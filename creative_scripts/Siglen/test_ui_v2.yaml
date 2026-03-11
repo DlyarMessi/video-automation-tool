@@ -1,0 +1,85 @@
+meta:
+  brand: Siglen
+  project: factory_overview_core_v1
+  objective: Present a clear, professional view of Siglen’s manufacturing capability and reliability
+  platform: short_video
+  target_length: 16
+
+tone:
+  profile: content_factory
+  vibe: calm, professional, reliable
+
+beats:
+  - id: production_line
+    purpose: establish_capability
+    scene: Production line area inside the factory
+    visual: >
+      A clean and organized production line in operation.
+      Start with a wide view showing the full line running continuously,
+      then closer views of machines and components moving steadily through each stage.
+      The environment feels controlled, precise, and efficient.
+    subtitle: Precision built into every step.
+    vo: From the production line, precision is built into every step.
+    duration_hint: 4
+    beat_structure:
+      - wide
+      - medium
+      - detail
+    tags:
+      - factory
+      - line
+
+  - id: automation_systems
+    purpose: show_automation
+    scene: Automation zone on the factory floor
+    visual: >
+      Automated equipment operating in sequence.
+      A wide view shows multiple automated systems working together,
+      followed by medium and detail views of robotic arms, sensors,
+      and control components performing repetitive tasks with consistency.
+    subtitle: Automation ensures consistent performance.
+    vo: Automation ensures consistent performance across every operation.
+    duration_hint: 4
+    beat_structure:
+      - wide
+      - medium
+      - detail
+    tags:
+      - factory
+      - automation
+
+  - id: testing_and_quality
+    purpose: quality_assurance
+    scene: Testing and inspection area
+    visual: >
+      Quality testing and inspection taking place.
+      Show testing equipment in use, measurement and verification processes,
+      and close-up details that emphasize careful checking and validation
+      before products move forward.
+    subtitle: Every unit is thoroughly tested.
+    vo: Every unit is thoroughly tested before it leaves the facility.
+    duration_hint: 4
+    beat_structure:
+      - wide
+      - medium
+      - detail
+    tags:
+      - factory
+      - testing
+
+  - id: brand_hero
+    purpose: brand_close
+    scene: Factory building hero view
+    visual: >
+      A strong, confident hero view of the factory building.
+      The space feels solid, modern, and dependable,
+      serving as a calm visual conclusion to the manufacturing story.
+    subtitle: Built for reliability. Designed for scale.
+    vo: Built for reliability. Designed to scale with your business.
+    duration_hint: 4
+    beat_structure:
+      - hero
+    tags:
+      - factory
+      - building
+      - hero

@@ -1,0 +1,35 @@
+meta:
+  brand: Siglen
+  project: factory_trust_v1
+  objective: "Build trust through manufacturing strength"
+  platform: short_video
+  target_length: 15
+
+tone:
+  profile: content_factory
+  vibe: calm, professional, reliable
+
+beats:
+  - id: hook
+    purpose: grab_attention
+    visual: factory wide automation line
+    subtitle: "Trust is manufactured"
+    duration_hint: 2
+
+  - id: proof_1
+    purpose: show_capability
+    visual: factory detail precision testing
+    subtitle: "Automated precision"
+    duration_hint: 4
+
+  - id: proof_2
+    purpose: show_product
+    visual: showroom elevator smooth running
+    subtitle: "Smooth and safe"
+    duration_hint: 4
+
+  - id: ending
+    purpose: brand_close
+    visual: elevator hero brand logo
+    subtitle: "SIGLEN"
+    duration_hint: 3

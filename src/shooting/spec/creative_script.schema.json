@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CreativeScript",
+  "type": "object",
+  "required": ["meta", "tone", "beats"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["brand", "project", "target_length", "language", "output", "audio"],
+      "properties": {
+        "brand": {"type": "string"},
+        "project": {"type": "string"},
+        "platform": {"type": "string"},
+        "target_length": {"type": "number"},
+        "language": {"type": "string"},
+        "output": {
+          "type": "object",
+          "required": ["format", "fit", "burn_subtitles"],
+          "properties": {
+            "format": {"type": "string"},
+            "fit": {"type": "string"},
+            "burn_subtitles": {"type": "boolean"}
+          }
+        },
+        "audio": {
+          "type": "object",
+          "properties": {
+            "voiceover": {
+              "type": "object",
+              "required": ["provider", "language"],
+              "properties": {
+                "provider": {"type": "string"},
+                "language": {"type": "string"},
+                "volume": {"type": "number"},
+                "output_format": {"type": "string"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "tone": {
+      "type": "object",
+      "required": ["profile"],
+      "properties": {
+        "profile": {"type": "string"},
+        "style_tags": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "beats": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["purpose", "visual", "vo", "subtitle", "beat_structure", "tags"],
+        "properties": {
+          "purpose": {"type": "string"},
+          "visual": {"type": "string"},
+          "vo": {"type": "string"},
+          "subtitle": {"type": "string"},
+          "beat_structure": {
+            "type": "array",
+            "items": {"enum": ["wide", "medium", "detail", "hero"]}
+          },
+          "tags": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    }
+  }
+}

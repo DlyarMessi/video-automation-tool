@@ -1,0 +1,23 @@
+# Human-readable creative script schema
+
+meta:
+  brand: string
+  objective: string
+  platform: string
+  length_sec: number
+
+tone:
+  profile: string
+  vibe: string
+
+message:
+  one_liner: string
+  proof_points: list
+
+beats:
+  - id: string
+    purpose: string
+    visual: string
+    subtitle: string
+    vo: string
+    duration_hint: number

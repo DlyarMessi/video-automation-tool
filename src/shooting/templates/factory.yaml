@@ -1,0 +1,6 @@
+location: factory
+required_coverage:
+  - wide
+  - medium
+  - detail
+notes: "Automation, precision, stability"
