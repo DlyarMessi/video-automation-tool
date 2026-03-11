@@ -1,0 +1,36 @@
+identity:
+  name: "Content Factory"
+  role: director
+  philosophy: >
+    Build long-term trust through consistency, clarity,
+    and calm professional pacing.
+
+constraints:
+  allow_random_ending: false
+  allow_excessive_transitions: false
+
+pacing:
+  shot_duration:
+    min: 2.5
+    max: 4.5
+  ending_hold: 0.6
+  min_gap_between_vo: 0.25
+
+transitions:
+  default: cut
+  fade_duration: 0.25
+  disable_fade_when_same_tag: true
+
+repetition:
+  max_consecutive_same_tag: 2
+  tag_cooldown: 2
+
+ending:
+  require_hero_tag: true
+  forbid_random_last: true
+
+rules_enabled:
+  - pacing
+  - repetition
+  - transitions
+  - ending

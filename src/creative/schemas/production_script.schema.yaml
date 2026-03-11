@@ -1,0 +1,12 @@
+# Machine-readable production script schema
+
+project:
+  director_profile: string
+  output: object
+  audio: object
+
+timeline:
+  - source: string
+    duration: number
+    subtitle: string
+    vo: string

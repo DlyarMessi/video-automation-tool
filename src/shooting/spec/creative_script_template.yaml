@@ -1,0 +1,57 @@
+meta:
+  brand: Siglen
+  project: test_run_v1
+  platform: short_video
+  target_length: 20
+  language: en-US
+
+  # 输出画面规范（你现在系统已支持 9:16）
+  output:
+    format: portrait_1080x1920
+    fit: cover
+    burn_subtitles: false
+
+  # TTS 规范（明天实战默认 elevenlabs，azure 兜底）
+  audio:
+    voiceover:
+      provider: elevenlabs
+      language: en-US
+      volume: 1.0
+      output_format: mp3_44100_128
+
+tone:
+  profile: content_factory
+  style_tags: [industrial, premium, clean, confident]
+
+# beats: 这是“叙事段落”，不是镜头列表
+beats:
+  - purpose: establish_context
+    visual: "Factory environment: wide clean production line"
+    # ✅ 两套文本必须都有
+    vo: "Manufacturing trust is built over time, through precision and consistency."
+    subtitle: "Manufacturing trust is built through precision and consistency."
+    # ✅ 段内结构意图（导演意图）
+    beat_structure: [wide, detail]
+    # ✅ 给 rename_plan / 素材筛选的语义标签（与命名规范一致）
+    tags: [factory, line]
+
+  - purpose: show_capability
+    visual: "Automation running smoothly: system-level to detail"
+    vo: "That precision is reflected in every step of our automated process."
+    subtitle: "Precision is reflected in every step of our automated process."
+    beat_structure: [wide, detail, medium]   # 你偏好的“越级/同类衔接”
+    tags: [factory, automation]
+
+  - purpose: build_trust
+    visual: "Testing & quality verification: detail then explain"
+    vo: "The result is quality you can see, verified through rigorous testing."
+    subtitle: "Quality you can see, verified through rigorous testing."
+    beat_structure: [detail, medium]
+    tags: [factory, testing]
+
+  - purpose: brand_close
+    visual: "Hero brand close: building/space, clean ending"
+    vo: "Welcome to Siglen."
+    subtitle: "Welcome to Siglen."
+    beat_structure: [hero]
+    tags: [factory, building, hero]

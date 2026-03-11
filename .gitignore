@@ -1,0 +1,41 @@
+input_videos/*.mp4
+*.mp4
+__pycache__/
+.DS_Store
+# --- Local secrets (DO NOT COMMIT) ---
+data/tts_profiles/elevenlabs_secrets.json
+data/tts_profiles/*_secrets.json
+*.secrets.json
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual env
+.venv/
+venv/
+env/
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Build / caches
+*.log
+*.tmp
+*.bak
+
+# Project runtime outputs
+output_videos/
+assets/audio/
+assets/processed/
+
+# Secrets / local config
+data/tts_profiles/*secrets*.json
+.env
+
+# Optional: if raw/private footage should not be public
+input_videos/
