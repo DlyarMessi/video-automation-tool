@@ -1,33 +1,34 @@
-# Video Automation Tool for Overseas Sales
+# Script-First Video Automation System
 
-Automates promotional video editing for elevator companies and used car export business.  
-Saves 10+ hours per week on manual editing, watermarking, and exporting.
+A script-driven pipeline for generating promo videos from structured creative scripts, reusable footage pools, voiceover, subtitles, and rule-based editing logic.
 
-## Business Problem
-As Overseas Sales Assistant, I manually edit dozens of promotional videos every week for three companies. This project automates the repetitive tasks.
+## What it does
+- Converts structured creative scripts into production-ready timelines
+- Generates shooting guides from the same source script
+- Reuses organized footage pools for batch promo video generation
+- Supports TTS voiceover and subtitle alignment
+- Applies rule-based editorial logic through a Director Engine
 
-## Features
-- Add logo watermark automatically
-- Batch cut clips + add subtitles
-- Export in multiple formats (YouTube, WeChat, LinkedIn)
-- Easy to customize for different products (elevator / used cars)
+## Core architecture
+Creative Script -> Production Script -> Shooting Guide -> Director Engine -> Render
 
-## Technologies
-- Python
-- MoviePy
-- FFmpeg (background)
+## Key modules
+- `src/creative/`: creative script compilation
+- `src/shooting/`: shooting guide generation
+- `src/director_engine/`: rule-based editing behavior
+- `ui_app.py`: operator-facing workflow UI
 
-## How to Use
-1. Install dependencies: `pip install moviepy`
-2. Put your videos in `input_videos/` folder
-3. Run `main.py`
-4. Check `output_videos/` folder
+## Why this project exists
+This project started from real business needs for repeated promo-video production, then evolved into a reusable, script-first video automation pipeline.
 
-## Demo
-![Screenshot](screenshot.png)  ← 以后放视频截图
+## Current status
+- End-to-end pipeline available
+- UI-driven workflow available
+- Director Engine rules in progress
+- Footage pool reuse workflow under active design
 
-## Future Improvements
-- Add text-to-speech voiceover
-- Auto-upload to YouTube/WeChat
-
-Made with passion for real business use at Siglen elevator companies and used car export store.
+## Roadmap
+- richer shot metadata for Director Engine
+- improved motion continuity / transition rules
+- stronger footage-pool retrieval and reuse
+- cleaner public demo assets and examples

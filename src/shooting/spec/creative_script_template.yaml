@@ -11,7 +11,7 @@ meta:
     fit: cover
     burn_subtitles: false
 
-  # TTS 规范（明天实战默认 elevenlabs，azure 兜底）
+  # TTS 规范（当前统一使用 ElevenLabs）
   audio:
     voiceover:
       provider: elevenlabs
