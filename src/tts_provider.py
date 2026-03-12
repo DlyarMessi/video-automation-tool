@@ -9,15 +9,13 @@ from typing import Any, Dict, Optional
 
 import requests
 
-from tts_azure_302ai import synthesize_wav as azure_synthesize_wav  # 兜底保留
-
 
 @dataclass
 class TTSRequest:
     text: str
     language: str                  # e.g. en-US / fr-FR / es-ES / ru-RU / ar-SA
-    provider: str = "azure"        # azure | elevenlabs
-    voice: Optional[str] = None    # azure voice name OR elevenlabs voice_id
+    provider: str = "elevenlabs"
+    voice: Optional[str] = None    # elevenlabs voice_id (optional; env/profile may supply it)
     model: Optional[str] = None    # elevenlabs model_id
     output_format: str = "mp3_44100_128"
     voice_settings: Optional[Dict[str, Any]] = None
@@ -49,17 +47,12 @@ def _load_eleven_profile() -> Dict[str, Any]:
 
 def synthesize(req: TTSRequest, cache_dir: Path, timeout: int = 90) -> Path:
     cache_dir.mkdir(parents=True, exist_ok=True)
-    provider = (req.provider or "azure").lower().strip()
+    provider = (req.provider or "elevenlabs").lower().strip()
 
-    if provider == "azure":
-        # Azure(302.ai) 输出 WAV，已有成熟缓存逻辑
-        voice = req.voice or "en-US-AndrewMultilingualNeural"
-        return azure_synthesize_wav(req.text, req.language, voice, cache_dir, timeout=timeout)
+    if provider != "elevenlabs":
+        raise ValueError(f"Only elevenlabs is supported now, got: {provider}")
 
-    if provider == "elevenlabs":
-        return _elevenlabs_synthesize(req, cache_dir, timeout=timeout)
-
-    raise ValueError(f"Unknown provider: {provider}")
+    return _elevenlabs_synthesize(req, cache_dir, timeout=timeout)
 
 
 def _elevenlabs_synthesize(req: TTSRequest, cache_dir: Path, timeout: int = 90) -> Path:

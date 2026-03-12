@@ -7,9 +7,6 @@ from typing import Any, Dict, List, Optional
 
 from moviepy import AudioFileClip, CompositeAudioClip
 
-# Azure (302.ai) fallback — 保留兜底
-from tts_azure_302ai import synthesize_wav as azure_synthesize_wav
-
 # ElevenLabs / Provider router
 from tts_provider import synthesize as tts_synthesize, TTSRequest
 
@@ -71,15 +68,6 @@ def extract_vo_events(
     return events
 
 
-def _looks_like_azure_voice_name(v: str) -> bool:
-    """
-    Azure voice 名称通常类似：
-    en-US-AndrewMultilingualNeural
-    """
-    up = (v or "").upper()
-    return "NEURAL" in up or up.count("-") >= 2
-
-
 def build_voiceover_track(
     project: dict,
     dsl_shots: List[Dict[str, Any]],
@@ -95,7 +83,7 @@ def build_voiceover_track(
     vo_cfg = audio_cfg.get("voiceover", {}) if isinstance(audio_cfg.get("voiceover", {}), dict) else {}
 
     default_language = str(vo_cfg.get("language", "en-US"))
-    default_voice = str(vo_cfg.get("voice", "en-US-AndrewMultilingualNeural"))
+    default_voice = str(vo_cfg.get("voice", "") or "")
     default_volume = float(vo_cfg.get("volume", 1.0))
     provider = str(vo_cfg.get("provider", "elevenlabs")).strip().lower()
     model = vo_cfg.get("model")
@@ -115,45 +103,17 @@ def build_voiceover_track(
     clips = []
 
     for e in events:
-        # ✅ ElevenLabs 不吃 Azure voice name
-        voice_for_provider: Optional[str] = e.voice
-        if provider.startswith("eleven") and _looks_like_azure_voice_name(voice_for_provider or ""):
-            voice_for_provider = None
-
-        audio_path: Optional[Path] = None
-        primary_error: Optional[Exception] = None
-
-        # ✅ 主通道：ElevenLabs
-        try:
-            audio_path = tts_synthesize(
-                TTSRequest(
-                    text=e.vo_text,
-                    language=e.language,
-                    provider=provider,
-                    voice=voice_for_provider,
-                    model=model,
-                    output_format=output_format,
-                ),
-                cache_dir=cache_dir,
-            )
-        except Exception as ex:
-            primary_error = ex
-            audio_path = None
-
-        # ✅ 兜底：Azure（302.ai）
-        if audio_path is None:
-            try:
-                audio_path = azure_synthesize_wav(
-                    e.vo_text,
-                    e.language,
-                    e.voice,
-                    cache_dir,
-                )
-            except Exception as ex2:
-                raise RuntimeError(
-                    f"TTS failed (primary={provider}, err={primary_error}) "
-                    f"and Azure fallback failed: {ex2}"
-                )
+        audio_path = tts_synthesize(
+            TTSRequest(
+                text=e.vo_text,
+                language=e.language,
+                provider=provider,
+                voice=e.voice or None,
+                model=model,
+                output_format=output_format,
+            ),
+            cache_dir=cache_dir,
+        )
 
         ac = AudioFileClip(str(audio_path))
         e.duration = ac.duration
