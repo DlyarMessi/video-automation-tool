@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from script_loader import load_script
+from src.script_loader import load_script
 
 
 def now_tag() -> str:

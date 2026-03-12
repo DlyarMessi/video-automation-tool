@@ -7,7 +7,7 @@ from typing import Optional
 
 from config import DATA_DIR, INPUT_DIR, OUTPUT_DIR, SCRIPTS_DIR, COMPANY_CONFIG
 from utils import process_company
-from workflow import compile_creative_file_to_production, generate_shooting_rows, render_html_task_table, load_yaml_text
+from src.workflow import compile_creative_file_to_production, generate_shooting_rows, render_html_task_table, load_yaml_text
 
 
 def setup_logging(verbose: bool = False) -> None:
