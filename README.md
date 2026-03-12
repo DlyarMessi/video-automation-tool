@@ -1,34 +1,23 @@
-# Script-First Video Automation System
+# Script-First Video Automation Tool
 
-A script-driven pipeline for generating promo videos from structured creative scripts, reusable footage pools, voiceover, subtitles, and rule-based editing logic.
+A clean three-step workflow for promo-video production:
 
-## What it does
-- Converts structured creative scripts into production-ready timelines
-- Generates shooting guides from the same source script
-- Reuses organized footage pools for batch promo video generation
-- Supports TTS voiceover and subtitle alignment
-- Applies rule-based editorial logic through a Director Engine
+1. give a structured script
+2. generate shooting tasks and fill footage slots
+3. render the final video
 
-## Core architecture
-Creative Script -> Production Script -> Shooting Guide -> Director Engine -> Render
+## Core files
 
-## Key modules
-- `src/creative/`: creative script compilation
-- `src/shooting/`: shooting guide generation
-- `src/director_engine/`: rule-based editing behavior
-- `ui_app.py`: operator-facing workflow UI
+- `ui_app.py` — operator-facing UI
+- `src/workflow.py` — core workflow logic
+- `src/director_engine/` — editorial rules
+- `src/tts_provider.py` — ElevenLabs provider
+- `src/voiceover_a2.py` — voiceover event handling
+- `src/subtitle_builder.py` — subtitle building
+- `src/main.py` — CLI orchestration
 
-## Why this project exists
-This project started from real business needs for repeated promo-video production, then evolved into a reusable, script-first video automation pipeline.
+## Notes
 
-## Current status
-- End-to-end pipeline available
-- UI-driven workflow available
-- Director Engine rules in progress
-- Footage pool reuse workflow under active design
-
-## Roadmap
-- richer shot metadata for Director Engine
-- improved motion continuity / transition rules
-- stronger footage-pool retrieval and reuse
-- cleaner public demo assets and examples
+- ElevenLabs is the only supported TTS provider.
+- The footage drive may live on external storage. The UI degrades safely if unavailable.
+- Output is intentionally lightweight per run.

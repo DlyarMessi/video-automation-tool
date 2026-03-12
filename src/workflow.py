@@ -1,0 +1,468 @@
+from __future__ import annotations
+
+import json
+import re
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from script_loader import load_script
+
+
+def now_tag() -> str:
+    return datetime.now().strftime("%Y%m%d_%H%M%S")
+
+
+def safe_slug(s: str) -> str:
+    s = (s or "").strip()
+    if not s:
+        return "untitled"
+    s = re.sub(r"\s+", "_", s)
+    s = re.sub(r"[^A-Za-z0-9_\-]+", "", s)
+    return s[:80] or "untitled"
+
+
+def load_yaml_text(text: str) -> dict:
+    try:
+        import yaml  # type: ignore
+        d = yaml.safe_load(text) or {}
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def beats_from_creative(creative: dict) -> list[dict]:
+    beats = creative.get("beats", [])
+    if not isinstance(beats, list):
+        return []
+    return [b for b in beats if isinstance(b, dict)]
+
+
+def validate_creative_schema(d: dict) -> tuple[bool, str]:
+    if not isinstance(d, dict):
+        return False, "Creative YAML is not a mapping."
+    beats = d.get("beats")
+    if not isinstance(beats, list) or not beats:
+        return False, "Missing or empty 'beats' list."
+    return True, "OK"
+
+
+def normalize_coverage(cov) -> list[str]:
+    if cov is None:
+        return []
+    if isinstance(cov, str):
+        return [cov]
+    if isinstance(cov, list):
+        return [str(x) for x in cov]
+    return []
+
+
+def list_video_files(folder: Path, suffixes: Optional[list[str]] = None) -> list[Path]:
+    suffixes = suffixes or [".mp4", ".mov", ".mkv", ".m4v"]
+    if not folder.exists() or not folder.is_dir():
+        return []
+    files = [p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in suffixes]
+    files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return files
+
+
+def safe_write_file(dst: Path, data: bytes) -> Path:
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    if not dst.exists():
+        dst.write_bytes(data)
+        return dst
+    stamped = dst.with_name(f"{dst.stem}_{now_tag()}{dst.suffix}")
+    stamped.write_bytes(data)
+    return stamped
+
+
+def infer_category_from_beat(beat: dict) -> str:
+    tags = beat.get("tags", [])
+    if isinstance(tags, list):
+        t = [str(x).lower() for x in tags]
+        for key in ["automation", "testing", "line", "building", "hero"]:
+            if key in t:
+                return "building" if key in ["building", "hero"] else key
+    purpose = str(beat.get("purpose", "")).lower()
+    if "automation" in purpose:
+        return "automation"
+    if "testing" in purpose or "qc" in purpose:
+        return "testing"
+    if "line" in purpose or "production" in purpose:
+        return "line"
+    if "brand" in purpose or "close" in purpose or "hero" in purpose:
+        return "building"
+    return "line"
+
+
+def infer_shots_from_beat(beat: dict) -> list[str]:
+    bs = beat.get("beat_structure")
+    if isinstance(bs, list) and bs:
+        return [str(x).lower() for x in bs]
+    cov_list = normalize_coverage(beat.get("coverage"))
+    if cov_list:
+        out = []
+        for x in cov_list:
+            xl = str(x).lower()
+            out.append("detail" if xl in ["close", "detail"] else xl)
+        return out
+    return ["wide", "detail"]
+
+
+def infer_scene_from_beat(beat: dict) -> str:
+    scene = str(beat.get("scene") or beat.get("location") or "").strip()
+    if scene:
+        return scene
+    visual = str(beat.get("visual") or beat.get("visual_description") or "").lower()
+    purpose = str(beat.get("purpose") or "").lower()
+    t = f"{purpose} {visual}"
+    if "exterior" in t or "building" in t:
+        return "Factory exterior"
+    if "testing" in t or "inspection" in t:
+        return "Testing area"
+    if "automation" in t or "robot" in t or "sensor" in t:
+        return "Factory floor (automation)"
+    if "line" in t or "production" in t:
+        return "Factory floor (line)"
+    return "Factory floor"
+
+
+def suggested_movement(shot: str) -> str:
+    s = (shot or "").lower()
+    if s == "detail":
+        return "static | slow push-in | micro pan"
+    if s == "medium":
+        return "static | slow pan"
+    if s in ["wide", "hero"]:
+        return "static | slow pan | tilt"
+    return "static | slow pan"
+
+
+def default_seconds_for_shot(_: str) -> str:
+    return "4–6"
+
+
+def generate_shooting_rows(creative: dict) -> list[dict]:
+    beats = beats_from_creative(creative)
+    rows: list[dict] = []
+    row_i = 1
+    for i, beat in enumerate(beats, start=1):
+        category = infer_category_from_beat(beat)
+        scene = infer_scene_from_beat(beat)
+        visual = str(beat.get("visual") or beat.get("visual_description") or "")
+        duration_hint = beat.get("duration_hint")
+        seconds_default = str(duration_hint) if duration_hint else ""
+        shots = infer_shots_from_beat(beat)
+        for shot in shots:
+            shot_norm = "detail" if shot in ["close"] else shot
+            rows.append(
+                {
+                    "Row": f"S{row_i:03d}",
+                    "Beat": i,
+                    "Category": category,
+                    "Scene": scene,
+                    "Shot": shot_norm,
+                    "Seconds": seconds_default or default_seconds_for_shot(shot_norm),
+                    "Movement": suggested_movement(shot_norm),
+                    "Notes": visual,
+                    "BeatPurpose": str(beat.get("purpose") or ""),
+                }
+            )
+            row_i += 1
+    return rows
+
+
+def render_html_task_table(rows: list[dict]) -> str:
+    css = """
+    <style>
+      body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial;margin:24px;}
+      h2{margin:0 0 12px 0;}
+      table{border-collapse:collapse;width:100%;}
+      th,td{border:1px solid #ddd;padding:8px;vertical-align:top;font-size:12px;}
+      th{background:#f3f3f3;font-weight:700;}
+      .small{color:#666;font-size:11px;}
+    </style>
+    """
+    headers = ["Row", "Beat", "Category", "Scene", "Shot", "Seconds", "Suggested Movement", "Notes"]
+    thead = "<tr>" + "".join([f"<th>{h}</th>" for h in headers]) + "</tr>"
+    trs = []
+    for r in rows:
+        trs.append(
+            "<tr>"
+            + f"<td>{r.get('Row','')}</td>"
+            + f"<td>{r.get('Beat','')}</td>"
+            + f"<td>{r.get('Category','')}</td>"
+            + f"<td>{r.get('Scene','')}</td>"
+            + f"<td>{r.get('Shot','')}</td>"
+            + f"<td>{r.get('Seconds','')}</td>"
+            + f"<td>{r.get('Movement','')}</td>"
+            + f"<td>{r.get('Notes','')}</td>"
+            + "</tr>"
+        )
+    tbody = "\n".join(trs)
+    return f"{css}<h2>Shooting Guide</h2><div class='small'>Generated: {now_tag()}</div><table>{thead}{tbody}</table>"
+
+
+def build_factory_filename(category: str, shot: str, custom: str, idx: int, ext: str) -> str:
+    category = safe_slug(category).lower()
+    shot = safe_slug(shot).lower()
+    custom = safe_slug(custom).lower()
+    core = f"factory_{category}_{shot}"
+    if custom:
+        core += f"_{custom}"
+    core += f"_{idx:02d}"
+    if not ext.startswith("."):
+        ext = "." + ext
+    return f"{core}{ext}"
+
+
+def next_index_for(factory_dir: Path, category: str, shot: str, custom: str, ext: str) -> int:
+    category = category.lower()
+    shot = shot.lower()
+    custom = safe_slug(custom).lower()
+    pat = re.compile(
+        rf"^factory_{re.escape(category)}_{re.escape(shot)}(?:_{re.escape(custom)})?_(\d\d){re.escape(ext)}$",
+        re.IGNORECASE,
+    )
+    mx = 0
+    if not factory_dir.exists():
+        return 1
+    for p in factory_dir.iterdir():
+        if not p.is_file():
+            continue
+        if p.suffix.lower() != ext.lower():
+            continue
+        m = pat.match(p.name)
+        if m:
+            try:
+                mx = max(mx, int(m.group(1)))
+            except Exception:
+                pass
+    return mx + 1
+
+
+def summarize_factory_coverage(rows: list[dict], factory_dir: Path) -> dict[str, int]:
+    factory_files = list_video_files(factory_dir)
+    need_by: dict[tuple[str, str], int] = {}
+    for r in rows:
+        need_by[(r["Category"], r["Shot"])] = need_by.get((r["Category"], r["Shot"]), 0) + 1
+
+    match_counts: dict[tuple[str, str], int] = {}
+    for (cat, shot), _need in need_by.items():
+        pat = re.compile(rf"^factory_{re.escape(cat)}_{re.escape(shot)}_.*", re.IGNORECASE)
+        match_counts[(cat, shot)] = len([p for p in factory_files if pat.match(p.name)])
+
+    total_need = sum(need_by.values())
+    total_ready = sum(min(need, match_counts.get(k, 0)) for k, need in need_by.items())
+    total_missing = total_need - total_ready
+    return {"total_need": total_need, "total_ready": total_ready, "total_missing": total_missing}
+
+
+def _normalize_purpose(purpose: str) -> str:
+    p = (purpose or "").strip().lower()
+    if p in {"establish_context", "show_capability", "build_trust", "brand_close"}:
+        return p
+    if "establish" in p or "capability" in p:
+        return "establish_context"
+    if "automation" in p or "show" in p:
+        return "show_capability"
+    if "quality" in p or "assurance" in p or "testing" in p or "qc" in p:
+        return "build_trust"
+    if "brand" in p or "close" in p or "hero" in p:
+        return "brand_close"
+    return "establish_context"
+
+
+def _infer_scene_token(visual: str) -> str:
+    v = (visual or "").lower()
+    if "showroom" in v:
+        return "showroom"
+    if "villa" in v:
+        return "villa"
+    if "factory" in v:
+        return "factory"
+    return "factory"
+
+
+def _shot(scene: str, content: str, coverage: str, move: str, duration: float,
+          subtitle: str, tag: str, vo: Optional[str] = None) -> Dict[str, Any]:
+    tags = [scene, content, coverage]
+    if move:
+        tags.append(move)
+    out: Dict[str, Any] = {
+        "source": "next:tags:" + ",".join(tags),
+        "duration": float(duration),
+        "subtitle": subtitle if subtitle else None,
+        "tag": tag,
+    }
+    if isinstance(vo, str) and vo.strip():
+        out["vo"] = vo.strip()
+    return out
+
+
+def _compile_fallback_shot(beat: Dict[str, Any], default_scene: str) -> Dict[str, Any]:
+    vo = beat.get("vo")
+    vo_clean = str(vo).strip() if isinstance(vo, str) else ""
+    subtitle = str(beat.get("subtitle") or "").strip()
+
+    source = beat.get("source") or beat.get("source_hint")
+    if isinstance(source, str) and source.strip():
+        out: Dict[str, Any] = {"source": source.strip()}
+        dur = beat.get("duration_hint")
+        if isinstance(dur, (int, float)):
+            out["duration"] = float(dur)
+        if subtitle:
+            out["subtitle"] = subtitle
+        if vo_clean:
+            out["vo"] = vo_clean
+        out["tag"] = str(beat.get("purpose") or "beat")
+        return out
+
+    tags = beat.get("tags")
+    if isinstance(tags, list) and tags:
+        tag_str = ",".join([str(t).strip() for t in tags if str(t).strip()])
+        out2: Dict[str, Any] = {"source": f"next:tags:{tag_str}" if tag_str else "next:tags:generic"}
+        dur2 = beat.get("duration_hint")
+        if isinstance(dur2, (int, float)):
+            out2["duration"] = float(dur2)
+        if subtitle:
+            out2["subtitle"] = subtitle
+        if vo_clean:
+            out2["vo"] = vo_clean
+        out2["tag"] = str(beat.get("purpose") or "beat")
+        return out2
+
+    visual = str(beat.get("visual") or "").strip()
+    dur3 = beat.get("duration_hint")
+    return {
+        "source": f"next:tags:{default_scene},generic",
+        "notes": visual if visual else None,
+        "duration": float(dur3) if isinstance(dur3, (int, float)) else 3.0,
+        "subtitle": subtitle or None,
+        "vo": vo_clean or None,
+        "tag": str(beat.get("purpose") or "beat"),
+    }
+
+
+def compile_creative_dict(creative: Dict[str, Any]) -> Dict[str, Any]:
+    meta = creative.get("meta", {}) if isinstance(creative.get("meta"), dict) else {}
+    target_len = float(meta.get("target_length", 20) or 20)
+    beats = beats_from_creative(creative)
+
+    seq: List[Dict[str, Any]] = []
+    for beat in beats:
+        purpose_raw = str(beat.get("purpose") or "").strip()
+        purpose = _normalize_purpose(purpose_raw)
+        subtitle = str(beat.get("subtitle") or "").strip()
+        vo_text = str(beat.get("vo") or "").strip()
+        visual = str(beat.get("visual") or "").strip()
+        scene = beat.get("scene") or _infer_scene_token(visual) or "factory"
+
+        if purpose == "establish_context":
+            seq.extend(
+                [
+                    _shot(scene, "line", "wide", "static", 3.0, subtitle, tag="context_wide", vo=vo_text),
+                    _shot(scene, "line", "detail", "static", 2.0, subtitle, tag="context_detail"),
+                ]
+            )
+        elif purpose == "show_capability":
+            seq.extend(
+                [
+                    _shot(scene, "automation", "wide", "slide", 3.0, subtitle, tag="automation_wide", vo=vo_text),
+                    _shot(scene, "automation", "detail", "static", 1.8, subtitle, tag="automation_detail"),
+                    _shot(scene, "automation", "medium", "pushin", 2.7, subtitle, tag="automation_medium"),
+                ]
+            )
+        elif purpose == "build_trust":
+            seq.extend(
+                [
+                    _shot(scene, "testing", "detail", "static", 2.2, subtitle, tag="testing_detail", vo=vo_text),
+                    _shot(scene, "testing", "medium", "static", 2.8, subtitle, tag="testing_medium"),
+                ]
+            )
+        elif purpose == "brand_close":
+            close_sub = subtitle if subtitle else "SIGLEN"
+            extra_moves = beat.get("move")
+            move = str(extra_moves).strip() if isinstance(extra_moves, str) and extra_moves.strip() else "orbit"
+            seq.append(_shot(scene, "building", "hero", move, 4.5, close_sub, tag="hero", vo=vo_text))
+        else:
+            seq.append(_compile_fallback_shot(beat, default_scene=scene))
+
+    total = sum(float(s.get("duration") or 0.0) for s in seq)
+    if total > 0:
+        scale = float(target_len) / float(total)
+        scale = max(0.85, min(1.15, scale))
+        for s in seq:
+            if isinstance(s.get("duration"), (int, float)):
+                s["duration"] = round(float(s["duration"]) * scale, 2)
+
+    proj = {"meta": meta, "output": {"format": "portrait_1080x1920"}}
+    if isinstance(creative.get("project"), dict):
+        proj.update(creative["project"])
+
+    return {"project": proj, "timeline": [{k: v for k, v in s.items() if v is not None} for s in seq]}
+
+
+def dump_yaml(data: dict, out_path: Path) -> None:
+    try:
+        import yaml  # type: ignore
+    except Exception as e:
+        raise RuntimeError(f"PyYAML required to write YAML: {e}")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+
+
+def compile_creative_file_to_production(creative_path: Path, out_path: Path) -> Path:
+    creative = load_script(creative_path)
+    production = compile_creative_dict(creative)
+    dump_yaml(production, out_path)
+    return out_path
+
+
+def patch_compiled_yaml(compiled_path: Path, orientation: str, lang: str, model: str,
+                        eleven_profile_path: Optional[Path] = None) -> None:
+    try:
+        import yaml  # type: ignore
+    except Exception:
+        raise RuntimeError("PyYAML not installed. Run: python -m pip install pyyaml")
+
+    d = yaml.safe_load(compiled_path.read_text(encoding="utf-8")) or {}
+    if not isinstance(d, dict):
+        d = {}
+
+    project = d.get("project", {})
+    if not isinstance(project, dict):
+        project = {}
+    d["project"] = project
+
+    out = project.get("output", {})
+    if not isinstance(out, dict):
+        out = {}
+    project["output"] = out
+    out["format"] = "portrait_1080x1920" if orientation == "portrait" else "landscape_1920x1080"
+
+    audio = project.get("audio", {})
+    if not isinstance(audio, dict):
+        audio = {}
+    project["audio"] = audio
+
+    voiceover = audio.get("voiceover", {})
+    if not isinstance(voiceover, dict):
+        voiceover = {}
+    audio["voiceover"] = voiceover
+
+    defaults = {}
+    if eleven_profile_path and eleven_profile_path.exists():
+        try:
+            profile = json.loads(eleven_profile_path.read_text(encoding="utf-8"))
+            defaults = profile.get("defaults", {}) if isinstance(profile.get("defaults", {}), dict) else {}
+        except Exception:
+            defaults = {}
+
+    voiceover["provider"] = "elevenlabs"
+    voiceover["language"] = lang
+    voiceover["model"] = model
+    voiceover["output_format"] = str(defaults.get("output_format", "mp3_44100_128"))
+    voiceover.setdefault("volume", 1.0)
+
+    compiled_path.write_text(yaml.safe_dump(d, allow_unicode=True, sort_keys=False), encoding="utf-8")
