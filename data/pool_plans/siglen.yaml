@@ -1,0 +1,276 @@
+brand: Siglen
+
+topics:
+  - name: Factory Strength
+    slots:
+      - scene: factory
+        content: building
+        coverage: wide
+        move: static
+        target: 8
+        priority: high
+        defaults:
+          energy: medium
+          quality_status: approved
+          continuity_group: factory_building
+          intro_safe: true
+          hero_safe: false
+          outro_safe: false
+
+      - scene: factory
+        content: building
+        coverage: hero
+        move: orbit
+        target: 6
+        priority: high
+        defaults:
+          energy: medium
+          quality_status: approved
+          continuity_group: factory_building
+          intro_safe: false
+          hero_safe: true
+          outro_safe: true
+
+      - scene: factory
+        content: automation
+        coverage: wide
+        move: static
+        target: 10
+        priority: high
+        defaults:
+          energy: medium
+          quality_status: approved
+          continuity_group: factory_automation
+          intro_safe: true
+          hero_safe: false
+          outro_safe: false
+
+      - scene: factory
+        content: automation
+        coverage: medium
+        move: slide
+        target: 10
+        priority: high
+        defaults:
+          energy: medium
+          quality_status: approved
+          continuity_group: factory_automation
+          intro_safe: false
+          hero_safe: false
+          outro_safe: false
+
+      - scene: factory
+        content: automation
+        coverage: detail
+        move: static
+        target: 12
+        priority: high
+        defaults:
+          energy: high
+          quality_status: approved
+          continuity_group: factory_automation
+          intro_safe: false
+          hero_safe: false
+          outro_safe: false
+
+  - name: Quality & Safety
+    slots:
+      - scene: tower
+        content: testing
+        coverage: medium
+        move: static
+        target: 8
+        priority: high
+        defaults:
+          energy: medium
+          quality_status: approved
+          continuity_group: tower_testing
+          intro_safe: false
+          hero_safe: false
+          outro_safe: false
+
+      - scene: tower
+        content: testing
+        coverage: detail
+        move: static
+        target: 10
+        priority: high
+        defaults:
+          energy: medium
+          quality_status: approved
+          continuity_group: tower_testing
+          intro_safe: false
+          hero_safe: false
+          outro_safe: false
+
+      - scene: tower
+        content: panel
+        coverage: detail
+        move: static
+        target: 8
+        priority: medium
+        defaults:
+          energy: low
+          quality_status: approved
+          continuity_group: tower_testing
+          intro_safe: false
+          hero_safe: false
+          outro_safe: false
+
+      - scene: factory
+        content: inspection
+        coverage: detail
+        move: static
+        target: 8
+        priority: medium
+        defaults:
+          energy: low
+          quality_status: approved
+          continuity_group: factory_testing
+          intro_safe: false
+          hero_safe: false
+          outro_safe: false
+
+  - name: Warehouse & Delivery
+    slots:
+      - scene: warehouse
+        content: storage
+        coverage: wide
+        move: static
+        target: 8
+        priority: high
+        defaults:
+          energy: medium
+          quality_status: approved
+          continuity_group: warehouse_storage
+          intro_safe: true
+          hero_safe: false
+          outro_safe: false
+
+      - scene: warehouse
+        content: storage
+        coverage: detail
+        move: static
+        target: 8
+        priority: medium
+        defaults:
+          energy: low
+          quality_status: approved
+          continuity_group: warehouse_storage
+          intro_safe: false
+          hero_safe: false
+          outro_safe: false
+
+      - scene: loading
+        content: shipment
+        coverage: medium
+        move: follow
+        target: 8
+        priority: high
+        defaults:
+          energy: high
+          quality_status: approved
+          continuity_group: loading_shipment
+          intro_safe: false
+          hero_safe: false
+          outro_safe: false
+
+      - scene: loading
+        content: shipment
+        coverage: detail
+        move: static
+        target: 8
+        priority: medium
+        defaults:
+          energy: medium
+          quality_status: approved
+          continuity_group: loading_shipment
+          intro_safe: false
+          hero_safe: false
+          outro_safe: false
+
+      - scene: weighing
+        content: shipment
+        coverage: detail
+        move: static
+        target: 6
+        priority: medium
+        defaults:
+          energy: low
+          quality_status: approved
+          continuity_group: loading_shipment
+          intro_safe: false
+          hero_safe: false
+          outro_safe: false
+
+  - name: Product Showcase
+    slots:
+      - scene: showroom
+        content: product
+        coverage: wide
+        move: static
+        target: 8
+        priority: high
+        defaults:
+          energy: medium
+          quality_status: approved
+          continuity_group: showroom_product
+          intro_safe: true
+          hero_safe: false
+          outro_safe: false
+
+      - scene: showroom
+        content: product
+        coverage: medium
+        move: slide
+        target: 8
+        priority: high
+        defaults:
+          energy: medium
+          quality_status: approved
+          continuity_group: showroom_product
+          intro_safe: false
+          hero_safe: false
+          outro_safe: false
+
+      - scene: showroom
+        content: cabin
+        coverage: detail
+        move: static
+        target: 10
+        priority: medium
+        defaults:
+          energy: low
+          quality_status: approved
+          continuity_group: showroom_product
+          intro_safe: false
+          hero_safe: false
+          outro_safe: false
+
+      - scene: showroom
+        content: panel
+        coverage: detail
+        move: static
+        target: 8
+        priority: medium
+        defaults:
+          energy: low
+          quality_status: approved
+          continuity_group: showroom_product
+          intro_safe: false
+          hero_safe: false
+          outro_safe: false
+
+      - scene: showroom
+        content: product
+        coverage: hero
+        move: orbit
+        target: 6
+        priority: high
+        defaults:
+          energy: medium
+          quality_status: approved
+          continuity_group: showroom_product
+          intro_safe: false
+          hero_safe: true
+          outro_safe: true
