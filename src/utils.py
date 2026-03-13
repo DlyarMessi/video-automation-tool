@@ -3,6 +3,15 @@ from __future__ import annotations
 from voiceover_a2 import build_voiceover_track
 from subtitle_builder import build_subtitles_from_vo_events
 
+
+def _read_render_fps(project: dict) -> int:
+    try:
+        output_cfg = project.get("output", {}) if isinstance(project.get("output", {}), dict) else {}
+        fps = output_cfg.get("fps", 60)
+        return int(fps)
+    except Exception:
+        return 60
+
 # ✅ Director Engine (optional, safe)
 from typing import cast, Type
 try:
