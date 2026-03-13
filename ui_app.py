@@ -8,6 +8,8 @@ from pathlib import Path
 
 import streamlit as st
 
+from src.render_profile import get_default_fps, get_language_family, get_subtitle_style
+from src.language_checks import build_language_check
 from src.workflow import (
     now_tag,
     safe_slug,
@@ -148,6 +150,15 @@ def run_cmd_silent(cmd: list[str], env: dict) -> tuple[int, str]:
     rc = p.wait() or 0
     return rc, "\n".join(lines)
 
+
+def ensure_run_layout(run_dir: Path) -> dict[str, Path]:
+    internal_dir = run_dir / "_internal"
+    internal_dir.mkdir(parents=True, exist_ok=True)
+    return {
+        "run_dir": run_dir,
+        "internal_dir": internal_dir,
+    }
+
 # =========================================================
 # Session state
 # =========================================================
@@ -240,6 +251,15 @@ with st.sidebar:
             langs = profile.get("languages", {}) if isinstance(profile.get("languages", {}), dict) else {}
             rows_map = [{"lang": k, "voice_id": (v or {}).get("voice_id", "")} for k, v in sorted(langs.items())]
             st.dataframe(rows_map, use_container_width=True, hide_index=True)
+
+    st.markdown("### Output Defaults")
+    target_fps = get_default_fps()
+    subtitle_family = get_language_family(lang_code)
+    subtitle_style = get_subtitle_style(lang_code)
+    st.caption(f"Target FPS: {target_fps}")
+    st.caption(f"Subtitle preset: {subtitle_family}")
+    st.caption(f"Font preset: {subtitle_style.get('font_family', 'default')}")
+    st.caption(f"Selected language family: {subtitle_family}")
 
     with st.expander("Advanced", expanded=False):
         input_root = st.text_input("Footage Root", value=str(INPUT_ROOT_DEFAULT))
@@ -364,17 +384,79 @@ if generate_btn:
     if not ok:
         st.error(msg)
     else:
-        project = str((d.get("meta", {}) or {}).get("project", "") or name_seed)
+        lang_check = build_language_check(d, lang_code, voice_id_input, load_eleven_profile())
+
+        if lang_check["blocking"]:
+            st.error(lang_check["summary"])
+            for item in lang_check["messages"]:
+                st.write(f"- {item}")
+        else:
+            st.info(lang_check["summary"])
+            for item in lang_check["messages"]:
+                st.caption(f"• {item}")
+            if lang_check.get("sample"):
+                st.caption(f"Sample text: {lang_check['sample']}")
+
+            project = str((d.get("meta", {}) or {}).get("project", "") or name_seed)
+            run_id = f"{safe_slug(project)}_{now_tag()[:15]}"
+            run_dir = output_root_path / orientation / company / run_id
+            run_dir.mkdir(parents=True, exist_ok=True)
+            st.session_state["run_dir"] = str(run_dir)
+
+            creative_path = run_dir / f"{run_id}.creative.yaml"
+            creative_path.write_text(creative_text, encoding="utf-8")
+            st.session_state["active_creative_path"] = str(creative_path)
+
+            compiled_out = run_dir / f"{run_id}.compiled.yaml"
+            st.session_state["compiled_out_path"] = str(compiled_out)
+
+            beats = beats_from_creative(d)
+            rows: list[dict] = []
+            row_i = 1
+            for i, beat in enumerate(beats, start=1):
+                category = infer_category_from_beat(beat)
+                scene = infer_scene_from_beat(beat)
+                visual = str(beat.get("visual") or beat.get("visual_description") or "")
+                duration_hint = beat.get("duration_hint")
+                seconds_default = str(duration_hint) if duration_hint else ""
+                shots = infer_shots_from_beat(beat)
+
+                for shot in shots:
+                    shot_norm = "detail" if shot in ["close"] else shot
+                    rows.append(
+                        {
+                            "Row": f"S{row_i:03d}",
+                            "Beat": i,
+                            "Category": category,
+                            "Scene": scene,
+                            "Shot": shot_norm,
+                            "Seconds": seconds_default or default_seconds_for_shot(shot_norm),
+                            "Movement": suggested_movement(shot_norm),
+                            "Notes": visual,
+                            "BeatPurpose": str(beat.get("purpose") or ""),
+                        }
+                    )
+                    row_i += 1
+
+            st.session_state["shooting_rows"] = rows
+            (run_dir / "shooting_rows.json").write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
+            if export_html:
+                (run_dir / "task_rows.html").write_text(render_html_task_table(rows), encoding="utf-8")
+
+            st.success(f"Generated {len(rows)} task rows.")
+            st.caption(f"Run Folder: {run_dir}")
         run_id = f"{safe_slug(project)}_{now_tag()[:15]}"
         run_dir = output_root_path / orientation / company / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
+        layout = ensure_run_layout(run_dir)
+        internal_dir = layout["internal_dir"]
         st.session_state["run_dir"] = str(run_dir)
 
-        creative_path = run_dir / f"{run_id}.creative.yaml"
+        creative_path = internal_dir / f"{run_id}.creative.yaml"
         creative_path.write_text(creative_text, encoding="utf-8")
         st.session_state["active_creative_path"] = str(creative_path)
 
-        compiled_out = run_dir / f"{run_id}.compiled.yaml"
+        compiled_out = internal_dir / f"{run_id}.compiled.yaml"
         st.session_state["compiled_out_path"] = str(compiled_out)
 
         beats = beats_from_creative(d)
@@ -406,7 +488,16 @@ if generate_btn:
                 row_i += 1
 
         st.session_state["shooting_rows"] = rows
-        (run_dir / "shooting_rows.json").write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
+        internal_dir = run_dir / "_internal"
+        internal_dir.mkdir(parents=True, exist_ok=True)
+        (internal_dir / "shooting_rows.json").write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        subtitle_style = get_subtitle_style(lang_code)
+        (internal_dir / "subtitle_style.json").write_text(
+            json.dumps(subtitle_style, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
         if export_html:
             (run_dir / "task_rows.html").write_text(render_html_task_table(rows), encoding="utf-8")
 
@@ -588,7 +679,7 @@ else:
 # =========================================================
 st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
 st.markdown("## Step 3 · Create Video")
-st.caption("Creates the final video with lightweight run logs.")
+st.caption("Creates the final video with lightweight run logs and default 60fps output.")
 
 active_creative_path = Path(st.session_state["active_creative_path"]) if st.session_state.get("active_creative_path") else None
 run_dir = Path(st.session_state["run_dir"]) if st.session_state.get("run_dir") else None
@@ -616,10 +707,10 @@ else:
             cmd_compile += ["compile", "--creative", str(active_creative_path), "--out", str(compiled_out)]
 
             rc, compile_logs = run_cmd_silent(cmd_compile, ENV)
-            (run_dir / "compile.log").write_text(compile_logs, encoding="utf-8")
+            (run_dir / "_internal" / "compile.log").write_text(compile_logs, encoding="utf-8")
             if rc != 0:
                 progress.progress(100)
-                st.error("Timeline preparation failed. See compile.log in the Run Folder.")
+                st.error("Timeline preparation failed. See _internal/compile.log in the Run Folder.")
                 raise SystemExit(0)
 
             status.markdown("**Applying Render Settings…**")
@@ -635,11 +726,11 @@ else:
             cmd_run += ["run", "--company", company, "--script", str(compiled_out), "--input", str(input_root_path)]
 
             rc2, render_logs = run_cmd_silent(cmd_run, ENV)
-            (run_dir / "render.log").write_text(render_logs, encoding="utf-8")
+            (run_dir / "_internal" / "render.log").write_text(render_logs, encoding="utf-8")
 
             if rc2 != 0:
                 progress.progress(100)
-                st.error("Video rendering failed. See render.log in the Run Folder.")
+                st.error("Video rendering failed. See _internal/render.log in the Run Folder.")
                 raise SystemExit(0)
 
             status.markdown("**Completed.**")

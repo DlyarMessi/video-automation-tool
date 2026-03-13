@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from src.script_loader import load_script
+from src.render_profile import get_default_fps, get_subtitle_style
 
 
 VIDEO_SUFFIXES = [".mp4", ".mov", ".mkv", ".m4v"]
@@ -558,6 +559,7 @@ def patch_compiled_yaml(
         out = {}
     project["output"] = out
     out["format"] = "portrait_1080x1920" if orientation == "portrait" else "landscape_1920x1080"
+    out["fps"] = get_default_fps()
 
     audio = project.get("audio", {})
     if not isinstance(audio, dict):
@@ -582,6 +584,8 @@ def patch_compiled_yaml(
     voiceover["model"] = model
     voiceover["output_format"] = str(defaults.get("output_format", "mp3_44100_128"))
     voiceover.setdefault("volume", 1.0)
+
+    project["subtitle_style"] = get_subtitle_style(lang)
 
     compiled_path.write_text(
         yaml.safe_dump(d, allow_unicode=True, sort_keys=False),

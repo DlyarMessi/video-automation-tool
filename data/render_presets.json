@@ -1,0 +1,56 @@
+{
+  "defaults": {
+    "fps": 60,
+    "codec": "libx264",
+    "audio_codec": "aac",
+    "pixel_format": "yuv420p"
+  },
+  "language_to_family": {
+    "en": "latin",
+    "fr": "latin",
+    "es": "latin",
+    "ru": "cyrillic",
+    "kk": "cyrillic",
+    "ar": "arabic"
+  },
+  "subtitle_presets": {
+    "latin": {
+      "font_family": "Avenir Next",
+      "font_size": 62,
+      "outline": 3,
+      "shadow": 1,
+      "bottom_margin": 82,
+      "max_lines": 2,
+      "line_spacing": 1.08
+    },
+    "cyrillic": {
+      "font_family": "Arial Unicode MS",
+      "font_size": 60,
+      "outline": 3,
+      "shadow": 1,
+      "bottom_margin": 82,
+      "max_lines": 2,
+      "line_spacing": 1.08
+    },
+    "arabic": {
+      "font_family": "Geeza Pro",
+      "font_size": 68,
+      "outline": 2,
+      "shadow": 1,
+      "bottom_margin": 90,
+      "max_lines": 2,
+      "line_spacing": 1.15
+    }
+  },
+  "filter_presets": {
+    "clean": {
+      "enabled": false
+    },
+    "industrial": {
+      "enabled": false
+    },
+    "warm_brand": {
+      "enabled": false
+    }
+  }
+}
