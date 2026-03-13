@@ -1,21 +1,48 @@
 # Director Engine
 
-This module represents the "director layer" of the video automation system.
+The Director Engine is the editorial rule layer of the system.
 
-Responsibilities:
-- Apply editorial decisions to an existing timeline
-- Enforce pacing, repetition, transition and ending rules
-- Ensure stylistic consistency across videos
+It is responsible for improving timeline consistency after the workflow has already generated a usable sequence.
 
-Non-responsibilities:
-- No media picking
-- No subtitle or audio generation
-- No rendering logic
-- No business or creative writing
+## Responsibilities
 
-Director Engine operates on:
-- A normalized timeline (shots)
-- A selected Director Profile
+- apply pacing rules
+- reduce undesirable repetition
+- apply transition logic
+- control ending behavior
+- keep editorial style consistent
 
-Output:
-- A modified timeline with editorial decisions applied
+## Non-responsibilities
+
+The Director Engine does not:
+
+- generate scripts
+- generate shooting tasks
+- manage footage uploads
+- perform TTS generation
+- build subtitles
+- render the final video
+
+## Input
+
+The Director Engine operates on a normalized timeline.
+
+Typical input includes:
+- shot order
+- tags
+- duration
+- transition-related metadata
+
+## Output
+
+The output is a modified timeline with editorial decisions applied.
+
+## Current role in the project
+
+In the current architecture:
+
+- `ui_app.py` handles the operator workflow
+- `src/workflow.py` handles the three-step product logic
+- `src/director_engine/` handles editorial behavior
+
+This separation keeps the Director Engine focused on style and structure, rather than product flow.
