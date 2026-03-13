@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 import json
 import os
-import re
 import subprocess
 import sys
 from pathlib import Path
 
 import streamlit as st
+import yaml
 
-from src.render_profile import get_default_fps, get_language_family, get_subtitle_style, get_filter_preset
+from src.render_profile import get_default_fps, get_filter_preset
 from src.language_checks import build_language_check
 from src.material_index import load_asset_index, upsert_asset_record, update_asset_record_fields
 from src.workflow import (
@@ -32,7 +32,6 @@ from src.workflow import (
     ensure_company_storage,
     get_storage_dirs,
     classify_orientation,
-    orientation_matches,
 )
 
 # =========================================================
@@ -49,34 +48,91 @@ TTS_PROFILE_DIR = ROOT / "data" / "tts_profiles"
 ELEVEN_PROFILE_PATH = TTS_PROFILE_DIR / "elevenlabs.json"
 ELEVEN_SECRETS_PATH = TTS_PROFILE_DIR / "elevenlabs_secrets.json"
 
+POOL_PLAN_DIR = ROOT / "data" / "pool_plans"
+
 VIDEO_EXTS = ["mp4", "mov", "mkv", "m4v"]
 VIDEO_SUFFIXES = ["." + e for e in VIDEO_EXTS]
 
 # =========================================================
-# UI Style
+# UI
 # =========================================================
 st.set_page_config(page_title="Video Automation Tool", layout="wide")
 st.markdown(
     """
     <style>
-      .divider { margin: 1.1rem 0 1.0rem 0; border-bottom: 1px solid rgba(0,0,0,0.08); }
+      .divider { margin: 1rem 0 0.9rem 0; border-bottom: 1px solid rgba(0,0,0,0.08); }
       .muted { color: rgba(0,0,0,0.55); }
       .tiny { color: rgba(0,0,0,0.55); font-size: 0.9rem; }
       code { white-space: pre-wrap !important; }
+      .top-help { padding-top: 1.7rem; }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
 # =========================================================
-# Persistent TTS helpers
+# Helpers
 # =========================================================
+
+def recommended_duration_for_slot(coverage: str, move: str) -> str:
+    coverage = str(coverage or "").strip().lower()
+    move = str(move or "").strip().lower()
+
+    if coverage == "wide":
+        return "5–7s"
+    if coverage == "medium":
+        return "5–7s"
+    if coverage == "detail":
+        return "4–6s"
+    if coverage == "hero":
+        return "6–8s"
+    return "5–7s"
+
+
+def movement_guidance(move: str) -> str:
+    move = str(move or "").strip().lower()
+    mapping = {
+        "static": "stable",
+        "slide": "slow side move",
+        "pushin": "slow push-in",
+        "follow": "smooth follow",
+        "orbit": "slow orbit",
+        "reveal": "controlled reveal",
+    }
+    return mapping.get(move, "controlled move")
+
+
+def composition_guidance(scene: str, content: str, coverage: str) -> str:
+    coverage = str(coverage or "").strip().lower()
+
+    if coverage == "wide":
+        return "show full space clearly"
+    if coverage == "medium":
+        return "one main subject readable"
+    if coverage == "detail":
+        return "one clear detail fills frame"
+    if coverage == "hero":
+        return "premium brand-style framing"
+    return "clean readable framing"
+
+
+def slot_display_name(scene: str, content: str, coverage: str, move: str) -> str:
+    return f"{scene} / {content} / {coverage} / {move}"
+
+
+def priority_badge(priority: str) -> str:
+    priority = str(priority or "").strip().lower()
+    if priority == "high":
+        return "🔴 High"
+    if priority == "medium":
+        return "🟡 Medium"
+    return "⚪️ Low"
 def _load_json(path: Path) -> dict:
     if not path.exists():
         return {}
     try:
-        d = json.loads(path.read_text(encoding="utf-8"))
-        return d if isinstance(d, dict) else {}
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
     except Exception:
         return {}
 
@@ -128,9 +184,6 @@ def ensure_default_eleven_profile() -> dict:
     save_eleven_profile(profile)
     return profile
 
-# =========================================================
-# Process runner
-# =========================================================
 def run_cmd_silent(cmd: list[str], env: dict) -> tuple[int, str]:
     p = subprocess.Popen(
         cmd,
@@ -151,30 +204,62 @@ def run_cmd_silent(cmd: list[str], env: dict) -> tuple[int, str]:
     rc = p.wait() or 0
     return rc, "\n".join(lines)
 
-
 def ensure_run_layout(run_dir: Path) -> dict[str, Path]:
     internal_dir = run_dir / "_internal"
     internal_dir.mkdir(parents=True, exist_ok=True)
-    return {
-        "run_dir": run_dir,
-        "internal_dir": internal_dir,
-    }
+    return {"run_dir": run_dir, "internal_dir": internal_dir}
+
+def load_pool_plan(company: str) -> dict:
+    path = POOL_PLAN_DIR / f"{str(company).strip().lower()}.yaml"
+    if not path.exists():
+        return {}
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+def count_pool_matches(factory_files: list[Path], scene: str, content: str, coverage: str, move: str) -> int:
+    scene = safe_slug(scene).lower()
+    content = safe_slug(content).lower()
+    coverage = safe_slug(coverage).lower()
+    move = safe_slug(move).lower()
+    prefix = f"{scene}_{content}_{coverage}_{move}_"
+    return len(
+        [
+            p for p in factory_files
+            if p.is_file()
+            and p.suffix.lower() in VIDEO_SUFFIXES
+            and p.name.lower().startswith(prefix.lower())
+        ]
+    )
+
+def list_companies(input_root: Path) -> list[str]:
+    names = set()
+    if CREATIVE_ROOT.exists():
+        names.update([p.name for p in CREATIVE_ROOT.iterdir() if p.is_dir()])
+    for ori in ("portrait", "landscape"):
+        ori_root = input_root / ori
+        if ori_root.exists():
+            names.update([p.name for p in ori_root.iterdir() if p.is_dir()])
+    return sorted([x for x in names if x.strip()])
 
 # =========================================================
-# Session state
+# Session
 # =========================================================
 st.session_state.setdefault("active_creative_path", None)
 st.session_state.setdefault("creative_draft", "")
 st.session_state.setdefault("run_dir", None)
 st.session_state.setdefault("shooting_rows", [])
 st.session_state.setdefault("compiled_out_path", None)
+st.session_state.setdefault("work_mode", "Project Mode")
 
 # =========================================================
 # Header
 # =========================================================
 st.markdown("## 🎬 Video Automation Tool")
 st.markdown(
-    "<span class='muted'>Step 1: Creative Script → Task Rows  ·  Step 2: Footage Board  ·  Step 3: Create Video</span>",
+    "<span class='muted'>Project Mode: script → tasks → render · Pool Fill Mode: plan-driven asset intake</span>",
     unsafe_allow_html=True,
 )
 
@@ -208,9 +293,8 @@ with st.sidebar:
     if not lang_code:
         lang_code = "en-US"
 
-    st.markdown("### ElevenLabs Settings")
+    st.markdown("### ElevenLabs")
     profile = ensure_default_eleven_profile()
-
     saved_key = load_eleven_api_key()
     eleven_key = st.text_input("API Key", value=saved_key, type="password")
 
@@ -228,50 +312,46 @@ with st.sidebar:
         help="Must be an ElevenLabs voice_id.",
     )
 
-    c1, c2 = st.columns([1, 1])
-    with c1:
-        if st.button("Save TTS Settings", use_container_width=True):
+    save_a, save_b = st.columns([1, 1])
+    with save_a:
+        if st.button("Save TTS", width="stretch"):
             if eleven_key.strip():
                 save_eleven_api_key(eleven_key.strip())
 
             prof = load_eleven_profile()
             prof.setdefault("defaults", {})
             prof.setdefault("languages", {})
+
             if isinstance(prof.get("defaults"), dict):
                 prof["defaults"]["model_id"] = model_id
                 prof["defaults"].setdefault("output_format", "mp3_44100_128")
+
             if isinstance(prof.get("languages"), dict):
                 prof["languages"].setdefault(lang_short, {})
                 if isinstance(prof["languages"][lang_short], dict):
                     prof["languages"][lang_short]["voice_id"] = voice_id_input.strip()
-            save_eleven_profile(prof)
-            st.success("TTS settings saved.")
 
-    with c2:
-        with st.popover("Voice Mappings"):
+            save_eleven_profile(prof)
+            st.success("Saved")
+
+    with save_b:
+        with st.popover("Voice Map"):
             langs = profile.get("languages", {}) if isinstance(profile.get("languages", {}), dict) else {}
             rows_map = [{"lang": k, "voice_id": (v or {}).get("voice_id", "")} for k, v in sorted(langs.items())]
-            st.dataframe(rows_map, use_container_width=True, hide_index=True)
+            st.dataframe(rows_map, width="stretch", hide_index=True)
 
     st.markdown("### Output Defaults")
     target_fps = get_default_fps()
-    subtitle_family = get_language_family(lang_code)
-    subtitle_style = get_subtitle_style(lang_code)
-    filter_preset_name = st.selectbox("Visual Filter", ["clean", "industrial", "warm_brand"], index=0)
-    filter_preset = get_filter_preset(filter_preset_name)
-
-    st.caption(f"Target FPS: {target_fps}")
-    st.caption(f"Subtitle preset: {subtitle_family}")
-    st.caption(f"Font preset: {subtitle_style.get('font_family', 'default')}")
-    st.caption(f"Selected language family: {subtitle_family}")
-    st.caption(f"Filter preset: {filter_preset_name}")
+    filter_preset_name = st.selectbox("Visual Filter", ["clean", "industrial", "warm_brand"], index=1)
+    _ = get_filter_preset(filter_preset_name)
+    st.caption(f"FPS: {target_fps}  |  Filter: {filter_preset_name}")
 
     with st.expander("Advanced", expanded=False):
         input_root = st.text_input("Footage Root", value=str(INPUT_ROOT_DEFAULT))
         verbose = st.checkbox("Verbose Logs (Dev)", value=False)
 
 # =========================================================
-# ENV injection
+# ENV
 # =========================================================
 ENV = os.environ.copy()
 
@@ -292,32 +372,28 @@ for k, v in _langs.items():
             ENV[f"ELEVENLABS_VOICE_ID_{k.upper()}"] = vid
 
 # =========================================================
-# Company discovery
-# =========================================================
-def list_companies() -> list[str]:
-    names = set()
-    if CREATIVE_ROOT.exists():
-        names.update([p.name for p in CREATIVE_ROOT.iterdir() if p.is_dir()])
-    input_root_path_local = Path(input_root) if "input_root" in locals() else INPUT_ROOT_DEFAULT
-    for ori in ("portrait", "landscape"):
-        ori_root = input_root_path_local / ori
-        if ori_root.exists():
-            names.update([p.name for p in ori_root.iterdir() if p.is_dir()])
-    return sorted([x for x in names if x.strip()])
-
-companies = list_companies()
-if not companies:
-    companies = ["Siglen", "Fareo"]
-
-default_idx = companies.index("Siglen") if "Siglen" in companies else 0
-company = st.selectbox("Company", companies, index=default_idx)
-
-# =========================================================
-# Storage resolution
+# Top controls
 # =========================================================
 input_root_path = Path(input_root) if "input_root" in locals() else INPUT_ROOT_DEFAULT
 output_root_path = OUTPUT_ROOT_DEFAULT
 
+companies = list_companies(input_root_path)
+default_idx = companies.index("Siglen") if "Siglen" in companies else (0 if companies else None)
+
+top_a, top_b = st.columns([1, 1])
+with top_a:
+    company = st.selectbox("Company", companies, index=default_idx, key="company_select_top")
+with top_b:
+    work_mode = st.radio(
+        "Work Mode",
+        ["Project Mode", "Pool Fill Mode"],
+        horizontal=True,
+        key="work_mode",
+    )
+
+# =========================================================
+# Storage
+# =========================================================
 storage_ready = True
 storage_error = ""
 
@@ -342,10 +418,243 @@ if not storage_ready:
         st.caption(f"Reason: {storage_error}")
 
 # =========================================================
-# Step 1 · Creative Script → Task Rows
+# Pool Fill Mode (independent page)
+# =========================================================
+if work_mode == "Pool Fill Mode":
+    st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
+    st.markdown("## Pool Fill Mode")
+    st.info(
+        "Use this page to build the reusable footage pool. "
+        "Choose a topic, inspect missing slots, then upload clips directly into the matching slot. "
+        "The system will auto-name files and update the asset index."
+    )
+
+    if not storage_ready or not factory_dir:
+        st.info("Footage storage is unavailable. Pool Fill Mode is currently disabled.")
+        st.stop()
+
+    pool_plan = load_pool_plan(company)
+    if not pool_plan:
+        st.error(f"No pool plan found for {company}. Expected: data/pool_plans/{str(company).lower()}.yaml")
+        st.stop()
+
+    topics = pool_plan.get("topics", []) if isinstance(pool_plan.get("topics"), list) else []
+    topic_names = [str(t.get("name", "")) for t in topics if isinstance(t, dict) and str(t.get("name", "")).strip()]
+    if not topic_names:
+        st.error("Pool plan has no valid topics.")
+        st.stop()
+
+    toolbar_a, toolbar_b, toolbar_c = st.columns([1, 1, 2])
+    with toolbar_a:
+        pool_topic = st.selectbox("Pool Topic", topic_names, key="pool_topic_v2")
+    with toolbar_b:
+        ext_choice_pool = st.selectbox("Default Ext", [".mp4", ".mov", ".m4v", ".mkv"], index=0, key="ext_choice_pool")
+    with toolbar_c:
+        st.markdown('<div class="top-help"></div>', unsafe_allow_html=True)
+        st.caption("Workflow: choose topic → inspect missing slots → upload matching clips → system auto-names + auto-indexes.")
+
+    factory_files = list_video_files(factory_dir, VIDEO_SUFFIXES)
+
+    selected_topic = None
+    for topic in topics:
+        if isinstance(topic, dict) and str(topic.get("name", "")) == pool_topic:
+            selected_topic = topic
+            break
+
+    slots = selected_topic.get("slots", []) if isinstance(selected_topic, dict) and isinstance(selected_topic.get("slots"), list) else []
+
+    summary_rows = []
+    total_target = 0
+    total_existing = 0
+    total_missing = 0
+
+    for slot in slots:
+        scene_name = str(slot.get("scene", "")).strip()
+        content_name = str(slot.get("content", "")).strip()
+        coverage_name = str(slot.get("coverage", "")).strip()
+        move_name = str(slot.get("move", "")).strip()
+        target = int(slot.get("target", 0) or 0)
+        priority = str(slot.get("priority", "medium") or "medium")
+
+        existing = count_pool_matches(factory_files, scene_name, content_name, coverage_name, move_name)
+        missing = max(0, target - existing)
+
+        total_target += target
+        total_existing += existing
+        total_missing += missing
+
+        summary_rows.append(
+            {
+                "priority": priority,
+                "scene": scene_name,
+                "content": content_name,
+                "coverage": coverage_name,
+                "move": move_name,
+                "target": target,
+                "existing": existing,
+                "missing": missing,
+            }
+        )
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Target clips", total_target)
+    m2.metric("Existing clips", total_existing)
+    m3.metric("Missing clips", total_missing)
+
+    st.markdown("### Slot Summary")
+    st.dataframe(summary_rows, width="stretch", hide_index=True)
+
+    st.markdown("### Capture Sheet")
+    st.caption("Screenshot-friendly shooting board. Focus on high-priority slots with the biggest gaps first.")
+
+    sorted_slots = sorted(
+        slots,
+        key=lambda slot: (
+            0 if str(slot.get("priority", "medium")).lower() == "high" else
+            1 if str(slot.get("priority", "medium")).lower() == "medium" else 2,
+            str(slot.get("scene", "")),
+            str(slot.get("content", "")),
+            str(slot.get("coverage", "")),
+        ),
+    )
+
+    compact_rows = []
+    for slot in sorted_slots:
+        scene_name = str(slot.get("scene", "")).strip()
+        content_name = str(slot.get("content", "")).strip()
+        coverage_name = str(slot.get("coverage", "")).strip()
+        move_name = str(slot.get("move", "")).strip()
+        target = int(slot.get("target", 0) or 0)
+        priority = str(slot.get("priority", "medium") or "medium")
+
+        existing = count_pool_matches(factory_files, scene_name, content_name, coverage_name, move_name)
+        missing = max(0, target - existing)
+
+        compact_rows.append(
+            {
+                "Priority": priority_badge(priority),
+                "Slot": slot_display_name(scene_name, content_name, coverage_name, move_name),
+                "Target": target,
+                "Existing": existing,
+                "Missing": missing,
+                "Duration": recommended_duration_for_slot(coverage_name, move_name),
+                "Move": movement_guidance(move_name),
+                "Framing": composition_guidance(scene_name, content_name, coverage_name),
+            }
+        )
+
+    st.dataframe(compact_rows, width="stretch", hide_index=True)
+
+    st.markdown("### Upload by Slot")
+    st.caption("Open the matching slot below and upload clips directly. Files will be auto-named and indexed.")
+
+    for i, slot in enumerate(sorted_slots):
+        scene_name = str(slot.get("scene", "")).strip()
+        content_name = str(slot.get("content", "")).strip()
+        coverage_name = str(slot.get("coverage", "")).strip()
+        move_name = str(slot.get("move", "")).strip()
+        target = int(slot.get("target", 0) or 0)
+        priority = str(slot.get("priority", "medium") or "medium")
+        defaults = slot.get("defaults", {}) if isinstance(slot.get("defaults"), dict) else {}
+
+        existing = count_pool_matches(factory_files, scene_name, content_name, coverage_name, move_name)
+        missing = max(0, target - existing)
+
+        default_energy = str(defaults.get("energy", "medium") or "medium")
+        default_quality = str(defaults.get("quality_status", "approved") or "approved")
+        default_group = str(defaults.get("continuity_group", "") or "")
+        default_intro = bool(defaults.get("intro_safe", False))
+        default_hero = bool(defaults.get("hero_safe", False))
+        default_outro = bool(defaults.get("outro_safe", False))
+
+        with st.expander(
+            f"{priority_badge(priority)} · {slot_display_name(scene_name, content_name, coverage_name, move_name)} · missing {missing}",
+            expanded=(missing > 0 and priority == "high"),
+        ):
+            head1, head2, head3, head4 = st.columns(4)
+            head1.metric("Target", target)
+            head2.metric("Existing", existing)
+            head3.metric("Missing", missing)
+            head4.write(f"**{recommended_duration_for_slot(coverage_name, move_name)}**  \n{movement_guidance(move_name)}")
+
+            uploads = st.file_uploader(
+                "Upload clips for this slot",
+                type=VIDEO_EXTS,
+                accept_multiple_files=True,
+                key=f"pool_fill_v2_upload_{pool_topic}_{i}",
+            )
+
+            meta1, meta2 = st.columns([1, 1])
+            with meta1:
+                energy_default = st.selectbox(
+                    "energy",
+                    ["low", "medium", "high"],
+                    index=["low", "medium", "high"].index(default_energy) if default_energy in ["low", "medium", "high"] else 1,
+                    key=f"pool_fill_v2_energy_{pool_topic}_{i}",
+                )
+                quality_default = st.selectbox(
+                    "quality_status",
+                    ["approved", "review", "reject"],
+                    index=["approved", "review", "reject"].index(default_quality) if default_quality in ["approved", "review", "reject"] else 0,
+                    key=f"pool_fill_v2_quality_{pool_topic}_{i}",
+                )
+            with meta2:
+                continuity_group_default = st.text_input(
+                    "continuity_group",
+                    value=default_group,
+                    key=f"pool_fill_v2_group_{pool_topic}_{i}",
+                )
+                notes_default = st.text_input(
+                    "notes",
+                    value="",
+                    key=f"pool_fill_v2_notes_{pool_topic}_{i}",
+                )
+
+            t1, t2, t3 = st.columns(3)
+            with t1:
+                intro_safe_default = st.checkbox("intro_safe", value=default_intro, key=f"pool_fill_v2_intro_{pool_topic}_{i}")
+            with t2:
+                hero_safe_default = st.checkbox("hero_safe", value=default_hero, key=f"pool_fill_v2_hero_{pool_topic}_{i}")
+            with t3:
+                outro_safe_default = st.checkbox("outro_safe", value=default_outro, key=f"pool_fill_v2_outro_{pool_topic}_{i}")
+
+            if st.button("Save to Pool", key=f"pool_fill_v2_save_{pool_topic}_{i}"):
+                if not uploads:
+                    st.warning("Please upload at least one clip.")
+                else:
+                    cur = next_index_for(factory_dir, scene_name, content_name, coverage_name, move_name, ext_choice_pool)
+
+                    for uf in uploads:
+                        ext = Path(uf.name).suffix.lower() or ext_choice_pool
+                        fname = build_factory_filename(scene_name, content_name, coverage_name, move_name, cur, ext)
+                        saved_path = safe_write_file(factory_dir / fname, uf.getbuffer().tobytes())
+                        upsert_asset_record(factory_dir / "asset_index.json", saved_path)
+                        update_asset_record_fields(
+                            factory_dir / "asset_index.json",
+                            saved_path.name,
+                            {
+                                "hero_safe": hero_safe_default,
+                                "intro_safe": intro_safe_default,
+                                "outro_safe": outro_safe_default,
+                                "continuity_group": continuity_group_default.strip(),
+                                "energy": energy_default,
+                                "quality_status": quality_default,
+                                "notes": notes_default.strip(),
+                            },
+                        )
+                        cur += 1
+
+                    st.success("Saved to pool.")
+                    st.rerun()
+
+    st.stop()
+
+# =========================================================
+# Project Mode · Step 1
 # =========================================================
 st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
 st.markdown("## Step 1 · Creative Script → Task Rows")
+st.caption("Use this mode when you already have a script and want task rows + final rendering.")
 
 src_mode = st.selectbox("Script Source", ["Paste Script YAML", "Use Existing Script YAML"], key="src_mode")
 colA, colB = st.columns([2, 1])
@@ -372,7 +681,7 @@ with colA:
 
 with colB:
     st.markdown("**Actions**")
-    generate_btn = st.button("Generate Task Rows", use_container_width=True, key="generate_tasks")
+    generate_btn = st.button("Generate Task Rows", width="stretch", key="generate_tasks")
     compact_view = st.checkbox("Compact View", value=True, key="compact_view")
     export_html = st.checkbox("Export Printable HTML", value=True, key="export_html")
 
@@ -406,18 +715,21 @@ if generate_btn:
             run_id = f"{safe_slug(project)}_{now_tag()[:15]}"
             run_dir = output_root_path / orientation / company / run_id
             run_dir.mkdir(parents=True, exist_ok=True)
+            layout = ensure_run_layout(run_dir)
+            internal_dir = layout["internal_dir"]
             st.session_state["run_dir"] = str(run_dir)
 
-            creative_path = run_dir / f"{run_id}.creative.yaml"
+            creative_path = internal_dir / f"{run_id}.creative.yaml"
             creative_path.write_text(creative_text, encoding="utf-8")
             st.session_state["active_creative_path"] = str(creative_path)
 
-            compiled_out = run_dir / f"{run_id}.compiled.yaml"
+            compiled_out = internal_dir / f"{run_id}.compiled.yaml"
             st.session_state["compiled_out_path"] = str(compiled_out)
 
             beats = beats_from_creative(d)
             rows: list[dict] = []
             row_i = 1
+
             for i, beat in enumerate(beats, start=1):
                 category = infer_category_from_beat(beat)
                 scene = infer_scene_from_beat(beat)
@@ -444,70 +756,13 @@ if generate_btn:
                     row_i += 1
 
             st.session_state["shooting_rows"] = rows
-            (run_dir / "shooting_rows.json").write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
+            (internal_dir / "shooting_rows.json").write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
+
             if export_html:
                 (run_dir / "task_rows.html").write_text(render_html_task_table(rows), encoding="utf-8")
 
             st.success(f"Generated {len(rows)} task rows.")
             st.caption(f"Run Folder: {run_dir}")
-        run_id = f"{safe_slug(project)}_{now_tag()[:15]}"
-        run_dir = output_root_path / orientation / company / run_id
-        run_dir.mkdir(parents=True, exist_ok=True)
-        layout = ensure_run_layout(run_dir)
-        internal_dir = layout["internal_dir"]
-        st.session_state["run_dir"] = str(run_dir)
-
-        creative_path = internal_dir / f"{run_id}.creative.yaml"
-        creative_path.write_text(creative_text, encoding="utf-8")
-        st.session_state["active_creative_path"] = str(creative_path)
-
-        compiled_out = internal_dir / f"{run_id}.compiled.yaml"
-        st.session_state["compiled_out_path"] = str(compiled_out)
-
-        beats = beats_from_creative(d)
-        rows: list[dict] = []
-        row_i = 1
-        for i, beat in enumerate(beats, start=1):
-            category = infer_category_from_beat(beat)
-            scene = infer_scene_from_beat(beat)
-            visual = str(beat.get("visual") or beat.get("visual_description") or "")
-            duration_hint = beat.get("duration_hint")
-            seconds_default = str(duration_hint) if duration_hint else ""
-            shots = infer_shots_from_beat(beat)
-
-            for shot in shots:
-                shot_norm = "detail" if shot in ["close"] else shot
-                rows.append(
-                    {
-                        "Row": f"S{row_i:03d}",
-                        "Beat": i,
-                        "Category": category,
-                        "Scene": scene,
-                        "Shot": shot_norm,
-                        "Seconds": seconds_default or default_seconds_for_shot(shot_norm),
-                        "Movement": suggested_movement(shot_norm),
-                        "Notes": visual,
-                        "BeatPurpose": str(beat.get("purpose") or ""),
-                    }
-                )
-                row_i += 1
-
-        st.session_state["shooting_rows"] = rows
-        internal_dir = run_dir / "_internal"
-        internal_dir.mkdir(parents=True, exist_ok=True)
-        (internal_dir / "shooting_rows.json").write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
-
-        subtitle_style = get_subtitle_style(lang_code)
-        (internal_dir / "subtitle_style.json").write_text(
-            json.dumps(subtitle_style, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-
-        if export_html:
-            (run_dir / "task_rows.html").write_text(render_html_task_table(rows), encoding="utf-8")
-
-        st.success(f"Generated {len(rows)} task rows.")
-        st.caption(f"Run Folder: {run_dir}")
 
 rows = st.session_state.get("shooting_rows") or []
 run_dir = Path(st.session_state["run_dir"]) if st.session_state.get("run_dir") else None
@@ -533,7 +788,7 @@ if rows and run_dir:
         if compact_view
         else ["Row", "Beat", "Category", "Scene", "Shot", "Seconds", "Movement", "Notes"]
     )
-    st.dataframe([{k: r.get(k, "") for k in show_cols} for r in rows], use_container_width=True, hide_index=True)
+    st.dataframe([{k: r.get(k, "") for k in show_cols} for r in rows], width="stretch", hide_index=True)
 
     if export_html:
         html_path = run_dir / "task_rows.html"
@@ -543,15 +798,15 @@ if rows and run_dir:
                 data=html_path.read_text(encoding="utf-8"),
                 file_name=html_path.name,
                 mime="text/html",
-                use_container_width=True,
+                width="stretch",
             )
 
 # =========================================================
-# Step 2 · Footage Board
+# Project Mode · Step 2
 # =========================================================
 st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
 st.markdown("## Step 2 · Footage Board")
-st.caption("Review footage requirements by beat. Each missing slot can be filled by upload or inbox transfer. Saved files go to the Factory Pool.")
+st.caption("Project-driven intake. Missing task slots can be filled by upload or inbox transfer.")
 
 if not storage_ready or not inbox_dir or not factory_dir:
     st.info("Footage storage is unavailable. Step 2 is currently disabled.")
@@ -572,17 +827,19 @@ elif rows:
         if preview_items:
             preview_rows = []
             for item in preview_items[:30]:
-                preview_rows.append({
-                    "filename": item.get("filename", ""),
-                    "scene": item.get("scene", ""),
-                    "content": item.get("content", ""),
-                    "coverage": item.get("coverage", ""),
-                    "move": item.get("move", ""),
-                    "raw_duration": item.get("raw_duration", ""),
-                    "usable_duration": item.get("usable_duration", ""),
-                    "quality_status": item.get("quality_status", ""),
-                })
-            st.dataframe(preview_rows, use_container_width=True, hide_index=True)
+                preview_rows.append(
+                    {
+                        "filename": item.get("filename", ""),
+                        "scene": item.get("scene", ""),
+                        "content": item.get("content", ""),
+                        "coverage": item.get("coverage", ""),
+                        "move": item.get("move", ""),
+                        "raw_duration": item.get("raw_duration", ""),
+                        "usable_duration": item.get("usable_duration", ""),
+                        "quality_status": item.get("quality_status", ""),
+                    }
+                )
+            st.dataframe(preview_rows, width="stretch", hide_index=True)
         else:
             st.info("No indexed factory assets yet.")
 
@@ -648,8 +905,15 @@ elif rows:
                 need[key] = need.get(key, 0) + 1
 
             for (cat, shot), n_need in need.items():
-                pat = re.compile(rf"^factory_{re.escape(cat)}_{re.escape(shot)}_.*", re.IGNORECASE)
-                matched = [p for p in factory_files if pat.match(p.name)]
+                scene_name = "factory"
+                content_name = cat
+                coverage_name = shot
+                move_name = "static"
+
+                matched = [
+                    p for p in factory_files
+                    if p.name.lower().startswith(f"{safe_slug(scene_name)}_{safe_slug(content_name)}_{safe_slug(coverage_name)}_")
+                ]
                 ready = min(n_need, len(matched)) if auto_use_factory else 0
                 missing = n_need - ready
 
@@ -663,11 +927,11 @@ elif rows:
                     st.markdown("---")
                     continue
 
-                slot_custom = st.text_input(
-                    f"Custom Tag for {cat}_{shot} (Optional)",
-                    value="",
-                    placeholder="e.g. angleA / takeB",
-                    key=f"slot_custom_{beat_no}_{cat}_{shot}",
+                move_name = st.selectbox(
+                    f"Move token for {cat}_{shot}",
+                    ["static", "slide", "pushin", "follow", "orbit", "reveal"],
+                    index=0,
+                    key=f"move_token_{beat_no}_{cat}_{shot}",
                 )
 
                 uploads = st.file_uploader(
@@ -685,11 +949,10 @@ elif rows:
                 )
 
                 if st.button("Save to Factory Pool", key=f"save_{beat_no}_{cat}_{shot}"):
-                    cur = next_index_for(factory_dir, cat, shot, slot_custom, ext_choice)
+                    cur = next_index_for(factory_dir, scene_name, content_name, coverage_name, move_name, ext_choice)
                     rejected_msgs: list[str] = []
                     saved_count = 0
 
-                    # uploads: save to inbox first? current UX saves directly to factory when validated
                     if uploads:
                         for uf in uploads:
                             tmp_ext = Path(uf.name).suffix.lower() or ext_choice
@@ -698,37 +961,34 @@ elif rows:
                                 tmp_path.write_bytes(uf.getbuffer().tobytes())
                                 actual = classify_orientation(tmp_path)
                                 if actual != orientation:
-                                    rejected_msgs.append(
-                                        f"{uf.name}: {actual} does not match current layout ({orientation})."
-                                    )
+                                    rejected_msgs.append(f"{uf.name}: {actual} does not match current layout ({orientation}).")
                                     tmp_path.unlink(missing_ok=True)
                                     continue
 
-                                fname = build_factory_filename(cat, shot, slot_custom, cur, tmp_ext)
-                                safe_write_file(factory_dir / fname, uf.getbuffer().tobytes())
+                                fname = build_factory_filename(scene_name, content_name, coverage_name, move_name, cur, tmp_ext)
+                                saved_path = safe_write_file(factory_dir / fname, uf.getbuffer().tobytes())
+                                upsert_asset_record(factory_dir / "asset_index.json", saved_path)
                                 saved_count += 1
                                 cur += 1
                             finally:
                                 if tmp_path.exists():
                                     tmp_path.unlink(missing_ok=True)
 
-                    # move from inbox only if orientation matches
                     if pick_inbox:
                         for src in pick_inbox:
                             actual = classify_orientation(src)
                             if actual != orientation:
-                                rejected_msgs.append(
-                                    f"{src.name}: {actual} does not match current layout ({orientation})."
-                                )
+                                rejected_msgs.append(f"{src.name}: {actual} does not match current layout ({orientation}).")
                                 continue
 
                             ext = src.suffix.lower() or ext_choice
-                            fname = build_factory_filename(cat, shot, slot_custom, cur, ext)
+                            fname = build_factory_filename(scene_name, content_name, coverage_name, move_name, cur, ext)
                             dst = factory_dir / fname
                             if dst.exists():
                                 dst = factory_dir / f"{Path(fname).stem}_{now_tag()}{ext}"
                             try:
                                 src.rename(dst)
+                                upsert_asset_record(factory_dir / "asset_index.json", dst)
                                 saved_count += 1
                                 cur += 1
                             except Exception as e:
@@ -750,7 +1010,7 @@ else:
     st.info("Generate Task Rows in Step 1 first.")
 
 # =========================================================
-# Step 3 · Create Video
+# Project Mode · Step 3
 # =========================================================
 st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
 st.markdown("## Step 3 · Create Video")
@@ -765,7 +1025,7 @@ if not storage_ready:
 elif not (active_creative_path and run_dir and compiled_out and active_creative_path.exists()):
     st.info("Generate Task Rows in Step 1 first.")
 else:
-    if st.button("Create Video", use_container_width=True, key="create_video"):
+    if st.button("Create Video", width="stretch", key="create_video"):
         progress = st.progress(0)
         status = st.empty()
 
@@ -818,4 +1078,4 @@ else:
             progress.progress(100)
             st.error(f"Unexpected Error: {e}")
 
-    st.link_button("Open Run Folder", f"file://{run_dir}", use_container_width=True)
+    st.link_button("Open Run Folder", f"file://{run_dir}", width="stretch")
