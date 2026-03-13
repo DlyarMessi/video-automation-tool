@@ -430,21 +430,24 @@ def burn_subtitles_ffmpeg(
     video_out: Path,
     font_name: str = "Arial",
     original_size: str = "1080x1920",
+    font_size: int = 48,
+    outline: int = 2,
+    shadow: int = 0,
+    margin_v: int = 140,
 ):
     PLAY_RES_X = 1080
     PLAY_RES_Y = 1920
-    FONT_SIZE = 48
-    MARGIN_V = 140
+
     style = (
         f"FontName={font_name},"
-        f"FontSize={FONT_SIZE},"
+        f"FontSize={font_size},"
         f"PrimaryColour=&H00FFFFFF,"
         f"OutlineColour=&H00000000,"
         f"BorderStyle=1,"
-        f"Outline=2,"
-        f"Shadow=0,"
+        f"Outline={outline},"
+        f"Shadow={shadow},"
         f"Alignment=2,"
-        f"MarginV={MARGIN_V},"
+        f"MarginV={margin_v},"
         f"PlayResX={PLAY_RES_X},"
         f"PlayResY={PLAY_RES_Y}"
     )
@@ -844,12 +847,27 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
 
             if has_srt:
                 st = style_presets.get("subtitle") or style_presets.get("default", {})
-                font_path = Path(st.get("font", FONT_PATH))
+                project_subtitle_style = project.get("subtitle_style", {}) if isinstance(project.get("subtitle_style", {}), dict) else {}
+
+                font_name = str(project_subtitle_style.get("font_family") or "")
+                if not font_name:
+                    font_path = Path(st.get("font", FONT_PATH))
+                    font_name = font_path.stem if font_path else "Arial"
+
+                font_size = int(project_subtitle_style.get("font_size", 48) or 48)
+                outline = int(project_subtitle_style.get("outline", 2) or 2)
+                shadow = int(project_subtitle_style.get("shadow", 0) or 0)
+                margin_v = int(project_subtitle_style.get("bottom_margin", 140) or 140)
+
                 burn_subtitles_ffmpeg(
                     video_in=tmp_mp4,
                     srt_path=srt_path,
                     video_out=mp4_path,
-                    font_name=font_path.stem if font_path else "Arial",
+                    font_name=font_name,
+                    font_size=font_size,
+                    outline=outline,
+                    shadow=shadow,
+                    margin_v=margin_v,
                     original_size=f"{final_video.w}x{final_video.h}",
                 )
                 did_burn = True
