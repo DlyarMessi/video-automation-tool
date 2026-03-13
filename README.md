@@ -1,87 +1,128 @@
 # Script-First Video Automation Tool
 
-A three-step workflow for industrial promo-video production.
+A production-oriented three-step workflow for short-form brand video generation:
 
-1. Provide a structured script  
-2. Generate shooting tasks and fill footage slots  
-3. Render the final video
+1. provide a structured script
+2. generate shooting tasks and fill the indexed material pool
+3. render final videos from reusable assets
 
-This project is designed to turn repeatable video production into a cleaner, more stable workflow for internal teams.
+---
 
-## Core idea
+## What the system does
 
-The system is built around a script-first approach.
+This project is designed to evolve from a one-off editing helper into a reusable content production system.
 
-A structured script is the primary input.  
-From that single input, the system can:
+Current foundation includes:
 
-- generate shooting tasks
-- organize footage requirements
-- prepare timeline logic
-- apply editorial rules
-- render a final video
+- script-first workflow
+- indexed reusable footage pool
+- multi-language subtitle styling
+- managed font assets
+- ElevenLabs-based voice pipeline
+- 60fps output defaults
+- visual filter presets
+- anti-repeat material scheduling
+- director-rule-based sequencing
+
+---
+
+## Core files
+
+- `ui_app.py` — operator-facing UI
+- `src/main.py` — CLI entry point
+- `src/workflow.py` — workflow helpers
+- `src/utils.py` — render pipeline and material scheduling
+- `src/material_index.py` — material index logic
+- `src/render_profile.py` — preset access layer
+- `src/director_engine/` — editorial rule system
+
+---
+
+## Material philosophy
+
+The long-term goal is not to manually edit every new video.
+
+The long-term goal is to:
+
+- build a standardized footage pool
+- index it with reusable metadata
+- let new scripts repeatedly call the pool
+- keep outputs varied through scheduling and director rules
+
+That is why the system now separates:
+
+- file naming
+- material indexing
+- director logic
+- render presets
+
+---
 
 ## Current workflow
 
 ### Step 1 — Script → Tasks
-The operator provides a creative script in YAML format.
-
-The system parses the script and generates:
-
-- task rows
-- scene / category / shot breakdown
-- missing footage requirements
-- optional printable task output
+Generate task rows from a creative script.
 
 ### Step 2 — Footage Board
-The operator reviews required footage and fills missing slots.
-
-This step supports:
-
-- checking existing factory footage
-- identifying missing assets
-- uploading new clips
-- moving clips from inbox to factory pool
-- applying naming rules consistently
+Fill required footage slots and manage the factory pool.
 
 ### Step 3 — Create Video
-The system prepares an internal production timeline, applies render settings, and generates the final video.
+Compile, apply render settings, and render the final video.
 
-## Project structure
+---
 
-- `ui_app.py` — operator-facing UI
-- `src/workflow.py` — main workflow logic for the three-step system
-- `src/main.py` — CLI entry point
-- `src/director_engine/` — editorial rule layer
-- `src/tts_provider.py` — ElevenLabs TTS provider
-- `src/voiceover_a2.py` — voiceover event handling
-- `src/subtitle_builder.py` — subtitle building
-- `creative_scripts/` — script inputs and examples
-- `data/tts_profiles/` — local TTS configuration
+## Key system layers
 
-See `PROJECT_STRUCTURE.md` for a more detailed breakdown.
+### Naming layer
+Core filename pattern:
 
-## Design principles
+`scene_content_coverage_move_index.ext`
 
-- script-first
-- stable over flashy
-- reusable over one-off
-- workflow clarity over experimental complexity
-- lightweight output per run
+### Index layer
+Each factory pool uses `asset_index.json` to store:
+- durations
+- usable windows
+- continuity groups
+- energy
+- quality review
+- intro / outro / hero suitability
 
-## Notes
+### Director layer
+The director engine currently applies:
+- structure rules
+- motion continuity rules
+- repetition control
+- transition logic
+- pacing logic
+- ending logic
 
-- ElevenLabs is the only supported TTS provider.
-- The footage drive may live on external storage.
-- The UI is designed to degrade safely if footage storage is unavailable.
-- The output structure is intentionally lightweight per run.
+### Render layer
+The render system currently supports:
+- subtitle style presets
+- font asset routing
+- filter presets
+- 60fps defaults
 
-## Next direction
+---
 
-The next development focus is not repository cleanup, but workflow refinement:
+## Important documents
 
-- stronger script schema
-- cleaner footage-slot logic
-- better metadata for the Director Engine
-- bilingual documentation
-- future Chinese UI support
+- `PROJECT_STRUCTURE.md` — folder and module layout
+- `SYSTEM_FIELDS.md` — naming, index, rule, and UI field dictionary
+
+---
+
+## Current TTS policy
+
+ElevenLabs is the only active TTS provider in the current system.
+
+---
+
+## Current output policy
+
+The system favors:
+- cleaner run folders
+- reusable material pools
+- lightweight internal artifacts
+- controlled repeatability over uncontrolled randomness
+

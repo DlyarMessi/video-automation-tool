@@ -1,78 +1,162 @@
 # Project Structure
 
-This document explains the current structure after the workflow consolidation.
+This project is organized around a three-step production workflow:
 
-## Primary layers
+1. provide a script
+2. generate shooting tasks and manage footage slots
+3. render final videos from an indexed material pool
+
+---
+
+## Root
 
 ### `ui_app.py`
-The operator-facing application.
+Operator-facing Streamlit UI.
 
-Responsibilities:
-- collect input from the user
-- display the three workflow steps
-- show task rows and footage status
-- trigger render actions
+### `README.md`
+Project overview.
 
-Non-responsibilities:
-- does not define editorial rules
-- does not own TTS implementation
-- does not own deep workflow logic
+### `PROJECT_STRUCTURE.md`
+This file.
 
-### `src/workflow.py`
-The core workflow layer.
+### `SYSTEM_FIELDS.md`
+Field dictionary for naming, indexing, director rules, and UI.
 
-Responsibilities:
-- validate structured scripts
-- generate shooting task rows
-- infer task metadata used by the UI
-- manage footage naming helpers
-- summarize footage coverage
-- prepare internal production YAML
-- patch final render settings
+### `data/`
+Project data assets and presets.
 
-This file is intentionally the main “product logic” layer.
+### `src/`
+Core application logic.
 
-### `src/director_engine/`
-The editorial rule layer.
+---
 
-Responsibilities:
-- apply pacing rules
-- apply repetition control
-- apply transitions
-- apply ending behavior
+## `data/`
 
-This layer modifies timeline behavior, but does not create the product workflow itself.
+### `data/render_presets.json`
+Render defaults, subtitle presets, and filter presets.
+
+### `data/fonts/`
+Project-managed subtitle font assets.
+
+Suggested structure:
+- `data/fonts/latin/`
+- `data/fonts/cyrillic/`
+- `data/fonts/arabic/`
+
+---
+
+## `src/`
 
 ### `src/main.py`
-The CLI entry point.
+CLI entry point.
 
-Responsibilities:
-- expose compile / guide / run commands
-- connect workflow logic to rendering logic
+### `src/workflow.py`
+Creative-to-production workflow helpers and patch logic.
 
-### TTS / subtitle / voiceover files
-- `src/tts_provider.py`
-- `src/voiceover_a2.py`
-- `src/subtitle_builder.py`
+### `src/utils.py`
+Main render pipeline and material selection logic.
 
-These files are engine-level support modules.
+### `src/render_profile.py`
+Render preset access layer.
 
-## Input directories
+### `src/material_index.py`
+Material pool indexing helpers.
 
-### `creative_scripts/`
-Stores structured script inputs and examples.
+### `src/subtitle_builder.py`
+Subtitle segment generation.
 
-### `data/tts_profiles/`
-Stores local ElevenLabs profile configuration.
+### `src/voiceover_a2.py`
+Voiceover event building.
 
-## Output philosophy
+### `src/tts_provider.py`
+TTS provider interface.
 
-The output structure is intentionally lightweight.
+### `src/script_loader.py`
+Script loading utility.
 
-A run should keep only what is necessary, such as:
-- creative script snapshot
-- task rows
-- render logs
-- final video
+---
 
-The repository no longer treats debug artifacts as first-class outputs.
+## `src/director_engine/`
+
+Director rules layer.
+
+### `engine.py`
+Rule runner.
+
+### `profiles/content_factory.yaml`
+Current main director profile.
+
+### `rules/common.py`
+Shared parsing helpers for rule modules.
+
+### `rules/structure.py`
+Sequence structure logic.
+
+### `rules/motion_continuity.py`
+Continuity scoring and local reordering.
+
+### `rules/pacing.py`
+Duration shaping.
+
+### `rules/repetition.py`
+Repetition control.
+
+### `rules/transitions.py`
+Transition decisions.
+
+### `rules/ending.py`
+Ending selection and hold logic.
+
+---
+
+## Material Pool Layout
+
+Input footage is expected under orientation and company folders.
+
+Recommended structure:
+
+`input_videos/<orientation>/<company>/_INBOX/`
+`input_videos/<orientation>/<company>/factory/`
+
+### `_INBOX`
+Raw intake area.
+
+### `factory`
+Named and indexed reusable material pool.
+
+This folder is the long-term production asset pool.
+
+### `factory/asset_index.json`
+Structured material metadata used by scheduling and director logic.
+
+---
+
+## Output Layout
+
+Recommended output structure:
+
+`output_videos/<orientation>/<company>/<run_id>/`
+
+Internal run artifacts are stored under:
+
+`output_videos/<orientation>/<company>/<run_id>/_internal/`
+
+A global usage memory file may exist at:
+
+`output_videos/_usage_history.json`
+
+This supports anti-repeat scheduling.
+
+---
+
+## Design Intent
+
+This project is no longer just a script-based renderer.
+
+It is moving toward:
+
+- a reusable indexed material pool
+- director-aware shot sequencing
+- controlled output styling
+- repeatable batch generation
+
