@@ -21,7 +21,8 @@
       "shadow": 1,
       "bottom_margin": 82,
       "max_lines": 2,
-      "line_spacing": 1.08
+      "line_spacing": 1.08,
+      "font_file": ""
     },
     "cyrillic": {
       "font_family": "Arial Unicode MS",
@@ -30,7 +31,8 @@
       "shadow": 1,
       "bottom_margin": 82,
       "max_lines": 2,
-      "line_spacing": 1.08
+      "line_spacing": 1.08,
+      "font_file": ""
     },
     "arabic": {
       "font_family": "Geeza Pro",
@@ -39,18 +41,28 @@
       "shadow": 1,
       "bottom_margin": 90,
       "max_lines": 2,
-      "line_spacing": 1.15
+      "line_spacing": 1.15,
+      "font_file": ""
     }
   },
   "filter_presets": {
     "clean": {
-      "enabled": false
+      "enabled": false,
+      "brightness": 1.0,
+      "contrast": 1.03,
+      "saturation": 1.0
     },
     "industrial": {
-      "enabled": false
+      "enabled": true,
+      "brightness": 0.99,
+      "contrast": 1.08,
+      "saturation": 0.94
     },
     "warm_brand": {
-      "enabled": false
+      "enabled": true,
+      "brightness": 1.01,
+      "contrast": 1.04,
+      "saturation": 1.06
     }
   }
 }

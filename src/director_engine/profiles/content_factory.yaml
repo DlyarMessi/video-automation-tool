@@ -3,16 +3,33 @@ identity:
   role: director
   philosophy: >
     Build long-term trust through consistency, clarity,
-    and calm professional pacing.
+    calm professional pacing, and readable visual continuity.
 
 constraints:
   allow_random_ending: false
   allow_excessive_transitions: false
 
+structure:
+  establish_context_start: wide
+  capability_order: [wide, medium, detail]
+  trust_max_consecutive_detail: 2
+  require_hero_last: true
+
+continuity:
+  prefer_same_scene_chain: true
+  prefer_progressive_coverage: true
+  prefer_same_continuity_group: true
+  avoid_detail_runs: true
+  local_swap_window: 4
+
 pacing:
   shot_duration:
     min: 2.5
     max: 4.5
+  energy_adjustments:
+    low: 1.08
+    medium: 1.0
+    high: 0.9
   ending_hold: 0.6
   min_gap_between_vo: 0.25
 
@@ -30,7 +47,9 @@ ending:
   forbid_random_last: true
 
 rules_enabled:
-  - pacing
+  - structure
+  - motion_continuity
   - repetition
   - transitions
+  - pacing
   - ending

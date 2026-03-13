@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from src.script_loader import load_script
-from src.render_profile import get_default_fps, get_subtitle_style
+from src.render_profile import get_default_fps, get_subtitle_style, get_filter_preset
 
 
 VIDEO_SUFFIXES = [".mp4", ".mov", ".mkv", ".m4v"]
@@ -539,6 +539,7 @@ def patch_compiled_yaml(
     lang: str,
     model: str,
     eleven_profile_path: Optional[Path] = None,
+    filter_preset_name: str = "clean",
 ) -> None:
     try:
         import yaml  # type: ignore
@@ -586,6 +587,7 @@ def patch_compiled_yaml(
     voiceover.setdefault("volume", 1.0)
 
     project["subtitle_style"] = get_subtitle_style(lang)
+    project["filter_preset"] = get_filter_preset(filter_preset_name)
 
     compiled_path.write_text(
         yaml.safe_dump(d, allow_unicode=True, sort_keys=False),
