@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from src.script_loader import load_script
+
+
+VIDEO_SUFFIXES = [".mp4", ".mov", ".mkv", ".m4v"]
 
 
 def now_tag() -> str:
@@ -58,7 +62,7 @@ def normalize_coverage(cov) -> list[str]:
 
 
 def list_video_files(folder: Path, suffixes: Optional[list[str]] = None) -> list[Path]:
-    suffixes = suffixes or [".mp4", ".mov", ".mkv", ".m4v"]
+    suffixes = suffixes or VIDEO_SUFFIXES
     if not folder.exists() or not folder.is_dir():
         return []
     files = [p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in suffixes]
@@ -76,6 +80,95 @@ def safe_write_file(dst: Path, data: bytes) -> Path:
     return stamped
 
 
+# =========================================================
+# Storage layout
+# =========================================================
+def ensure_company_storage(input_root: Path, company: str) -> dict[str, Path]:
+    """
+    Ensure both orientations exist for one company.
+
+    Creates:
+      input_root/portrait/<company>/_INBOX
+      input_root/portrait/<company>/factory
+      input_root/landscape/<company>/_INBOX
+      input_root/landscape/<company>/factory
+    """
+    out: dict[str, Path] = {}
+    for orientation in ("portrait", "landscape"):
+        company_root = input_root / orientation / company
+        inbox = company_root / "_INBOX"
+        factory = company_root / "factory"
+        inbox.mkdir(parents=True, exist_ok=True)
+        factory.mkdir(parents=True, exist_ok=True)
+        out[f"{orientation}_company_root"] = company_root
+        out[f"{orientation}_inbox"] = inbox
+        out[f"{orientation}_factory"] = factory
+    return out
+
+
+def get_storage_dirs(input_root: Path, orientation: str, company: str) -> dict[str, Path]:
+    ensure_company_storage(input_root, company)
+    company_root = input_root / orientation / company
+    return {
+        "company_root": company_root,
+        "inbox": company_root / "_INBOX",
+        "factory": company_root / "factory",
+    }
+
+
+# =========================================================
+# Video orientation
+# =========================================================
+def probe_video_dimensions(path: Path) -> tuple[Optional[int], Optional[int]]:
+    """
+    Uses ffprobe to read width/height.
+    Returns (width, height) or (None, None) on failure.
+    """
+    try:
+        cmd = [
+            "ffprobe",
+            "-v", "error",
+            "-select_streams", "v:0",
+            "-show_entries", "stream=width,height",
+            "-of", "json",
+            str(path),
+        ]
+        p = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        if p.returncode != 0:
+            return None, None
+        data = json.loads(p.stdout or "{}")
+        streams = data.get("streams", [])
+        if not streams:
+            return None, None
+        stream = streams[0]
+        w = stream.get("width")
+        h = stream.get("height")
+        if isinstance(w, int) and isinstance(h, int):
+            return w, h
+        return None, None
+    except Exception:
+        return None, None
+
+
+def classify_orientation(path: Path) -> str:
+    w, h = probe_video_dimensions(path)
+    if not w or not h:
+        return "unknown"
+    if h > w:
+        return "portrait"
+    if w > h:
+        return "landscape"
+    return "square"
+
+
+def orientation_matches(target_orientation: str, path: Path) -> bool:
+    actual = classify_orientation(path)
+    return actual == target_orientation
+
+
+# =========================================================
+# Task row generation
+# =========================================================
 def infer_category_from_beat(beat: dict) -> str:
     tags = beat.get("tags", [])
     if isinstance(tags, list):
@@ -146,6 +239,7 @@ def generate_shooting_rows(creative: dict) -> list[dict]:
     beats = beats_from_creative(creative)
     rows: list[dict] = []
     row_i = 1
+
     for i, beat in enumerate(beats, start=1):
         category = infer_category_from_beat(beat)
         scene = infer_scene_from_beat(beat)
@@ -153,6 +247,7 @@ def generate_shooting_rows(creative: dict) -> list[dict]:
         duration_hint = beat.get("duration_hint")
         seconds_default = str(duration_hint) if duration_hint else ""
         shots = infer_shots_from_beat(beat)
+
         for shot in shots:
             shot_norm = "detail" if shot in ["close"] else shot
             rows.append(
@@ -169,6 +264,7 @@ def generate_shooting_rows(creative: dict) -> list[dict]:
                 }
             )
             row_i += 1
+
     return rows
 
 
@@ -200,9 +296,12 @@ def render_html_task_table(rows: list[dict]) -> str:
             + "</tr>"
         )
     tbody = "\n".join(trs)
-    return f"{css}<h2>Shooting Guide</h2><div class='small'>Generated: {now_tag()}</div><table>{thead}{tbody}</table>"
+    return f"{css}<h2>Task Rows</h2><div class='small'>Generated: {now_tag()}</div><table>{thead}{tbody}</table>"
 
 
+# =========================================================
+# Footage pool helpers
+# =========================================================
 def build_factory_filename(category: str, shot: str, custom: str, idx: int, ext: str) -> str:
     category = safe_slug(category).lower()
     shot = safe_slug(shot).lower()
@@ -242,7 +341,7 @@ def next_index_for(factory_dir: Path, category: str, shot: str, custom: str, ext
 
 
 def summarize_factory_coverage(rows: list[dict], factory_dir: Path) -> dict[str, int]:
-    factory_files = list_video_files(factory_dir)
+    factory_files = list_video_files(factory_dir, VIDEO_SUFFIXES)
     need_by: dict[tuple[str, str], int] = {}
     for r in rows:
         need_by[(r["Category"], r["Shot"])] = need_by.get((r["Category"], r["Shot"]), 0) + 1
@@ -258,6 +357,9 @@ def summarize_factory_coverage(rows: list[dict], factory_dir: Path) -> dict[str,
     return {"total_need": total_need, "total_ready": total_ready, "total_missing": total_missing}
 
 
+# =========================================================
+# Internal compile/render helpers
+# =========================================================
 def _normalize_purpose(purpose: str) -> str:
     p = (purpose or "").strip().lower()
     if p in {"establish_context", "show_capability", "build_trust", "brand_close"}:
@@ -284,8 +386,16 @@ def _infer_scene_token(visual: str) -> str:
     return "factory"
 
 
-def _shot(scene: str, content: str, coverage: str, move: str, duration: float,
-          subtitle: str, tag: str, vo: Optional[str] = None) -> Dict[str, Any]:
+def _shot(
+    scene: str,
+    content: str,
+    coverage: str,
+    move: str,
+    duration: float,
+    subtitle: str,
+    tag: str,
+    vo: Optional[str] = None,
+) -> Dict[str, Any]:
     tags = [scene, content, coverage]
     if move:
         tags.append(move)
@@ -409,7 +519,10 @@ def dump_yaml(data: dict, out_path: Path) -> None:
     except Exception as e:
         raise RuntimeError(f"PyYAML required to write YAML: {e}")
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    out_path.write_text(
+        yaml.safe_dump(data, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
 
 
 def compile_creative_file_to_production(creative_path: Path, out_path: Path) -> Path:
@@ -419,8 +532,13 @@ def compile_creative_file_to_production(creative_path: Path, out_path: Path) -> 
     return out_path
 
 
-def patch_compiled_yaml(compiled_path: Path, orientation: str, lang: str, model: str,
-                        eleven_profile_path: Optional[Path] = None) -> None:
+def patch_compiled_yaml(
+    compiled_path: Path,
+    orientation: str,
+    lang: str,
+    model: str,
+    eleven_profile_path: Optional[Path] = None,
+) -> None:
     try:
         import yaml  # type: ignore
     except Exception:
@@ -465,4 +583,7 @@ def patch_compiled_yaml(compiled_path: Path, orientation: str, lang: str, model:
     voiceover["output_format"] = str(defaults.get("output_format", "mp3_44100_128"))
     voiceover.setdefault("volume", 1.0)
 
-    compiled_path.write_text(yaml.safe_dump(d, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    compiled_path.write_text(
+        yaml.safe_dump(d, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )

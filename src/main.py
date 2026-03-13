@@ -7,7 +7,12 @@ from typing import Optional
 
 from config import DATA_DIR, INPUT_DIR, OUTPUT_DIR, SCRIPTS_DIR, COMPANY_CONFIG
 from utils import process_company
-from src.workflow import compile_creative_file_to_production, generate_shooting_rows, render_html_task_table, load_yaml_text
+from src.workflow import (
+    compile_creative_file_to_production,
+    generate_shooting_rows,
+    render_html_task_table,
+    load_yaml_text,
+)
 
 
 def setup_logging(verbose: bool = False) -> None:
@@ -29,26 +34,26 @@ def check_environment(company: Optional[str], script: Optional[str], input_dir: 
     in_dir = Path(input_dir).expanduser().resolve() if input_dir else INPUT_DIR
     for p in [DATA_DIR, _base_output_root(), SCRIPTS_DIR]:
         if not p.exists():
-            print(f"❌ 缺少目录: {p}")
+            print(f"❌ Missing directory: {p}")
             ok = False
 
     if input_dir and not in_dir.exists():
-        print(f"⚠️ 输入素材目录不存在: {in_dir}")
+        print(f"⚠️ Input footage root does not exist: {in_dir}")
 
     if company:
         assets = COMPANY_CONFIG.get(company)
         if not assets:
-            print(f"❌ 未知公司: {company}")
+            print(f"❌ Unknown company: {company}")
             return False
         if not assets.logo.exists():
-            print(f"⚠️ {company} 缺少 logo: {assets.logo}（将跳过水印）")
+            print(f"⚠️ {company} missing logo: {assets.logo} (watermark will be skipped)")
         if not assets.bgm.exists():
-            print(f"⚠️ {company} 缺少 bgm: {assets.bgm}（将跳过BGM）")
+            print(f"⚠️ {company} missing bgm: {assets.bgm} (BGM will be skipped)")
 
     if script:
         sp = Path(script).expanduser().resolve()
         if not sp.exists():
-            print(f"❌ 指定脚本不存在: {sp}")
+            print(f"❌ Script does not exist: {sp}")
             ok = False
     return ok
 
@@ -62,34 +67,34 @@ def _default_output_dir(company: str, run_name: str) -> Path:
 
 def cmd_run(args: argparse.Namespace) -> int:
     if not check_environment(args.company, args.script, args.input):
-        print("\n👉 请根据提示补齐目录/素材/脚本后再运行。")
+        print("\n👉 Fix the missing directories / assets / script and run again.")
         return 1
 
     if not args.company:
-        print("❌ 必须指定 --company")
+        print("❌ --company is required")
         return 1
 
     if args.creative:
         creative_path = Path(args.creative).expanduser().resolve()
         if not creative_path.exists():
-            print(f"❌ 指定 creative 脚本不存在: {creative_path}")
+            print(f"❌ Creative script not found: {creative_path}")
             return 1
         run_name = creative_path.stem
         out_dir = _default_output_dir(args.company, run_name)
         compiled_path = out_dir / f"{run_name}.compiled.yaml"
         compile_creative_file_to_production(creative_path, compiled_path)
-        logging.info("✅ 已生成内部 production 脚本: %s", compiled_path)
+        logging.info("✅ Internal production script created: %s", compiled_path)
         process_company(args.company, script_path=str(compiled_path), input_dir=args.input)
-        print("\n✨ 完成")
+        print("\n✨ Done")
         return 0
 
     process_company(args.company, script_path=args.script, input_dir=args.input)
-    print("\n✨ 完成")
+    print("\n✨ Done")
     return 0
 
 
 def cmd_list(args: argparse.Namespace) -> int:
-    print("可用公司：")
+    print("Available companies:")
     for name in COMPANY_CONFIG.keys():
         print(f" - {name}")
     return 0
@@ -98,19 +103,20 @@ def cmd_list(args: argparse.Namespace) -> int:
 def cmd_compile(args: argparse.Namespace) -> int:
     creative_path = Path(args.creative).expanduser().resolve()
     if not creative_path.exists():
-        print(f"❌ 指定 creative 脚本不存在: {creative_path}")
+        print(f"❌ Creative script not found: {creative_path}")
         return 1
     out_path = Path(args.out).expanduser().resolve()
     compile_creative_file_to_production(creative_path, out_path)
-    print(f"✅ 已生成 Production Script: {out_path}")
+    print(f"✅ Production script created: {out_path}")
     return 0
 
 
 def cmd_guide(args: argparse.Namespace) -> int:
     creative_path = Path(args.creative).expanduser().resolve()
     if not creative_path.exists():
-        print(f"❌ 指定 creative 脚本不存在: {creative_path}")
+        print(f"❌ Creative script not found: {creative_path}")
         return 1
+
     text = creative_path.read_text(encoding="utf-8")
     creative = load_yaml_text(text)
     rows = generate_shooting_rows(creative)
@@ -119,36 +125,37 @@ def cmd_guide(args: argparse.Namespace) -> int:
     out_path = Path(args.out).expanduser().resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
+
     html_path = out_path.with_suffix(".html")
     html_path.write_text(render_html_task_table(rows), encoding="utf-8")
-    print(f"✅ 已生成 Shooting Rows: {out_path}")
-    print(f"✅ 已生成 Shooting HTML: {html_path}")
+    print(f"✅ Task rows created: {out_path}")
+    print(f"✅ HTML guide created: {html_path}")
     return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="video-automation-tool", description="Script-first video automation tool")
-    p.add_argument("-v", "--verbose", action="store_true", help="输出更多调试日志")
+    p.add_argument("-v", "--verbose", action="store_true", help="more logs")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    run = sub.add_parser("run", help="运行生成视频")
-    run.add_argument("--company", help="公司名，例如 Siglen / Fareo")
-    run.add_argument("--script", help="指定 production 脚本路径（可选）")
-    run.add_argument("--creative", help="指定创意脚本路径（可选）")
-    run.add_argument("--input", help="指定素材目录（可选）")
+    run = sub.add_parser("run", help="render video")
+    run.add_argument("--company", help="company name, e.g. Siglen / Fareo")
+    run.add_argument("--script", help="production script path (optional)")
+    run.add_argument("--creative", help="creative script path (optional)")
+    run.add_argument("--input", help="footage input root (optional)")
     run.set_defaults(func=cmd_run)
 
-    lst = sub.add_parser("list", help="列出公司")
+    lst = sub.add_parser("list", help="list companies")
     lst.set_defaults(func=cmd_list)
 
-    cp = sub.add_parser("compile", help="将 Creative Script 编译为内部 production YAML")
-    cp.add_argument("--creative", required=True, help="创意脚本路径")
-    cp.add_argument("--out", required=True, help="输出 production 脚本路径")
+    cp = sub.add_parser("compile", help="compile creative script to internal production YAML")
+    cp.add_argument("--creative", required=True, help="creative script path")
+    cp.add_argument("--out", required=True, help="production YAML output path")
     cp.set_defaults(func=cmd_compile)
 
-    gd = sub.add_parser("guide", help="从 Creative Script 生成任务 rows")
-    gd.add_argument("--creative", required=True, help="创意脚本路径")
-    gd.add_argument("--out", required=True, help="输出 rows json 路径")
+    gd = sub.add_parser("guide", help="generate task rows from creative script")
+    gd.add_argument("--creative", required=True, help="creative script path")
+    gd.add_argument("--out", required=True, help="task rows json output path")
     gd.set_defaults(func=cmd_guide)
     return p
 
