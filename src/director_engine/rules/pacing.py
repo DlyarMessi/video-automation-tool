@@ -1,39 +1,47 @@
-# src/director_engine/rules/pacing.py
+from __future__ import annotations
 
 from typing import List, Dict, Any
 
+from .common import get_coverage, get_energy
+
 
 def apply(shots: List[Dict[str, Any]], context: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """
-    Enforce pacing constraints on shot durations.
-
-    This rule ensures that each shot duration falls within
-    the [min, max] range defined in the director profile.
-    """
+    if not shots:
+        return shots
 
     profile = context.get("profile", {})
-    pacing_cfg = profile.get("pacing", {})
+    pacing_cfg = profile.get("pacing", {}) or {}
+    duration_cfg = pacing_cfg.get("shot_duration", {}) or {}
+    energy_cfg = pacing_cfg.get("energy_adjustments", {}) or {}
 
-    duration_cfg = pacing_cfg.get("shot_duration", {})
     min_dur = duration_cfg.get("min")
     max_dur = duration_cfg.get("max")
-
-    # If no pacing limits defined, do nothing
-    if min_dur is None and max_dur is None:
-        return shots
 
     adjusted = []
 
     for shot in shots:
-        new_shot = dict(shot)  # shallow copy to avoid mutating original
+        new_shot = dict(shot)
         dur = new_shot.get("duration")
 
         if isinstance(dur, (int, float)):
-            if min_dur is not None and dur < min_dur:
-                new_shot["duration"] = float(min_dur)
+            target = float(dur)
 
-            elif max_dur is not None and dur > max_dur:
-                new_shot["duration"] = float(max_dur)
+            energy = get_energy(new_shot, context)
+            mul = float(energy_cfg.get(energy, 1.0) or 1.0)
+            target *= mul
+
+            coverage = get_coverage(new_shot)
+            if coverage == "detail":
+                target *= 0.92
+            elif coverage == "hero":
+                target *= 1.08
+
+            if min_dur is not None:
+                target = max(float(min_dur), target)
+            if max_dur is not None:
+                target = min(float(max_dur), target)
+
+            new_shot["duration"] = round(float(target), 3)
 
         adjusted.append(new_shot)
 

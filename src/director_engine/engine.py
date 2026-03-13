@@ -27,14 +27,18 @@ class DirectorEngine:
 
         return profile
 
-    def apply(self, shots: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def apply(self, shots: List[Dict[str, Any]], extra_context: Dict[str, Any] | None = None) -> List[Dict[str, Any]]:
         """
         Apply enabled director rules sequentially to the timeline shots.
         """
         rules = self.profile.get("rules_enabled", [])
         context = {
-            "profile": self.profile
+            "profile": self.profile,
+            "asset_index_path": self.profile.get("asset_index_path"),
         }
+
+        if isinstance(extra_context, dict):
+            context.update(extra_context)
 
         directed_shots = shots
 

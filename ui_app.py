@@ -8,8 +8,9 @@ from pathlib import Path
 
 import streamlit as st
 
-from src.render_profile import get_default_fps, get_language_family, get_subtitle_style
+from src.render_profile import get_default_fps, get_language_family, get_subtitle_style, get_filter_preset
 from src.language_checks import build_language_check
+from src.material_index import load_asset_index, upsert_asset_record, update_asset_record_fields
 from src.workflow import (
     now_tag,
     safe_slug,
@@ -256,10 +257,14 @@ with st.sidebar:
     target_fps = get_default_fps()
     subtitle_family = get_language_family(lang_code)
     subtitle_style = get_subtitle_style(lang_code)
+    filter_preset_name = st.selectbox("Visual Filter", ["clean", "industrial", "warm_brand"], index=0)
+    filter_preset = get_filter_preset(filter_preset_name)
+
     st.caption(f"Target FPS: {target_fps}")
     st.caption(f"Subtitle preset: {subtitle_family}")
     st.caption(f"Font preset: {subtitle_style.get('font_family', 'default')}")
     st.caption(f"Selected language family: {subtitle_family}")
+    st.caption(f"Filter preset: {filter_preset_name}")
 
     with st.expander("Advanced", expanded=False):
         input_root = st.text_input("Footage Root", value=str(INPUT_ROOT_DEFAULT))
@@ -562,6 +567,76 @@ elif rows:
     for r in rows:
         beats_map.setdefault(int(r["Beat"]), []).append(r)
 
+    with st.expander("Factory Asset Index Preview", expanded=False):
+        preview_items = load_asset_index(factory_dir / "asset_index.json")
+        if preview_items:
+            preview_rows = []
+            for item in preview_items[:30]:
+                preview_rows.append({
+                    "filename": item.get("filename", ""),
+                    "scene": item.get("scene", ""),
+                    "content": item.get("content", ""),
+                    "coverage": item.get("coverage", ""),
+                    "move": item.get("move", ""),
+                    "raw_duration": item.get("raw_duration", ""),
+                    "usable_duration": item.get("usable_duration", ""),
+                    "quality_status": item.get("quality_status", ""),
+                })
+            st.dataframe(preview_rows, use_container_width=True, hide_index=True)
+        else:
+            st.info("No indexed factory assets yet.")
+
+    with st.expander("Edit Asset Soft Tags", expanded=False):
+        editable_items = load_asset_index(factory_dir / "asset_index.json")
+        if not editable_items:
+            st.info("No indexed factory assets yet.")
+        else:
+            selected_filename = st.selectbox(
+                "Asset",
+                [str(item.get("filename", "")) for item in editable_items],
+                key="asset_editor_filename",
+            )
+
+            selected_item = None
+            for item in editable_items:
+                if str(item.get("filename", "")) == selected_filename:
+                    selected_item = item
+                    break
+
+            if selected_item:
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    hero_safe = st.checkbox("hero_safe", value=bool(selected_item.get("hero_safe", False)), key="edit_hero_safe")
+                    intro_safe = st.checkbox("intro_safe", value=bool(selected_item.get("intro_safe", False)), key="edit_intro_safe")
+                with c2:
+                    outro_safe = st.checkbox("outro_safe", value=bool(selected_item.get("outro_safe", False)), key="edit_outro_safe")
+                    continuity_group = st.text_input("continuity_group", value=str(selected_item.get("continuity_group", "") or ""), key="edit_continuity_group")
+                with c3:
+                    energy = st.selectbox("energy", ["low", "medium", "high"], index=["low", "medium", "high"].index(str(selected_item.get("energy", "medium") or "medium")) if str(selected_item.get("energy", "medium") or "medium") in ["low", "medium", "high"] else 1, key="edit_energy")
+                    quality_status = st.selectbox("quality_status", ["approved", "review", "reject"], index=["approved", "review", "reject"].index(str(selected_item.get("quality_status", "approved") or "approved")) if str(selected_item.get("quality_status", "approved") or "approved") in ["approved", "review", "reject"] else 0, key="edit_quality_status")
+
+                notes = st.text_area("notes", value=str(selected_item.get("notes", "") or ""), height=80, key="edit_notes")
+
+                if st.button("Save Asset Tags", key="save_asset_tags"):
+                    ok = update_asset_record_fields(
+                        factory_dir / "asset_index.json",
+                        selected_filename,
+                        {
+                            "hero_safe": hero_safe,
+                            "intro_safe": intro_safe,
+                            "outro_safe": outro_safe,
+                            "continuity_group": continuity_group.strip(),
+                            "energy": energy,
+                            "quality_status": quality_status,
+                            "notes": notes.strip(),
+                        },
+                    )
+                    if ok:
+                        st.success("Asset tags saved.")
+                        st.rerun()
+                    else:
+                        st.warning("No asset changes were saved.")
+
     for beat_no in sorted(beats_map.keys()):
         beat_rows = beats_map[beat_no]
         beat_title = beat_rows[0].get("BeatPurpose") or f"Beat {beat_no}"
@@ -715,7 +790,7 @@ else:
 
             status.markdown("**Applying Render Settings…**")
             progress.progress(50)
-            patch_compiled_yaml(compiled_out, orientation, lang_code, model_id, ELEVEN_PROFILE_PATH)
+            patch_compiled_yaml(compiled_out, orientation, lang_code, model_id, ELEVEN_PROFILE_PATH, filter_preset_name=filter_preset_name)
 
             status.markdown("**Rendering Final Video…**")
             progress.progress(70)

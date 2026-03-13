@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from moviepy import (
+    MultiplyColor,
     AudioFileClip,
     CompositeAudioClip,
     CompositeVideoClip,
@@ -66,8 +67,104 @@ from config import (
 )
 
 from script_loader import load_script
+from material_index import load_asset_index, find_asset_record
 
 logger = logging.getLogger("video_automation")
+
+
+def _usage_history_path() -> Path:
+    base = OUTPUT_DIR
+    if base.name in ("portrait", "landscape"):
+        base = base.parent
+    base.mkdir(parents=True, exist_ok=True)
+    return base / "_usage_history.json"
+
+
+def _load_usage_history() -> Dict[str, Any]:
+    p = _usage_history_path()
+    if not p.exists():
+        return {"recent_files": []}
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {"recent_files": []}
+    except Exception:
+        return {"recent_files": []}
+
+
+def _save_usage_history(data: Dict[str, Any]) -> None:
+    p = _usage_history_path()
+    p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _remember_used_files(file_paths: List[Path], keep_last: int = 120) -> None:
+    data = _load_usage_history()
+    recent = data.get("recent_files", [])
+    if not isinstance(recent, list):
+        recent = []
+
+    for p in file_paths:
+        recent.append(str(p))
+
+    recent = recent[-keep_last:]
+    data["recent_files"] = recent
+    _save_usage_history(data)
+
+
+def _recently_used_set() -> set[str]:
+    data = _load_usage_history()
+    recent = data.get("recent_files", [])
+    if not isinstance(recent, list):
+        return set()
+    return set(str(x) for x in recent)
+
+
+def _asset_index_for_input_dir(input_dir: Path) -> Path:
+    return input_dir / "factory" / "asset_index.json" if input_dir.name != "factory" else input_dir / "asset_index.json"
+
+
+def _safe_float(x: Any, default: float) -> float:
+    try:
+        return float(x)
+    except Exception:
+        return float(default)
+
+
+def _apply_filter_preset(video, project: dict):
+    filter_cfg = project.get("filter_preset", {}) if isinstance(project.get("filter_preset", {}), dict) else {}
+    if not filter_cfg:
+        return video
+
+    enabled = bool(filter_cfg.get("enabled", False))
+    name = str(filter_cfg.get("name", "clean") or "clean")
+
+    # clean preset is intentionally very conservative
+    brightness = _safe_float(filter_cfg.get("brightness", 1.0), 1.0)
+    contrast = _safe_float(filter_cfg.get("contrast", 1.0), 1.0)
+    saturation = _safe_float(filter_cfg.get("saturation", 1.0), 1.0)
+
+    out = video
+
+    try:
+        if brightness != 1.0:
+            out = out.with_effects([MultiplyColor(brightness)])
+    except Exception:
+        pass
+
+    try:
+        if contrast != 1.0:
+            out = out.with_effects([vfx.LumContrast(0, int(round((contrast - 1.0) * 100)), 255)])
+    except Exception:
+        pass
+
+    try:
+        # MoviePy 2.x Effect name may differ by build; keep conservative fallback
+        if saturation != 1.0 and hasattr(vfx, "MultiplyColor"):
+            out = out.with_effects([vfx.MultiplyColor(saturation)])
+    except Exception:
+        pass
+
+    logger.info("🎨 Applied filter preset: %s", name)
+    return out
 
 # ============================================================
 # ✅ NEW: orientation + run_name + dir resolver helpers
@@ -222,7 +319,7 @@ def parse_legacy_txt(script_path: Path) -> List[ShotLegacy]:
 # Material matching (recursive + flexible)
 # =========================
 class MaterialPicker:
-    """Stateful picker for 'random'/'next' patterns. Recursively scans folders."""
+    """Stateful picker for 'random'/'next' patterns with anti-repeat scheduling."""
 
     MOVE_TOKENS = {
         "static", "panl", "panr", "tiltu", "tiltd", "slidel", "slider",
@@ -233,6 +330,11 @@ class MaterialPicker:
     def __init__(self, input_dir: Path):
         self.input_dir = input_dir
         self.pool: List[Path] = []
+        self._idx = 0
+        self.used_in_run: set[str] = set()
+        self.recently_used: set[str] = _recently_used_set()
+        self.asset_index_path = _asset_index_for_input_dir(input_dir)
+
         video_exts = {".mp4", ".mov", ".mkv", ".m4v"}
         for p in input_dir.rglob("*"):
             if not p.is_file():
@@ -242,7 +344,6 @@ class MaterialPicker:
             if p.suffix.lower() in video_exts:
                 self.pool.append(p)
         self.pool.sort()
-        self._idx = 0
 
     def _match_all_keywords(self, keywords: List[str]) -> List[Path]:
         if not keywords:
@@ -272,19 +373,55 @@ class MaterialPicker:
                 out.append(p)
         return out
 
+    def _quality_rank(self, p: Path) -> int:
+        rec = find_asset_record(self.asset_index_path, p.name)
+        status = str(rec.get("quality_status", "") or "").strip().lower()
+        if status == "approved":
+            return 0
+        if status == "review":
+            return 1
+        if status == "reject":
+            return 9
+        return 2
+
+    def _cooldown_rank(self, p: Path) -> int:
+        return 1 if str(p) in self.recently_used else 0
+
+    def _run_used_rank(self, p: Path) -> int:
+        return 1 if str(p) in self.used_in_run else 0
+
+    def _rank_candidates(self, candidates: List[Path]) -> List[Path]:
+        ranked = sorted(
+            candidates,
+            key=lambda p: (
+                self._run_used_rank(p),
+                self._cooldown_rank(p),
+                self._quality_rank(p),
+                str(p),
+            ),
+        )
+        return ranked
+
     def pick(self, spec: str) -> Optional[Path]:
         if not self.pool:
             return None
+
         s = (spec or "").strip()
         if not s:
-            return random.choice(self.pool)
+            ranked = self._rank_candidates(self.pool)
+            chosen = ranked[0] if ranked else None
+            if chosen:
+                self.used_in_run.add(str(chosen))
+            return chosen
 
         p = Path(s)
         if p.is_absolute() and p.exists():
+            self.used_in_run.add(str(p))
             return p
 
         p2 = self.input_dir / s
         if p2.exists():
+            self.used_in_run.add(str(p2))
             return p2
 
         mode = None
@@ -306,18 +443,11 @@ class MaterialPicker:
                 hard_tags = []
                 for t in tags:
                     tl = t.lower().strip()
-
-                    # movement tokens are optional
                     if tl in self.MOVE_TOKENS:
                         continue
-
                     raw = t.strip()
-
-                    # NEW: drop long descriptive tags (they won't exist in filenames)
-                    # e.g. "Factory building hero view"
                     if (" " in raw and len(raw) > 20) or len(raw) > 40:
                         continue
-
                     hard_tags.append(raw)
                 if hard_tags:
                     candidates = self._match_all_keywords(hard_tags)
@@ -336,13 +466,24 @@ class MaterialPicker:
             if not candidates:
                 candidates = self.pool
 
+        candidates = self._rank_candidates(candidates)
+        if not candidates:
+            return None
+
         if mode == "random":
-            return random.choice(candidates)
+            chosen = candidates[0]
+            self.used_in_run.add(str(chosen))
+            return chosen
+
         if mode == "next":
             chosen = candidates[self._idx % len(candidates)]
             self._idx += 1
+            self.used_in_run.add(str(chosen))
             return chosen
-        return candidates[0]
+
+        chosen = candidates[0]
+        self.used_in_run.add(str(chosen))
+        return chosen
 
 
 # =========================
@@ -838,6 +979,8 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
         )
 
         did_burn = False
+        final_video = _apply_filter_preset(final_video, project)
+
         if burn_subtitles:
             srt_path = timeline_base.with_suffix(".srt")
             try:
@@ -849,7 +992,15 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
                 st = style_presets.get("subtitle") or style_presets.get("default", {})
                 project_subtitle_style = project.get("subtitle_style", {}) if isinstance(project.get("subtitle_style", {}), dict) else {}
 
-                font_name = str(project_subtitle_style.get("font_family") or "")
+                font_file = str(project_subtitle_style.get("font_file") or "").strip()
+                font_name = str(project_subtitle_style.get("font_family") or "").strip()
+
+                if font_file:
+                    try:
+                        font_name = Path(font_file).stem
+                    except Exception:
+                        pass
+
                 if not font_name:
                     font_path = Path(st.get("font", FONT_PATH))
                     font_name = font_path.stem if font_path else "Arial"
