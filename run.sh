@@ -1,83 +1,70 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
-# ==========================================================
-# 🎛️ MODE SWITCH（只改这里）
-# ==========================================================
-# 可选值：
-#   run        → 用 production script 生成视频
-#   creative   → 用 creative script 生成视频（内部 compile + run）
-#   compile    → 只把 creative script 编译成 production script
-#   guide      → 只生成拍摄清单（Shooting Guide）
-#   clean-tts  → 清空 TTS 缓存
-MODE="run"
+PY="./.venv/bin/python"
+MODE="${MODE:-ui}"
 
-# ==========================================================
-# 🏢 PROJECT CONFIG（常改的都在这）
-# ==========================================================
-COMPANY="Siglen"
+COMPANY="${COMPANY:-Siglen}"
+SCRIPT="${SCRIPT:-}"
+CREATIVE="${CREATIVE:-}"
+INPUT_DIR="${INPUT_DIR:-}"
+POOL_PLAN_DIR="data/brands/$(echo "$COMPANY" | tr '[:upper:]' '[:lower:]')/pool_plans"
 
-# production script（MODE=run 用）
-SCRIPT="output_videos/Siglen/test_run_v1/test_run_v1.compiled.yaml"
-
-# creative script（MODE=creative / compile / guide 用）
-CREATIVE="creative_scripts/Siglen/test_run_v1.yaml"
-
-# 素材目录（可留空，走默认 INPUT_DIR）
-INPUT_DIR="input_videos/portrait/Siglen/factory"
-
-# TTS cache（按项目）
-TTS_CACHE_DIR="output_videos/${COMPANY}/siglen_promo/cache_tts"
-
-# ==========================================================
-# 🔊 TTS ENV（与你现在的一致）
-# ==========================================================
-export AI302_AZURE_TTS_URL="https://api.302.ai/cognitiveservices/v1"
-export TTS_HTTP_PROXY="http://127.0.0.1:8001"
-
-# ==========================================================
-# 🚀 EXECUTION（不用改）
-# ==========================================================
 echo "▶ MODE = ${MODE}"
 echo "▶ COMPANY = ${COMPANY}"
 
 case "$MODE" in
+  ui)
+    echo "▶ Launching Streamlit UI"
+    exec "$PY" -m streamlit run ui_app.py
+    ;;
+
+  status)
+    echo "▶ Python = $PY"
+    echo "▶ Company = $COMPANY"
+    echo "▶ Pool plan dir = $POOL_PLAN_DIR"
+    if [[ -d "$POOL_PLAN_DIR" ]]; then
+      echo "▶ Available pool plans:"
+      find "$POOL_PLAN_DIR" -maxdepth 1 -type f \( -name "*.yaml" -o -name "*.yml" \) | sort
+    else
+      echo "▶ No brand pool plan directory found"
+    fi
+    echo "▶ Docs:"
+    find docs -maxdepth 1 -type f 2>/dev/null | sort || true
+    ;;
+
   run)
-    echo "▶ Running production script: ${SCRIPT}"
-    if [[ -n "$INPUT_DIR" ]]; then
-      python3 src/main.py run --company "$COMPANY" --script "$SCRIPT" --input "$INPUT_DIR"
-    else
-      python3 src/main.py run --company "$COMPANY" --script "$SCRIPT"
+    if [[ -z "$SCRIPT" ]]; then
+      echo "❌ MODE=run requires SCRIPT=/path/to/compiled.yaml"
+      exit 1
     fi
-    ;;
-
-  creative)
-    echo "▶ Running from creative script: ${CREATIVE}"
+    echo "▶ Running production script: $SCRIPT"
     if [[ -n "$INPUT_DIR" ]]; then
-      python3 src/main.py run --company "$COMPANY" --creative "$CREATIVE" --input "$INPUT_DIR"
+      exec "$PY" src/main.py run --company "$COMPANY" --script "$SCRIPT" --input "$INPUT_DIR"
     else
-      python3 src/main.py run --company "$COMPANY" --creative "$CREATIVE"
+      exec "$PY" src/main.py run --company "$COMPANY" --script "$SCRIPT"
     fi
-    ;;
-
-  compile)
-    echo "▶ Compiling creative → production"
-    python3 src/main.py compile --company "$COMPANY" --creative "$CREATIVE"
     ;;
 
   guide)
-    echo "▶ Generating shooting guide"
-    python3 src/main.py guide --company "$COMPANY" --creative "$CREATIVE"
+    if [[ -z "$CREATIVE" ]]; then
+      echo "❌ MODE=guide requires CREATIVE=/path/to/creative.yaml"
+      exit 1
+    fi
+    echo "▶ Generating shooting guide from creative script: $CREATIVE"
+    exec "$PY" src/main.py guide --company "$COMPANY" --creative "$CREATIVE"
     ;;
 
-  clean-tts)
-    echo "▶ Cleaning TTS cache: ${TTS_CACHE_DIR}"
-    rm -rf "$TTS_CACHE_DIR"
-    echo "✅ TTS cache cleaned"
+  clean-junk)
+    echo "▶ Removing .DS_Store and __pycache__ ..."
+    find . -name ".DS_Store" -delete
+    find . -name "__pycache__" -type d -prune -exec rm -rf {} +
+    echo "✅ Junk files cleaned"
     ;;
 
   *)
     echo "❌ Unknown MODE: $MODE"
+    echo "Available: ui | status | run | guide | clean-junk"
     exit 1
     ;;
 esac

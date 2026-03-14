@@ -3,8 +3,10 @@
 This document defines the current field system used by the project.
 
 It is the reference for:
+
 - file naming
 - material indexing
+- pool-plan intake
 - director rules
 - UI editing scope
 
@@ -28,7 +30,9 @@ High-level place or environment.
 Examples:
 - `factory`
 - `showroom`
-- `villa`
+- `tower`
+- `warehouse`
+- `loading`
 
 ### content
 What the shot mainly shows.
@@ -36,13 +40,17 @@ What the shot mainly shows.
 Examples:
 - `automation`
 - `testing`
-- `line`
+- `inspection`
 - `building`
+- `product`
+- `shipment`
+- `storage`
+- `panel`
 
 ### coverage
 Shot scale / editorial use.
 
-Allowed core values:
+Current core values:
 - `wide`
 - `medium`
 - `detail`
@@ -51,21 +59,15 @@ Allowed core values:
 ### move
 Camera movement token.
 
-Current core values:
+Current commonly used values:
 - `static`
-- `panl`
-- `panr`
-- `tiltu`
-- `tiltd`
-- `slidel`
-- `slider`
+- `slide`
 - `pushin`
-- `pullout`
 - `follow`
-- `pov`
 - `orbit`
 - `reveal`
-- `expand`
+
+Legacy or extended tokens may still exist in older material sets.
 
 ### index
 Two-digit sequence used when the previous fields are the same.
@@ -107,15 +109,12 @@ Values:
 
 #### raw_duration
 Original media duration in seconds.
-Auto-read from file metadata.
 
 #### usable_start
 Suggested usable start point in seconds.
-Default is inferred automatically.
 
 #### usable_end
 Suggested usable end point in seconds.
-Default is inferred automatically.
 
 #### usable_duration
 Computed as:
@@ -125,34 +124,16 @@ Computed as:
 ### Human-edited soft tags
 
 #### hero_safe
-Whether this clip is safe for hero/brand-ending usage.
-
-Values:
-- `true`
-- `false`
+Whether this clip is safe for hero / brand-ending usage.
 
 #### intro_safe
 Whether this clip is safe for opening / establishing usage.
 
-Values:
-- `true`
-- `false`
-
 #### outro_safe
-Whether this clip is safe for final closing usage.
-
-Values:
-- `true`
-- `false`
+Whether this clip is safe for closing usage.
 
 #### continuity_group
-Soft grouping key for clips that belong to the same action chain,
-space observation chain, or coherent sequence.
-
-Examples:
-- `automation_line_a`
-- `testing_station_b`
-- `factory_exterior_orbit`
+Soft grouping key for clips that belong to the same action chain, space chain, or coherent sequence.
 
 #### energy
 Pacing strength indicator.
@@ -175,13 +156,79 @@ Freeform operator note.
 
 ---
 
-## 3. Render / Subtitle Fields
+## 3. Pool Fill / Pool Plan Fields
+
+Pool plans are now brand-scoped and typically live under:
+
+`data/brands/<company>/pool_plans/<plan>.yaml`
+
+### brand
+Brand name for the plan.
+
+### topics
+Top-level intake groups shown in Pool Fill.
+
+Each topic contains:
+
+- `name`
+- `slots`
+
+### slot fields
+
+#### scene
+Target environment for the slot.
+
+#### content
+Target subject / action for the slot.
+
+#### coverage
+Target framing scale for the slot.
+
+#### move
+Target camera movement token for the slot.
+
+#### target
+Desired clip count for this slot.
+
+#### priority
+Current values commonly used:
+- `high`
+- `medium`
+
+#### defaults
+Default soft-tag values to apply on upload.
+
+Common keys:
+- `energy`
+- `quality_status`
+- `continuity_group`
+- `intro_safe`
+- `hero_safe`
+- `outro_safe`
+
+---
+
+## 4. Render / Subtitle Fields
 
 These live in render presets and compiled project settings.
 
 ### FPS
 Current default:
 - `60`
+
+### language_to_family
+Maps language short code to subtitle family bucket.
+
+Current notable mappings:
+- `en` → `latin`
+- `fr` → `latin`
+- `es` → `latin`
+- `ru` → `cyrillic`
+- `kk` → `cyrillic`
+- `tg` → `cyrillic`
+- `ar` → `arabic`
+- `ug` → `arabic`
+- `uz` → `latin` (default bucket)
 
 ### subtitle_style
 Per-language subtitle style payload.
@@ -197,6 +244,13 @@ Current fields:
 - `bottom_margin`
 - `max_lines`
 - `line_spacing`
+
+### script-family fallback
+Language checks may allow more than one detected script family.
+
+Current notable fallback behavior:
+- `kk` accepts `cyrillic` or `latin`
+- `uz` accepts `latin` or `cyrillic`
 
 ### filter_preset
 Visual output preset.
@@ -215,7 +269,7 @@ Current fields:
 
 ---
 
-## 4. Director Rule Inputs
+## 5. Director Rule Inputs
 
 These fields are currently consumed by director rules.
 
@@ -257,66 +311,4 @@ Uses:
 - primary tag signature
 
 ### transitions
-Uses:
-- same-family continuity
-- repeated detail checks
-- primary tag continuity
-
----
-
-## 5. UI Editing Scope
-
-### Automatically generated in UI / system
-- file naming shell
-- raw duration
-- orientation
-- usable window defaults
-- subtitle preset selection
-- filter preset selection
-
-### Human-editable in UI
-- `hero_safe`
-- `intro_safe`
-- `outro_safe`
-- `continuity_group`
-- `energy`
-- `quality_status`
-- `notes`
-
-### Not yet exposed for editing
-- manual override of `usable_start`
-- manual override of `usable_end`
-- explicit per-shot reuse weight
-- explicit clip priority score
-
----
-
-## 6. Field Design Principles
-
-### Keep filenames short
-Do not overload filenames with soft editorial meaning.
-
-### Put reusable semantics into the material index
-Anything likely to affect:
-- director logic
-- scheduling
-- repetition control
-- shot suitability
-
-should live in the index, not in the filename.
-
-### Prefer defaults over heavy manual annotation
-If a field can be:
-- inferred from file structure
-- inferred from duration
-- standardized by shooting rules
-
-it should not become a required manual step.
-
-### Human review should focus on high-value judgment
-The operator should mainly decide:
-- whether a clip is intro-safe / outro-safe / hero-safe
-- whether a clip belongs to a continuity group
-- the energy level
-- the quality status
-
+Uses rule-specific timeline adjacency and pacing context.
