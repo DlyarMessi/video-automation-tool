@@ -142,6 +142,7 @@ Voice IDs can be mapped per language short code in:
 
 - `PROJECT_STRUCTURE.md` — folder and module layout
 - `CANONICAL_TAG_POLICY.md` — governance rules for canonical tags and public/internal boundaries
+- `BRAND_CREATION_SPEC.md` — rules for onboarding new brands into the system
 - `SYSTEM_FIELDS.md` — naming, index, pool-plan, rule, and UI field dictionary
 - `TERMINOLOGY.md` — core project vocabulary
 

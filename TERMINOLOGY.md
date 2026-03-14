@@ -11,6 +11,12 @@
 - **Rich Central Registry**  
   The long-term design direction where canonical identity, user-facing explanation, and editorial metadata attach to one governed registry entry.
 
+- **Brand Layer**  
+  The local layer that stores one brand's assets, pool plans, and onboarding-specific files.
+
+- **Global Layer**  
+  The governed shared layer for canonical protocol, taxonomy direction, render profiles, and system-wide rules.
+
 - **Script-First**  
   The workflow starts from a structured script.
 
