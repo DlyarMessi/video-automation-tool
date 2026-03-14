@@ -47,6 +47,9 @@ Core application logic.
 ### `docs/pool_fill_shooting_guide.html`
 Phone-friendly downloadable field guide for Pool Fill operators and photographers.
 
+### `docs/POOL_FILL_ROW_SCHEMA.md`
+Documentation contract for the current Pool Fill row structure used between plan loading, semantic merge, registry hydration, and UI rendering.
+
 ---
 
 ## `data/`

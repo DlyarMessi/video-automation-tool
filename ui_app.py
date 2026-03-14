@@ -141,6 +141,15 @@ def priority_score(priority: str) -> int:
 
 
 def build_pool_slot_rows(slots, factory_files):
+    """Build normalized Pool Fill row dictionaries.
+
+This function is the current render-facing integration point between:
+- pool plan slots
+- factory footage counting
+- semantic enrichment
+- registry hydration
+- Pool Fill UI card rendering
+"""
     rows = []
 
     for slot in slots:
