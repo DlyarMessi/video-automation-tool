@@ -270,6 +270,62 @@ def save_pool_uploads(
         cur += 1
 
 
+def merge_pool_semantic_fields(slot_rows: list[dict], slots: list[dict]) -> list[dict]:
+    semantic_map: dict[tuple[str, str, str, str], dict] = {}
+
+    for slot in slots:
+        if not isinstance(slot, dict):
+            continue
+        key = (
+            str(slot.get("scene", "") or "").strip().lower(),
+            str(slot.get("content", "") or "").strip().lower(),
+            str(slot.get("coverage", "") or "").strip().lower(),
+            str(slot.get("move", "") or "").strip().lower(),
+        )
+        semantic_map[key] = {
+            "human_label": str(slot.get("human_label", "") or "").strip(),
+            "shoot_brief": str(slot.get("shoot_brief", "") or "").strip(),
+            "purpose": str(slot.get("purpose", "") or "").strip(),
+            "success_criteria": slot.get("success_criteria") if isinstance(slot.get("success_criteria"), list) else [],
+            "fallback": slot.get("fallback") if isinstance(slot.get("fallback"), list) else [],
+        }
+
+    merged_rows: list[dict] = []
+    for row in slot_rows:
+        if not isinstance(row, dict):
+            merged_rows.append(row)
+            continue
+
+        merged = dict(row)
+        key = (
+            str(merged.get("scene", "") or "").strip().lower(),
+            str(merged.get("content", "") or "").strip().lower(),
+            str(merged.get("coverage", "") or "").strip().lower(),
+            str(merged.get("move", "") or "").strip().lower(),
+        )
+        semantic = semantic_map.get(key, {})
+
+        canonical_label = str(merged.get("slot_label", "") or "").strip()
+        human_label = str(semantic.get("human_label", "") or "").strip()
+        if human_label:
+            merged["canonical_slot_label"] = canonical_label
+            merged["slot_label"] = human_label
+
+        for field in ("human_label", "shoot_brief", "purpose"):
+            value = str(semantic.get(field, "") or "").strip()
+            if value:
+                merged[field] = value
+
+        if semantic.get("success_criteria"):
+            merged["success_criteria"] = semantic["success_criteria"]
+        if semantic.get("fallback"):
+            merged["fallback"] = semantic["fallback"]
+
+        merged_rows.append(merged)
+
+    return merged_rows
+
+
 def render_pool_active_slot_card(row, pool_topic: str, i: int, factory_dir: Path, ext_choice_pool: str):
     scene_name = str(row.get("scene", "")).strip()
     content_name = str(row.get("content", "")).strip()
@@ -290,8 +346,14 @@ def render_pool_active_slot_card(row, pool_topic: str, i: int, factory_dir: Path
 
     with st.container(border=True):
         st.markdown(f"**{row['slot_label']}** {priority_badge(priority)}")
+
+        shoot_brief = str(row.get("shoot_brief", "") or "").strip()
+        if shoot_brief:
+            st.caption(f"📝 {shoot_brief}")
+        else:
+            st.caption(f"💡 {row['framing_label']} · {row['move_label']}")
+
         st.markdown(f"🎬 `{move_name}` · ⏱️ `{row['duration_label']}` · ⚠️ **missing {missing}**")
-        st.caption(f"💡 {row['framing_label']} · {row['move_label']}")
 
         progress_col, status_col = st.columns([3, 2])
         with progress_col:
@@ -389,6 +451,9 @@ def render_pool_completed_slot_card(row, pool_topic: str, i: int, factory_dir: P
     default_outro = bool(defaults.get("outro_safe", False))
 
     with st.expander(f"✅ {row['slot_label']} · ready {existing}", expanded=False):
+        shoot_brief = str(row.get("shoot_brief", "") or "").strip()
+        if shoot_brief:
+            st.caption(f"📝 {shoot_brief}")
         st.caption(f"Current clips: {existing} · upload here only if you want replacements or alternates.")
 
         uploads = st.file_uploader(
@@ -856,6 +921,7 @@ if work_mode == "Pool Fill Mode":
 
     slots = selected_topic.get("slots", []) if isinstance(selected_topic, dict) and isinstance(selected_topic.get("slots"), list) else []
     slot_rows = build_pool_slot_rows(slots, factory_files)
+    slot_rows = merge_pool_semantic_fields(slot_rows, slots)
     slot_rows = sort_pool_slot_rows(slot_rows)
     summary = summarize_pool_slot_rows(slot_rows)
 
