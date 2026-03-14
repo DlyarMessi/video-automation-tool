@@ -293,7 +293,36 @@ Current fields:
 
 ---
 
-## 5. Director Rule Inputs
+## 5. Pool Fill Row Layer (current render-facing integration layer)
+
+The Pool Fill UI currently depends on a normalized row structure built before rendering cards.
+
+Important current row fields include:
+- `scene`
+- `content`
+- `coverage`
+- `move`
+- `registry_key`
+- `slot_label`
+- `canonical_slot_label`
+- `human_label`
+- `shoot_brief`
+- `purpose`
+- `framing_label`
+- `move_label`
+- `duration_label`
+- `target`
+- `existing`
+- `missing`
+- `priority`
+- `success_criteria`
+- `fallback`
+- `defaults`
+
+See also:
+- `docs/POOL_FILL_ROW_SCHEMA.md`
+
+## 6. Director Rule Inputs
 
 These fields are currently consumed by director rules.
 
