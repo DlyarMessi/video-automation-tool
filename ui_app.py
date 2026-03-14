@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -733,15 +734,107 @@ def count_pool_matches(factory_files: list[Path], scene: str, content: str, cove
         ]
     )
 
+def list_brand_catalog_names() -> list[str]:
+    brands_dir = ROOT / "data" / "brands"
+    if not brands_dir.exists():
+        return []
+
+    names: list[str] = []
+
+    for brand_dir in brands_dir.iterdir():
+        if not brand_dir.is_dir():
+            continue
+        if brand_dir.name.startswith(".") or brand_dir.name == "_starter":
+            continue
+
+        default_plan = brand_dir / "pool_plans" / "default.yaml"
+        display_name = ""
+        if default_plan.exists():
+            try:
+                data = yaml.safe_load(default_plan.read_text(encoding="utf-8")) or {}
+                if isinstance(data, dict):
+                    display_name = str(data.get("brand", "") or "").strip()
+            except Exception:
+                pass
+
+        names.append(display_name or brand_dir.name)
+
+    return sorted([x for x in names if str(x).strip()], key=lambda x: str(x).lower())
+
+
+def clone_brand_starter_into_project(brand_name: str, brand_slug: str = "") -> tuple[bool, str]:
+    starter_dir = ROOT / "data" / "brands" / "_starter"
+    brands_dir = ROOT / "data" / "brands"
+
+    if not starter_dir.exists():
+        return False, "Starter brand template is missing at data/brands/_starter/"
+
+    brand_name_clean = str(brand_name or "").strip()
+    if not brand_name_clean:
+        return False, "Please enter a brand name."
+
+    slug = safe_slug(brand_slug or brand_name_clean).lower()
+    if not slug:
+        return False, "Could not derive a valid brand slug."
+
+    if slug == "_starter":
+        return False, "The slug '_starter' is reserved."
+
+    target_dir = brands_dir / slug
+    if target_dir.exists():
+        return False, f"Brand directory already exists: data/brands/{slug}/"
+
+    try:
+        shutil.copytree(starter_dir, target_dir)
+
+        default_plan = target_dir / "pool_plans" / "default.yaml"
+        if default_plan.exists():
+            data = yaml.safe_load(default_plan.read_text(encoding="utf-8")) or {}
+            if isinstance(data, dict):
+                data["brand"] = brand_name_clean
+                default_plan.write_text(
+                    yaml.safe_dump(data, sort_keys=False, allow_unicode=True),
+                    encoding="utf-8",
+                )
+
+        return True, (
+            f"Created brand skeleton: data/brands/{slug}/  |  "
+            f"Next: add logo.png and refine pool_plans/default.yaml"
+        )
+    except Exception as e:
+        return False, f"Failed to create brand skeleton: {e}"
+
+
 def list_companies(input_root: Path) -> list[str]:
-    names = set()
+    names: list[str] = []
+    seen: set[str] = set()
+
+    def add_name(value: str) -> None:
+        clean = str(value or "").strip()
+        if not clean:
+            return
+        key = clean.casefold()
+        if key in seen:
+            return
+        seen.add(key)
+        names.append(clean)
+
     if CREATIVE_ROOT.exists():
-        names.update([p.name for p in CREATIVE_ROOT.iterdir() if p.is_dir()])
+        for p in CREATIVE_ROOT.iterdir():
+            if p.is_dir():
+                add_name(p.name)
+
     for ori in ("portrait", "landscape"):
         ori_root = input_root / ori
         if ori_root.exists():
-            names.update([p.name for p in ori_root.iterdir() if p.is_dir()])
-    return sorted([x for x in names if x.strip()])
+            for p in ori_root.iterdir():
+                if p.is_dir():
+                    add_name(p.name)
+
+    for brand_name in list_brand_catalog_names():
+        add_name(brand_name)
+
+    return sorted(names, key=lambda x: str(x).lower())
 
 # =========================================================
 # Session
@@ -864,6 +957,8 @@ if _api:
 
 _prof = load_eleven_profile()
 _defaults = _prof.get("defaults", {}) if isinstance(_prof.get("defaults", {}), dict) else {}
+
+
 ENV["ELEVENLABS_MODEL_ID"] = str(_defaults.get("model_id", "eleven_multilingual_v2"))
 ENV["ELEVENLABS_OUTPUT_FORMAT"] = str(_defaults.get("output_format", "mp3_44100_128"))
 
@@ -893,6 +988,25 @@ with top_b:
         horizontal=True,
         key="work_mode",
     )
+
+brand_create_a, brand_create_b = st.columns([2, 1])
+with brand_create_a:
+    new_brand_name = st.text_input(
+        "Create Brand",
+        value="",
+        placeholder="e.g. Acme Elevators",
+        key="create_brand_name_v1_main",
+    )
+with brand_create_b:
+    slug_preview = safe_slug(new_brand_name).lower() if new_brand_name.strip() else ""
+    st.caption(f"Slug: {slug_preview or '(waiting)'}")
+    if st.button("Create Brand Skeleton", use_container_width=True, key="create_brand_skeleton_v1_main"):
+        ok, msg = clone_brand_starter_into_project(new_brand_name)
+        if ok:
+            st.success(msg)
+            st.caption("Reload or rerun if the new brand does not appear immediately in the Company selector.")
+        else:
+            st.warning(msg)
 
 # =========================================================
 # Storage
