@@ -11,7 +11,10 @@
     "es": "latin",
     "ru": "cyrillic",
     "kk": "cyrillic",
-    "ar": "arabic"
+    "ar": "arabic",
+    "ug": "arabic",
+    "uz": "latin",
+    "tg": "cyrillic"
   },
   "subtitle_presets": {
     "latin": {

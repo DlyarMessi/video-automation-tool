@@ -49,6 +49,8 @@ ELEVEN_PROFILE_PATH = TTS_PROFILE_DIR / "elevenlabs.json"
 ELEVEN_SECRETS_PATH = TTS_PROFILE_DIR / "elevenlabs_secrets.json"
 
 POOL_PLAN_DIR = ROOT / "data" / "pool_plans"
+BRANDS_DIR = ROOT / "data" / "brands"
+DOCS_DIR = ROOT / "docs"
 
 VIDEO_EXTS = ["mp4", "mov", "mkv", "m4v"]
 VIDEO_SUFFIXES = ["." + e for e in VIDEO_EXTS]
@@ -127,6 +129,357 @@ def priority_badge(priority: str) -> str:
     if priority == "medium":
         return "🟡 Medium"
     return "⚪️ Low"
+
+
+def priority_score(priority: str) -> int:
+    p = str(priority or "").strip().lower()
+    if p == "high":
+        return 2
+    if p == "medium":
+        return 1
+    return 0
+
+
+def build_pool_slot_rows(slots, factory_files):
+    rows = []
+
+    for slot in slots:
+        scene_name = str(slot.get("scene", "")).strip()
+        content_name = str(slot.get("content", "")).strip()
+        coverage_name = str(slot.get("coverage", "")).strip()
+        move_name = str(slot.get("move", "")).strip()
+        target = int(slot.get("target", 0) or 0)
+        priority = str(slot.get("priority", "medium") or "medium")
+        defaults = slot.get("defaults", {}) if isinstance(slot.get("defaults"), dict) else {}
+
+        existing = count_pool_matches(factory_files, scene_name, content_name, coverage_name, move_name)
+        missing = max(0, target - existing)
+
+        rows.append(
+            {
+                "scene": scene_name,
+                "content": content_name,
+                "coverage": coverage_name,
+                "move": move_name,
+                "target": target,
+                "priority": priority,
+                "priority_score": priority_score(priority),
+                "existing": existing,
+                "missing": missing,
+                "defaults": defaults,
+                "slot_label": slot_display_name(scene_name, content_name, coverage_name, move_name),
+                "duration_label": recommended_duration_for_slot(coverage_name, move_name),
+                "move_label": movement_guidance(move_name),
+                "framing_label": composition_guidance(scene_name, content_name, coverage_name),
+            }
+        )
+
+    return rows
+
+
+def summarize_pool_slot_rows(slot_rows):
+    total_target = sum(int(r.get("target", 0) or 0) for r in slot_rows)
+    total_existing = sum(int(r.get("existing", 0) or 0) for r in slot_rows)
+    total_missing = sum(int(r.get("missing", 0) or 0) for r in slot_rows)
+
+    missing_rows = [r for r in slot_rows if int(r.get("missing", 0)) > 0]
+
+    if missing_rows:
+        urgent = sorted(
+            missing_rows,
+            key=lambda r: (
+                -int(r.get("priority_score", 0)),
+                -int(r.get("missing", 0)),
+                str(r.get("scene", "")),
+                str(r.get("content", "")),
+                str(r.get("coverage", "")),
+            ),
+        )[0]
+
+        by_scene = {}
+        for r in missing_rows:
+            scene = str(r.get("scene", "") or "").strip() or "unknown"
+            by_scene[scene] = by_scene.get(scene, 0) + int(r.get("missing", 0))
+
+        focus_scene = sorted(by_scene.items(), key=lambda kv: (-kv[1], kv[0]))[0][0]
+        urgent_label = str(urgent.get("slot_label", "") or "")
+    else:
+        focus_scene = "All filled"
+        urgent_label = "All slots complete"
+
+    return {
+        "total_target": total_target,
+        "total_existing": total_existing,
+        "total_missing": total_missing,
+        "focus_scene": focus_scene,
+        "urgent_label": urgent_label,
+    }
+
+
+def sort_pool_slot_rows(slot_rows):
+    return sorted(
+        slot_rows,
+        key=lambda r: (
+            0 if int(r.get("missing", 0)) > 0 else 1,
+            -int(r.get("priority_score", 0)),
+            -int(r.get("missing", 0)),
+            str(r.get("scene", "")),
+            str(r.get("content", "")),
+            str(r.get("coverage", "")),
+            str(r.get("move", "")),
+        ),
+    )
+
+
+def save_pool_uploads(
+    uploads,
+    factory_dir: Path,
+    ext_choice_pool: str,
+    scene_name: str,
+    content_name: str,
+    coverage_name: str,
+    move_name: str,
+    hero_safe_default: bool,
+    intro_safe_default: bool,
+    outro_safe_default: bool,
+    continuity_group_default: str,
+    energy_default: str,
+    quality_default: str,
+    notes_default: str,
+):
+    cur = next_index_for(factory_dir, scene_name, content_name, coverage_name, move_name, ext_choice_pool)
+
+    for uf in uploads:
+        ext = Path(uf.name).suffix.lower() or ext_choice_pool
+        fname = build_factory_filename(scene_name, content_name, coverage_name, move_name, cur, ext)
+        saved_path = safe_write_file(factory_dir / fname, uf.getbuffer().tobytes())
+        upsert_asset_record(factory_dir / "asset_index.json", saved_path)
+        update_asset_record_fields(
+            factory_dir / "asset_index.json",
+            saved_path.name,
+            {
+                "hero_safe": hero_safe_default,
+                "intro_safe": intro_safe_default,
+                "outro_safe": outro_safe_default,
+                "continuity_group": continuity_group_default.strip(),
+                "energy": energy_default,
+                "quality_status": quality_default,
+                "notes": notes_default.strip(),
+            },
+        )
+        cur += 1
+
+
+def render_pool_active_slot_card(row, pool_topic: str, i: int, factory_dir: Path, ext_choice_pool: str):
+    scene_name = str(row.get("scene", "")).strip()
+    content_name = str(row.get("content", "")).strip()
+    coverage_name = str(row.get("coverage", "")).strip()
+    move_name = str(row.get("move", "")).strip()
+    target = int(row.get("target", 0) or 0)
+    priority = str(row.get("priority", "medium") or "medium")
+    existing = int(row.get("existing", 0) or 0)
+    missing = int(row.get("missing", 0) or 0)
+    defaults = row.get("defaults", {}) if isinstance(row.get("defaults"), dict) else {}
+
+    default_energy = str(defaults.get("energy", "medium") or "medium")
+    default_quality = str(defaults.get("quality_status", "approved") or "approved")
+    default_group = str(defaults.get("continuity_group", "") or "")
+    default_intro = bool(defaults.get("intro_safe", False))
+    default_hero = bool(defaults.get("hero_safe", False))
+    default_outro = bool(defaults.get("outro_safe", False))
+
+    with st.container(border=True):
+        st.markdown(f"**{row['slot_label']}** {priority_badge(priority)}")
+        st.markdown(f"🎬 `{move_name}` · ⏱️ `{row['duration_label']}` · ⚠️ **missing {missing}**")
+        st.caption(f"💡 {row['framing_label']} · {row['move_label']}")
+
+        progress_col, status_col = st.columns([3, 2])
+        with progress_col:
+            ratio = (existing / target) if target else 0
+            st.progress(ratio)
+        with status_col:
+            st.markdown(
+                f"<div style='font-size:0.92rem; text-align:right;'>"
+                f"{existing}/{target} · "
+                f"<span style='color:#FF4B4B; font-weight:600;'>need {missing}</span>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+
+        uploads = st.file_uploader(
+            "Upload clips for this slot",
+            type=VIDEO_EXTS,
+            accept_multiple_files=True,
+            key=f"pool_fill_v3_upload_{pool_topic}_{i}",
+            label_visibility="collapsed",
+        )
+
+        with st.expander("Clip tags", expanded=False):
+            meta1, meta2 = st.columns([1, 1])
+            with meta1:
+                energy_default = st.selectbox(
+                    "energy",
+                    ["low", "medium", "high"],
+                    index=["low", "medium", "high"].index(default_energy) if default_energy in ["low", "medium", "high"] else 1,
+                    key=f"pool_fill_v3_energy_{pool_topic}_{i}",
+                )
+                quality_default = st.selectbox(
+                    "quality_status",
+                    ["approved", "review", "reject"],
+                    index=["approved", "review", "reject"].index(default_quality) if default_quality in ["approved", "review", "reject"] else 0,
+                    key=f"pool_fill_v3_quality_{pool_topic}_{i}",
+                )
+            with meta2:
+                continuity_group_default = st.text_input(
+                    "continuity_group",
+                    value=default_group,
+                    key=f"pool_fill_v3_group_{pool_topic}_{i}",
+                )
+                notes_default = st.text_input(
+                    "notes",
+                    value="",
+                    key=f"pool_fill_v3_notes_{pool_topic}_{i}",
+                )
+
+            t1, t2, t3 = st.columns(3)
+            with t1:
+                intro_safe_default = st.checkbox("intro_safe", value=default_intro, key=f"pool_fill_v3_intro_{pool_topic}_{i}")
+            with t2:
+                hero_safe_default = st.checkbox("hero_safe", value=default_hero, key=f"pool_fill_v3_hero_{pool_topic}_{i}")
+            with t3:
+                outro_safe_default = st.checkbox("outro_safe", value=default_outro, key=f"pool_fill_v3_outro_{pool_topic}_{i}")
+
+        if st.button("Save to Pool", key=f"pool_fill_v3_save_{pool_topic}_{i}", use_container_width=True):
+            if not uploads:
+                st.warning("Please upload at least one clip.")
+            else:
+                save_pool_uploads(
+                    uploads=uploads,
+                    factory_dir=factory_dir,
+                    ext_choice_pool=ext_choice_pool,
+                    scene_name=scene_name,
+                    content_name=content_name,
+                    coverage_name=coverage_name,
+                    move_name=move_name,
+                    hero_safe_default=hero_safe_default,
+                    intro_safe_default=intro_safe_default,
+                    outro_safe_default=outro_safe_default,
+                    continuity_group_default=continuity_group_default,
+                    energy_default=energy_default,
+                    quality_default=quality_default,
+                    notes_default=notes_default,
+                )
+                st.success("Saved to pool.")
+                st.rerun()
+
+
+def render_pool_completed_slot_card(row, pool_topic: str, i: int, factory_dir: Path, ext_choice_pool: str):
+    scene_name = str(row.get("scene", "")).strip()
+    content_name = str(row.get("content", "")).strip()
+    coverage_name = str(row.get("coverage", "")).strip()
+    move_name = str(row.get("move", "")).strip()
+    existing = int(row.get("existing", 0) or 0)
+    defaults = row.get("defaults", {}) if isinstance(row.get("defaults"), dict) else {}
+
+    default_energy = str(defaults.get("energy", "medium") or "medium")
+    default_quality = str(defaults.get("quality_status", "approved") or "approved")
+    default_group = str(defaults.get("continuity_group", "") or "")
+    default_intro = bool(defaults.get("intro_safe", False))
+    default_hero = bool(defaults.get("hero_safe", False))
+    default_outro = bool(defaults.get("outro_safe", False))
+
+    with st.expander(f"✅ {row['slot_label']} · ready {existing}", expanded=False):
+        st.caption(f"Current clips: {existing} · upload here only if you want replacements or alternates.")
+
+        uploads = st.file_uploader(
+            "Upload clips for this slot",
+            type=VIDEO_EXTS,
+            accept_multiple_files=True,
+            key=f"pool_fill_v3_done_upload_{pool_topic}_{i}",
+            label_visibility="collapsed",
+        )
+
+        meta1, meta2 = st.columns([1, 1])
+        with meta1:
+            energy_default = st.selectbox(
+                "energy",
+                ["low", "medium", "high"],
+                index=["low", "medium", "high"].index(default_energy) if default_energy in ["low", "medium", "high"] else 1,
+                key=f"pool_fill_v3_done_energy_{pool_topic}_{i}",
+            )
+            quality_default = st.selectbox(
+                "quality_status",
+                ["approved", "review", "reject"],
+                index=["approved", "review", "reject"].index(default_quality) if default_quality in ["approved", "review", "reject"] else 0,
+                key=f"pool_fill_v3_done_quality_{pool_topic}_{i}",
+            )
+        with meta2:
+            continuity_group_default = st.text_input(
+                "continuity_group",
+                value=default_group,
+                key=f"pool_fill_v3_done_group_{pool_topic}_{i}",
+            )
+            notes_default = st.text_input(
+                "notes",
+                value="",
+                key=f"pool_fill_v3_done_notes_{pool_topic}_{i}",
+            )
+
+        t1, t2, t3 = st.columns(3)
+        with t1:
+            intro_safe_default = st.checkbox("intro_safe", value=default_intro, key=f"pool_fill_v3_done_intro_{pool_topic}_{i}")
+        with t2:
+            hero_safe_default = st.checkbox("hero_safe", value=default_hero, key=f"pool_fill_v3_done_hero_{pool_topic}_{i}")
+        with t3:
+            outro_safe_default = st.checkbox("outro_safe", value=default_outro, key=f"pool_fill_v3_done_outro_{pool_topic}_{i}")
+
+        if st.button("Save to Pool", key=f"pool_fill_v3_done_save_{pool_topic}_{i}", use_container_width=True):
+            if not uploads:
+                st.warning("Please upload at least one clip.")
+            else:
+                save_pool_uploads(
+                    uploads=uploads,
+                    factory_dir=factory_dir,
+                    ext_choice_pool=ext_choice_pool,
+                    scene_name=scene_name,
+                    content_name=content_name,
+                    coverage_name=coverage_name,
+                    move_name=move_name,
+                    hero_safe_default=hero_safe_default,
+                    intro_safe_default=intro_safe_default,
+                    outro_safe_default=outro_safe_default,
+                    continuity_group_default=continuity_group_default,
+                    energy_default=energy_default,
+                    quality_default=quality_default,
+                    notes_default=notes_default,
+                )
+                st.success("Saved to pool.")
+                st.rerun()
+
+
+def render_pool_fill_downloads():
+    guide_html = DOCS_DIR / "pool_fill_shooting_guide.html"
+
+    with st.container():
+        c1, c2 = st.columns([1, 5])
+
+        with c1:
+            if guide_html.exists():
+                st.download_button(
+                    "Get Guide",
+                    data=guide_html.read_text(encoding="utf-8"),
+                    file_name=guide_html.name,
+                    mime="text/html",
+                    use_container_width=True,
+                    key="download_pool_guide_html",
+                )
+            else:
+                st.caption("Guide missing")
+
+        with c2:
+            st.caption("Download the phone-friendly shooting guide for quick reference.")
+
+
 def _load_json(path: Path) -> dict:
     if not path.exists():
         return {}
@@ -209,8 +562,33 @@ def ensure_run_layout(run_dir: Path) -> dict[str, Path]:
     internal_dir.mkdir(parents=True, exist_ok=True)
     return {"run_dir": run_dir, "internal_dir": internal_dir}
 
-def load_pool_plan(company: str) -> dict:
-    path = POOL_PLAN_DIR / f"{str(company).strip().lower()}.yaml"
+def list_brand_pool_plans(company: str) -> list[Path]:
+    company_slug = safe_slug(str(company).strip()).lower()
+    brand_dir = BRANDS_DIR / company_slug / "pool_plans"
+
+    plans: list[Path] = []
+    if brand_dir.exists() and brand_dir.is_dir():
+        plans.extend(sorted(brand_dir.glob("*.yaml")))
+        plans.extend(sorted(brand_dir.glob("*.yml")))
+
+    # legacy fallback
+    legacy = POOL_PLAN_DIR / f"{company_slug}.yaml"
+    if legacy.exists():
+        plans.append(legacy)
+
+    # de-duplicate while preserving order
+    seen = set()
+    out = []
+    for p in plans:
+        key = str(p.resolve()) if p.exists() else str(p)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(p)
+    return out
+
+
+def load_pool_plan_from_path(path: Path) -> dict:
     if not path.exists():
         return {}
     try:
@@ -281,6 +659,10 @@ with st.sidebar:
         ("Spanish", "es-ES"),
         ("Russian", "ru-RU"),
         ("Arabic", "ar-SA"),
+        ("Uyghur", "ug-CN"),
+        ("Kazakh", "kk-KZ"),
+        ("Uzbek", "uz-UZ"),
+        ("Tajik", "tg-TJ"),
         ("Other…", "other"),
     ]
     lang_labels = [f"{n} ({c})" if c != "other" else n for n, c in lang_options]
@@ -423,35 +805,46 @@ if not storage_ready:
 if work_mode == "Pool Fill Mode":
     st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
     st.markdown("## Pool Fill Mode")
-    st.info(
-        "Use this page to build the reusable footage pool. "
-        "Choose a topic, inspect missing slots, then upload clips directly into the matching slot. "
-        "The system will auto-name files and update the asset index."
-    )
+    st.caption("Topic-driven intake board for reusable footage. Focus on missing slots first, then backfill alternates.")
 
     if not storage_ready or not factory_dir:
         st.info("Footage storage is unavailable. Pool Fill Mode is currently disabled.")
         st.stop()
 
-    pool_plan = load_pool_plan(company)
-    if not pool_plan:
-        st.error(f"No pool plan found for {company}. Expected: data/pool_plans/{str(company).lower()}.yaml")
+    available_pool_plans = list_brand_pool_plans(company)
+    if not available_pool_plans:
+        st.error(
+            f"No pool plan found for {company}. Expected brand plans under "
+            f"data/brands/{safe_slug(str(company).strip()).lower()}/pool_plans/"
+        )
         st.stop()
 
-    topics = pool_plan.get("topics", []) if isinstance(pool_plan.get("topics"), list) else []
-    topic_names = [str(t.get("name", "")) for t in topics if isinstance(t, dict) and str(t.get("name", "")).strip()]
-    if not topic_names:
-        st.error("Pool plan has no valid topics.")
-        st.stop()
+    pool_plan_labels = []
+    pool_plan_map = {}
+    for p in available_pool_plans:
+        label = p.stem
+        if p.parent == POOL_PLAN_DIR:
+            label = f"{label} (legacy)"
+        pool_plan_labels.append(label)
+        pool_plan_map[label] = p
 
-    toolbar_a, toolbar_b, toolbar_c = st.columns([1, 1, 2])
+    toolbar_a, toolbar_b, toolbar_c, toolbar_d = st.columns([1.2, 1.2, 1, 2])
     with toolbar_a:
-        pool_topic = st.selectbox("Pool Topic", topic_names, key="pool_topic_v2")
+        selected_plan_label = st.selectbox("Pool Plan", pool_plan_labels, key="pool_plan_select_v4")
     with toolbar_b:
-        ext_choice_pool = st.selectbox("Default Ext", [".mp4", ".mov", ".m4v", ".mkv"], index=0, key="ext_choice_pool")
+        ext_choice_pool = st.selectbox("Default Ext", [".mp4", ".mov", ".m4v", ".mkv"], index=0, key="ext_choice_pool_v4")
     with toolbar_c:
+        selected_plan_path = pool_plan_map[selected_plan_label]
+        pool_plan = load_pool_plan_from_path(selected_plan_path)
+        topics = pool_plan.get("topics", []) if isinstance(pool_plan.get("topics"), list) else []
+        topic_names = [str(t.get("name", "")) for t in topics if isinstance(t, dict) and str(t.get("name", "")).strip()]
+        if not topic_names:
+            st.error("Selected pool plan has no valid topics.")
+            st.stop()
+        pool_topic = st.selectbox("Pool Topic", topic_names, key="pool_topic_v4")
+    with toolbar_d:
         st.markdown('<div class="top-help"></div>', unsafe_allow_html=True)
-        st.caption("Workflow: choose topic → inspect missing slots → upload matching clips → system auto-names + auto-indexes.")
+        st.caption("Workflow: choose plan → choose topic → inspect missing slots → upload matching clips.")
 
     factory_files = list_video_files(factory_dir, VIDEO_SUFFIXES)
 
@@ -462,190 +855,61 @@ if work_mode == "Pool Fill Mode":
             break
 
     slots = selected_topic.get("slots", []) if isinstance(selected_topic, dict) and isinstance(selected_topic.get("slots"), list) else []
+    slot_rows = build_pool_slot_rows(slots, factory_files)
+    slot_rows = sort_pool_slot_rows(slot_rows)
+    summary = summarize_pool_slot_rows(slot_rows)
 
-    summary_rows = []
-    total_target = 0
-    total_existing = 0
-    total_missing = 0
-
-    for slot in slots:
-        scene_name = str(slot.get("scene", "")).strip()
-        content_name = str(slot.get("content", "")).strip()
-        coverage_name = str(slot.get("coverage", "")).strip()
-        move_name = str(slot.get("move", "")).strip()
-        target = int(slot.get("target", 0) or 0)
-        priority = str(slot.get("priority", "medium") or "medium")
-
-        existing = count_pool_matches(factory_files, scene_name, content_name, coverage_name, move_name)
-        missing = max(0, target - existing)
-
-        total_target += target
-        total_existing += existing
-        total_missing += missing
-
-        summary_rows.append(
-            {
-                "priority": priority,
-                "scene": scene_name,
-                "content": content_name,
-                "coverage": coverage_name,
-                "move": move_name,
-                "target": target,
-                "existing": existing,
-                "missing": missing,
-            }
+    with st.container(border=True):
+        st.markdown("#### 📋 Today’s Intake Brief")
+        st.markdown(f"📍 **Best scene to fill:** {summary['focus_scene']}")
+        st.markdown(f"🔥 **Most urgent slot:** {summary['urgent_label']}")
+        st.caption(
+            f"Need {summary['total_missing']} more clips · "
+            f"Existing {summary['total_existing']} / Target {summary['total_target']}"
         )
 
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Target clips", total_target)
-    m2.metric("Existing clips", total_existing)
-    m3.metric("Missing clips", total_missing)
+        guide_html = DOCS_DIR / "pool_fill_shooting_guide.html"
+        guide_a, guide_b = st.columns([1.1, 3.2])
+        with guide_a:
+            if guide_html.exists():
+                st.download_button(
+                    "Get Guide",
+                    data=guide_html.read_text(encoding="utf-8"),
+                    file_name=guide_html.name,
+                    mime="text/html",
+                    use_container_width=True,
+                    key="download_pool_guide_html_inline",
+                )
+        with guide_b:
+            st.caption("Field reference for crew phone use. Download once and keep it with the shooting board.")
 
-    st.markdown("### Slot Summary")
-    st.dataframe(summary_rows, width="stretch", hide_index=True)
+    st.markdown("### Task Board")
+    st.caption("Open missing slots first. Completed slots are folded to the bottom.")
 
-    st.markdown("### Capture Sheet")
-    st.caption("Screenshot-friendly shooting board. Focus on high-priority slots with the biggest gaps first.")
+    active_rows = [r for r in slot_rows if int(r.get("missing", 0)) > 0]
+    completed_rows = [r for r in slot_rows if int(r.get("missing", 0)) == 0]
 
-    sorted_slots = sorted(
-        slots,
-        key=lambda slot: (
-            0 if str(slot.get("priority", "medium")).lower() == "high" else
-            1 if str(slot.get("priority", "medium")).lower() == "medium" else 2,
-            str(slot.get("scene", "")),
-            str(slot.get("content", "")),
-            str(slot.get("coverage", "")),
-        ),
-    )
-
-    compact_rows = []
-    for slot in sorted_slots:
-        scene_name = str(slot.get("scene", "")).strip()
-        content_name = str(slot.get("content", "")).strip()
-        coverage_name = str(slot.get("coverage", "")).strip()
-        move_name = str(slot.get("move", "")).strip()
-        target = int(slot.get("target", 0) or 0)
-        priority = str(slot.get("priority", "medium") or "medium")
-
-        existing = count_pool_matches(factory_files, scene_name, content_name, coverage_name, move_name)
-        missing = max(0, target - existing)
-
-        compact_rows.append(
-            {
-                "Priority": priority_badge(priority),
-                "Slot": slot_display_name(scene_name, content_name, coverage_name, move_name),
-                "Target": target,
-                "Existing": existing,
-                "Missing": missing,
-                "Duration": recommended_duration_for_slot(coverage_name, move_name),
-                "Move": movement_guidance(move_name),
-                "Framing": composition_guidance(scene_name, content_name, coverage_name),
-            }
+    for i, row in enumerate(active_rows):
+        render_pool_active_slot_card(
+            row=row,
+            pool_topic=pool_topic,
+            i=i,
+            factory_dir=factory_dir,
+            ext_choice_pool=ext_choice_pool,
         )
+        st.write("")
 
-    st.dataframe(compact_rows, width="stretch", hide_index=True)
-
-    st.markdown("### Upload by Slot")
-    st.caption("Open the matching slot below and upload clips directly. Files will be auto-named and indexed.")
-
-    for i, slot in enumerate(sorted_slots):
-        scene_name = str(slot.get("scene", "")).strip()
-        content_name = str(slot.get("content", "")).strip()
-        coverage_name = str(slot.get("coverage", "")).strip()
-        move_name = str(slot.get("move", "")).strip()
-        target = int(slot.get("target", 0) or 0)
-        priority = str(slot.get("priority", "medium") or "medium")
-        defaults = slot.get("defaults", {}) if isinstance(slot.get("defaults"), dict) else {}
-
-        existing = count_pool_matches(factory_files, scene_name, content_name, coverage_name, move_name)
-        missing = max(0, target - existing)
-
-        default_energy = str(defaults.get("energy", "medium") or "medium")
-        default_quality = str(defaults.get("quality_status", "approved") or "approved")
-        default_group = str(defaults.get("continuity_group", "") or "")
-        default_intro = bool(defaults.get("intro_safe", False))
-        default_hero = bool(defaults.get("hero_safe", False))
-        default_outro = bool(defaults.get("outro_safe", False))
-
-        with st.expander(
-            f"{priority_badge(priority)} · {slot_display_name(scene_name, content_name, coverage_name, move_name)} · missing {missing}",
-            expanded=(missing > 0 and priority == "high"),
-        ):
-            head1, head2, head3, head4 = st.columns(4)
-            head1.metric("Target", target)
-            head2.metric("Existing", existing)
-            head3.metric("Missing", missing)
-            head4.write(f"**{recommended_duration_for_slot(coverage_name, move_name)}**  \n{movement_guidance(move_name)}")
-
-            uploads = st.file_uploader(
-                "Upload clips for this slot",
-                type=VIDEO_EXTS,
-                accept_multiple_files=True,
-                key=f"pool_fill_v2_upload_{pool_topic}_{i}",
+    if completed_rows:
+        st.markdown("### Filled Slots")
+        st.caption("These slots already meet target count. Expand only if you want replacements or alternates.")
+        for j, row in enumerate(completed_rows):
+            render_pool_completed_slot_card(
+                row=row,
+                pool_topic=pool_topic,
+                i=j,
+                factory_dir=factory_dir,
+                ext_choice_pool=ext_choice_pool,
             )
-
-            meta1, meta2 = st.columns([1, 1])
-            with meta1:
-                energy_default = st.selectbox(
-                    "energy",
-                    ["low", "medium", "high"],
-                    index=["low", "medium", "high"].index(default_energy) if default_energy in ["low", "medium", "high"] else 1,
-                    key=f"pool_fill_v2_energy_{pool_topic}_{i}",
-                )
-                quality_default = st.selectbox(
-                    "quality_status",
-                    ["approved", "review", "reject"],
-                    index=["approved", "review", "reject"].index(default_quality) if default_quality in ["approved", "review", "reject"] else 0,
-                    key=f"pool_fill_v2_quality_{pool_topic}_{i}",
-                )
-            with meta2:
-                continuity_group_default = st.text_input(
-                    "continuity_group",
-                    value=default_group,
-                    key=f"pool_fill_v2_group_{pool_topic}_{i}",
-                )
-                notes_default = st.text_input(
-                    "notes",
-                    value="",
-                    key=f"pool_fill_v2_notes_{pool_topic}_{i}",
-                )
-
-            t1, t2, t3 = st.columns(3)
-            with t1:
-                intro_safe_default = st.checkbox("intro_safe", value=default_intro, key=f"pool_fill_v2_intro_{pool_topic}_{i}")
-            with t2:
-                hero_safe_default = st.checkbox("hero_safe", value=default_hero, key=f"pool_fill_v2_hero_{pool_topic}_{i}")
-            with t3:
-                outro_safe_default = st.checkbox("outro_safe", value=default_outro, key=f"pool_fill_v2_outro_{pool_topic}_{i}")
-
-            if st.button("Save to Pool", key=f"pool_fill_v2_save_{pool_topic}_{i}"):
-                if not uploads:
-                    st.warning("Please upload at least one clip.")
-                else:
-                    cur = next_index_for(factory_dir, scene_name, content_name, coverage_name, move_name, ext_choice_pool)
-
-                    for uf in uploads:
-                        ext = Path(uf.name).suffix.lower() or ext_choice_pool
-                        fname = build_factory_filename(scene_name, content_name, coverage_name, move_name, cur, ext)
-                        saved_path = safe_write_file(factory_dir / fname, uf.getbuffer().tobytes())
-                        upsert_asset_record(factory_dir / "asset_index.json", saved_path)
-                        update_asset_record_fields(
-                            factory_dir / "asset_index.json",
-                            saved_path.name,
-                            {
-                                "hero_safe": hero_safe_default,
-                                "intro_safe": intro_safe_default,
-                                "outro_safe": outro_safe_default,
-                                "continuity_group": continuity_group_default.strip(),
-                                "energy": energy_default,
-                                "quality_status": quality_default,
-                                "notes": notes_default.strip(),
-                            },
-                        )
-                        cur += 1
-
-                    st.success("Saved to pool.")
-                    st.rerun()
 
     st.stop()
 
