@@ -34,6 +34,9 @@ Human-facing reference documents.
 ### `CANONICAL_TAG_POLICY.md`
 Policy document defining canonical-tag governance and future public/internal schema boundaries.
 
+### `BRAND_CREATION_SPEC.md`
+Specification for future multi-brand onboarding, asset layout, and pool-plan initialization rules.
+
 ### `data/`
 Project data assets and presets.
 

@@ -15,6 +15,15 @@ It is the reference for:
 
 ## 0. Governance Boundary
 
+The project also now distinguishes:
+
+- **global governed layers** — shared protocol and taxonomy structures
+- **brand-local layers** — assets, pool plans, and execution setup specific to one brand
+
+See also:
+- `BRAND_CREATION_SPEC.md`
+
+
 The project now formally distinguishes:
 
 - **core matching fields** — machine-critical canonical fields
