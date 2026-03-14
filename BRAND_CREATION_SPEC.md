@@ -162,6 +162,9 @@ For v1, a new brand gets:
 - optional semantic execution fields
 - optional `registry_key` links
 
+Recommended starter source:
+- `data/brands/_starter/pool_plans/default.yaml`
+
 ---
 
 ## 7. What belongs to the global layer
@@ -340,3 +343,22 @@ The project therefore adopts this v1 principle:
 - **promotion to global structure happens slowly and intentionally**
 
 This is the current foundation for future multi-brand onboarding.
+
+
+## 15. Starter clone helper
+
+A lightweight starter-clone helper now exists for spec-driven onboarding:
+
+`scripts/clone_brand_starter.py`
+
+Example usage:
+
+`python3 scripts/clone_brand_starter.py "My Brand"`
+
+This creates:
+
+- `data/brands/<slug>/`
+- `data/brands/<slug>/pool_plans/default.yaml`
+
+It does **not** create a final logo automatically.
+The operator is still expected to provide brand assets intentionally.
