@@ -1,0 +1,208 @@
+brand: Starter
+
+topics:
+  - name: Facility Overview
+    slots:
+      - scene: factory
+        content: building
+        coverage: wide
+        move: static
+        registry_key: factory.building.wide.static
+        target: 6
+        priority: high
+        human_label: Facility exterior wide establishing shot
+        shoot_brief: Capture a stable wide shot that clearly shows the building, site scale, and operating environment.
+        success_criteria:
+          - The building or main facility area is clearly visible
+          - The shot can work as an opening context shot
+          - The frame feels stable and usable
+        fallback:
+          - Use a slightly tighter static exterior if the full facade cannot be captured cleanly
+          - Use a diagonal exterior angle if it still communicates facility scale
+        purpose: Establish context and show facility scale
+        defaults:
+          energy: medium
+          quality_status: approved
+          continuity_group: facility_exterior
+          intro_safe: true
+          hero_safe: false
+          outro_safe: false
+
+      - scene: factory
+        content: automation
+        coverage: wide
+        move: static
+        registry_key: factory.automation.wide.static
+        target: 8
+        priority: high
+        human_label: Production capability wide shot
+        shoot_brief: Capture a stable wide shot that clearly shows the main production or automation area.
+        success_criteria:
+          - The workflow area is easy to understand visually
+          - The frame shows enough context to communicate production capability
+          - The shot is stable and clean
+        fallback:
+          - Use another wide production area if the main line is not accessible
+          - Use a slightly tighter wide shot if it still communicates capability clearly
+        purpose: Show manufacturing or production capability
+        defaults:
+          energy: medium
+          quality_status: approved
+          continuity_group: production_area
+          intro_safe: true
+          hero_safe: false
+          outro_safe: false
+
+      - scene: factory
+        content: automation
+        coverage: detail
+        move: static
+        registry_key: factory.automation.detail.static
+        target: 8
+        priority: high
+        human_label: Production process detail
+        shoot_brief: Capture a stable close detail of machinery, processing, or a precise production action.
+        success_criteria:
+          - The detail clearly feels operational rather than generic
+          - The shot highlights precision or process quality
+          - The frame is stable and visually clean
+        fallback:
+          - Use another machine or process detail if needed
+          - Use a different close operational detail if it still signals production precision
+        purpose: Provide detailed proof of production quality
+        defaults:
+          energy: high
+          quality_status: approved
+          continuity_group: production_area
+          intro_safe: false
+          hero_safe: false
+          outro_safe: false
+
+  - name: Quality & Verification
+    slots:
+      - scene: factory
+        content: inspection
+        coverage: detail
+        move: static
+        registry_key: factory.inspection.detail.static
+        target: 6
+        priority: medium
+        human_label: Inspection detail shot
+        shoot_brief: Capture a close stable detail showing checking, inspection, or quality verification work.
+        success_criteria:
+          - Inspection activity is visually obvious
+          - The detail supports a quality-control message
+          - The shot feels intentional and precise
+        fallback:
+          - Use another quality-check detail if the original step is unavailable
+          - Use a nearby verification action if it still clearly shows inspection work
+        purpose: Build trust through quality verification detail
+        defaults:
+          energy: low
+          quality_status: approved
+          continuity_group: quality_check
+          intro_safe: false
+          hero_safe: false
+          outro_safe: false
+
+      - scene: tower
+        content: testing
+        coverage: medium
+        move: static
+        registry_key: tower.testing.medium.static
+        target: 6
+        priority: medium
+        human_label: Testing process medium shot
+        shoot_brief: Capture a stable medium shot showing a real testing or validation process in action.
+        success_criteria:
+          - Testing activity is understandable without extra explanation
+          - The frame clearly feels like a verification environment
+          - The shot is stable and readable
+        fallback:
+          - Use a slightly wider test-process angle if medium framing does not explain enough
+          - Use another testing area if it still clearly proves real testing activity
+        purpose: Build trust by showing validation in progress
+        defaults:
+          energy: medium
+          quality_status: approved
+          continuity_group: quality_testing
+          intro_safe: false
+          hero_safe: false
+          outro_safe: false
+
+  - name: Product / Delivery / Closing
+    slots:
+      - scene: showroom
+        content: product
+        coverage: wide
+        move: static
+        registry_key: showroom.product.wide.static
+        target: 6
+        priority: high
+        human_label: Product showcase wide shot
+        shoot_brief: Capture a stable wide shot that presents the main product in a clean, display-ready environment.
+        success_criteria:
+          - The product is still readable as the main subject
+          - The display environment feels clean and presentable
+          - The shot is usable for product introduction
+        fallback:
+          - Use another clean showroom angle if the original setup is crowded
+          - Use a slightly tighter display framing if it still works as a showcase opener
+        purpose: Establish the product showcase context
+        defaults:
+          energy: medium
+          quality_status: approved
+          continuity_group: showroom_product
+          intro_safe: true
+          hero_safe: false
+          outro_safe: false
+
+      - scene: loading
+        content: shipment
+        coverage: medium
+        move: follow
+        registry_key: loading.shipment.medium.follow
+        target: 6
+        priority: medium
+        human_label: Shipment workflow follow shot
+        shoot_brief: Follow the shipment or loading process with smooth subject-led motion.
+        success_criteria:
+          - The workflow is understandable from the shot
+          - The motion feels controlled rather than shaky
+          - The frame clearly belongs to logistics or delivery activity
+        fallback:
+          - Use a side-track or alternate follow angle if needed
+          - Use a static workflow shot if follow movement is not practical
+        purpose: Show operational delivery readiness
+        defaults:
+          energy: high
+          quality_status: approved
+          continuity_group: logistics_flow
+          intro_safe: false
+          hero_safe: false
+          outro_safe: false
+
+      - scene: showroom
+        content: product
+        coverage: hero
+        move: orbit
+        registry_key: showroom.product.hero.orbit
+        target: 4
+        priority: high
+        human_label: Product hero orbit shot
+        shoot_brief: Capture a premium hero-style orbit around the featured product while keeping it dominant and polished.
+        success_criteria:
+          - The product is the unmistakable hero subject
+          - The movement feels premium and smooth
+          - The shot is strong enough for headline or closing brand usage
+        fallback:
+          - Use a premium reveal or slide if a full orbit is not practical
+          - Use a strong static hero shot if motion compromises clarity
+        purpose: Create a premium brand-close hero shot
+        defaults:
+          energy: medium
+          quality_status: approved
+          continuity_group: showroom_product
+          intro_safe: false
+          hero_safe: true
+          outro_safe: true

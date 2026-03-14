@@ -58,6 +58,13 @@ Documentation contract for the current Pool Fill row structure used between plan
 ## `data/`
 
 ### `data/brands/`
+Brand-local assets and pool plans.
+
+Example:
+- `data/brands/siglen/logo.png`
+- `data/brands/siglen/pool_plans/default.yaml`
+- `data/brands/_starter/pool_plans/default.yaml`
+
 Brand-scoped assets and pool plans.
 
 Recommended structure:
@@ -211,3 +218,7 @@ It is moving toward:
 - director-aware shot sequencing
 - controlled output styling
 - repeatable batch generation
+
+
+### `scripts/clone_brand_starter.py`
+Utility script that clones `data/brands/_starter/` into a new brand-local directory.

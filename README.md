@@ -156,3 +156,16 @@ The system favors:
 - reusable material pools
 - lightweight internal artifacts
 - controlled repeatability over uncontrolled randomness
+
+## Brand starter template
+
+- starter brand template under `data/brands/_starter/`
+
+
+## Brand onboarding helper
+
+The project now includes a starter clone helper:
+
+`python3 scripts/clone_brand_starter.py "My Brand"`
+
+This creates a new brand-local skeleton from `data/brands/_starter/`.
