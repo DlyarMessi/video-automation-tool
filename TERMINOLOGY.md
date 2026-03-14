@@ -12,7 +12,13 @@
   Structured shooting tasks generated from the script.
 
 - **Footage Board**  
-  The UI section where missing footage is reviewed and filled.
+  The Project Mode UI section where missing footage is reviewed and filled.
+
+- **Pool Fill Mode**  
+  The independent intake page used to build reusable footage pools directly from brand pool plans.
+
+- **Pool Plan**  
+  A brand-scoped YAML plan that defines topics, slots, priorities, and default upload metadata for Pool Fill.
 
 - **Footage Pool**  
   The reusable set of organized clips available for production.
@@ -49,13 +55,16 @@
   A content grouping such as automation, testing, line, or building.
 
 - **Scene**  
-  The spatial or visual context of a shot.
+  The spatial or visual context of a shot or slot.
 
 - **Ready**  
   A required slot is already covered by existing footage.
 
 - **Missing**  
   A required slot still needs footage.
+
+- **Slot**  
+  A normalized footage requirement defined by `scene + content + coverage + move`.
 
 ## Render terms
 
@@ -67,6 +76,12 @@
 
 - **Voice ID**  
   The ElevenLabs voice identifier.
+
+- **Language Family**  
+  The subtitle/font bucket used by render presets, such as `latin`, `cyrillic`, or `arabic`.
+
+- **Script Family**  
+  The actual detected writing system in subtitle / voice text.
 
 - **Output Format**  
   The target video format for rendering.

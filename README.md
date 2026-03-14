@@ -1,6 +1,6 @@
 # Script-First Video Automation Tool
 
-A production-oriented three-step workflow for short-form brand video generation:
+A production-oriented workflow for short-form brand video generation:
 
 1. provide a structured script
 2. generate shooting tasks and fill the indexed material pool
@@ -10,14 +10,15 @@ A production-oriented three-step workflow for short-form brand video generation:
 
 ## What the system does
 
-This project is designed to evolve from a one-off editing helper into a reusable content production system.
+This project is evolving from a one-off editing helper into a reusable content production system.
 
 Current foundation includes:
 
 - script-first workflow
 - indexed reusable footage pool
-- multi-language subtitle styling
-- managed font assets
+- Pool Fill Mode as an independent intake page
+- brand-scoped pool plan selection
+- managed subtitle font buckets
 - ElevenLabs-based voice pipeline
 - 60fps output defaults
 - visual filter presets
@@ -26,14 +27,40 @@ Current foundation includes:
 
 ---
 
+## Current operator workflow
+
+### Project Mode
+Used when you already have a creative script and want to:
+
+- generate task rows
+- review footage readiness
+- render final output
+
+### Pool Fill Mode
+Used when you want to build the reusable material pool directly.
+
+Current capabilities include:
+
+- select company
+- select pool plan
+- select topic
+- inspect missing slots
+- upload clips directly into matching slots
+- auto-name clips into the factory pool
+- auto-update `asset_index.json`
+- download a phone-friendly HTML shooting guide
+
+---
+
 ## Core files
 
 - `ui_app.py` — operator-facing UI
+- `run.sh` — lightweight helper entry for current project-stage workflows
 - `src/main.py` — CLI entry point
 - `src/workflow.py` — workflow helpers
 - `src/utils.py` — render pipeline and material scheduling
 - `src/material_index.py` — material index logic
-- `src/render_profile.py` — preset access layer
+- `src/render_profile.py` — subtitle and render preset access
 - `src/director_engine/` — editorial rule system
 
 ---
@@ -42,87 +69,87 @@ Current foundation includes:
 
 The long-term goal is not to manually edit every new video.
 
-The long-term goal is to:
+The system is moving toward:
 
-- build a standardized footage pool
-- index it with reusable metadata
-- let new scripts repeatedly call the pool
-- keep outputs varied through scheduling and director rules
+- a standardized footage pool
+- reusable clip metadata
+- script-driven pool reuse
+- controlled visual variation through scheduling and director rules
 
-That is why the system now separates:
+That is why the project now separates:
 
 - file naming
 - material indexing
+- pool-plan-driven intake
 - director logic
 - render presets
+- brand assets
 
 ---
 
-## Current workflow
+## Current layout highlights
 
-### Step 1 — Script → Tasks
-Generate task rows from a creative script.
+### Brand assets
+Brand-scoped assets now live under:
 
-### Step 2 — Footage Board
-Fill required footage slots and manage the factory pool.
+`data/brands/<company>/`
 
-### Step 3 — Create Video
-Compile, apply render settings, and render the final video.
+Example:
+
+- `data/brands/siglen/logo.png`
+- `data/brands/siglen/pool_plans/default.yaml`
+
+### Fonts
+Managed subtitle buckets currently include:
+
+- `latin`
+- `cyrillic`
+- `arabic`
+
+Language-family mappings currently include:
+
+- `en`, `fr`, `es` → `latin`
+- `ru`, `kk`, `tg` → `cyrillic`
+- `ar`, `ug` → `arabic`
+- `uz` → `latin` by default, with script fallback support
+
+### Guide output
+Current downloadable field guide:
+
+- `docs/pool_fill_shooting_guide.html`
 
 ---
 
-## Key system layers
+## Current TTS note
 
-### Naming layer
-Core filename pattern:
+ElevenLabs is the only active TTS provider in the current system.
 
-`scene_content_coverage_move_index.ext`
+The UI now includes language entries for:
 
-### Index layer
-Each factory pool uses `asset_index.json` to store:
-- durations
-- usable windows
-- continuity groups
-- energy
-- quality review
-- intro / outro / hero suitability
+- Uyghur
+- Kazakh
+- Uzbek
+- Tajik
 
-### Director layer
-The director engine currently applies:
-- structure rules
-- motion continuity rules
-- repetition control
-- transition logic
-- pacing logic
-- ending logic
+Voice IDs can be mapped per language short code in:
 
-### Render layer
-The render system currently supports:
-- subtitle style presets
-- font asset routing
-- filter presets
-- 60fps defaults
+`data/tts_profiles/elevenlabs.json`
 
 ---
 
 ## Important documents
 
 - `PROJECT_STRUCTURE.md` — folder and module layout
-- `SYSTEM_FIELDS.md` — naming, index, rule, and UI field dictionary
-
----
-
-## Current TTS policy
-
-ElevenLabs is the only active TTS provider in the current system.
+- `SYSTEM_FIELDS.md` — naming, index, pool-plan, rule, and UI field dictionary
+- `TERMINOLOGY.md` — core project vocabulary
 
 ---
 
 ## Current output policy
 
 The system favors:
+
 - cleaner run folders
 - reusable material pools
 - lightweight internal artifacts
 - controlled repeatability over uncontrolled randomness
-

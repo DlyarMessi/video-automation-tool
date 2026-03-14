@@ -13,6 +13,9 @@ This project is organized around a three-step production workflow:
 ### `ui_app.py`
 Operator-facing Streamlit UI.
 
+### `run.sh`
+Current-stage helper script for launching UI, checking status, running CLI jobs, and cleaning junk files.
+
 ### `README.md`
 Project overview.
 
@@ -20,7 +23,13 @@ Project overview.
 This file.
 
 ### `SYSTEM_FIELDS.md`
-Field dictionary for naming, indexing, director rules, and UI.
+Field dictionary for naming, indexing, pool plans, director rules, and UI.
+
+### `TERMINOLOGY.md`
+Core vocabulary for the project.
+
+### `docs/`
+Human-facing reference documents.
 
 ### `data/`
 Project data assets and presets.
@@ -30,18 +39,41 @@ Core application logic.
 
 ---
 
+## `docs/`
+
+### `docs/pool_fill_shooting_guide.html`
+Phone-friendly downloadable field guide for Pool Fill operators and photographers.
+
+---
+
 ## `data/`
 
+### `data/brands/`
+Brand-scoped assets and pool plans.
+
+Recommended structure:
+
+`data/brands/<company>/logo.png`
+`data/brands/<company>/bgm/`
+`data/brands/<company>/pool_plans/<plan>.yaml`
+
+Current example:
+
+`data/brands/siglen/pool_plans/default.yaml`
+
 ### `data/render_presets.json`
-Render defaults, subtitle presets, and filter presets.
+Render defaults, subtitle family mapping, subtitle presets, and filter presets.
 
 ### `data/fonts/`
-Project-managed subtitle font assets.
+Managed subtitle font assets.
 
-Suggested structure:
+Current buckets:
 - `data/fonts/latin/`
 - `data/fonts/cyrillic/`
 - `data/fonts/arabic/`
+
+### `data/tts_profiles/`
+Local ElevenLabs config and language-to-voice mappings.
 
 ---
 
@@ -57,7 +89,7 @@ Creative-to-production workflow helpers and patch logic.
 Main render pipeline and material selection logic.
 
 ### `src/render_profile.py`
-Render preset access layer.
+Render preset and language-family access layer.
 
 ### `src/material_index.py`
 Material pool indexing helpers.
@@ -73,6 +105,9 @@ TTS provider interface.
 
 ### `src/script_loader.py`
 Script loading utility.
+
+### `src/language_checks.py`
+Script-family checking and language-family validation helpers.
 
 ---
 
@@ -124,8 +159,6 @@ Raw intake area.
 ### `factory`
 Named and indexed reusable material pool.
 
-This folder is the long-term production asset pool.
-
 ### `factory/asset_index.json`
 Structured material metadata used by scheduling and director logic.
 
@@ -156,7 +189,8 @@ This project is no longer just a script-based renderer.
 It is moving toward:
 
 - a reusable indexed material pool
+- brand-scoped asset and plan organization
+- pool-plan-driven intake
 - director-aware shot sequencing
 - controlled output styling
 - repeatable batch generation
-
