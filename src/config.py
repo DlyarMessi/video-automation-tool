@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parent.parent
 INPUT_DIR = ROOT / "input_videos"
 OUTPUT_DIR = ROOT / "output_videos"
 DATA_DIR = ROOT / "data"
+BRANDS_DIR = DATA_DIR / "brands"
 SCRIPTS_DIR = ROOT / "scripts"
 
 # ==================== 字幕与视觉设置 ====================
@@ -44,13 +45,13 @@ class CompanyAssets:
 
 COMPANY_CONFIG: dict[str, CompanyAssets] = {
     "Siglen": CompanyAssets(
-        logo=DATA_DIR / "Siglen" / "logo.png",
-        bgm=DATA_DIR / "Siglen" / "bgm.mp3",
+        logo=BRANDS_DIR / "siglen" / "logo.png",
+        bgm=BRANDS_DIR / "siglen" / "bgm" / "default.mp3",
         prefix="Siglen_Promo_",
     ),
     "Fareo": CompanyAssets(
-        logo=DATA_DIR / "Fareo" / "logo.png",
-        bgm=DATA_DIR / "Fareo" / "bgm.mp3",
+        logo=BRANDS_DIR / "fareo" / "logo.png",
+        bgm=BRANDS_DIR / "fareo" / "bgm" / "default.mp3",
         prefix="Fareo_Promo_",
     ),
 }

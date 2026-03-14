@@ -69,6 +69,21 @@ def detect_creative_family(creative: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def get_allowed_families(lang_code: str) -> List[str]:
+    short = get_lang_short(lang_code)
+
+    if short == "kk":
+        return ["cyrillic", "latin"]
+    if short == "uz":
+        return ["latin", "cyrillic"]
+    if short == "ug":
+        return ["arabic"]
+    if short == "tg":
+        return ["cyrillic"]
+
+    return [get_language_family(lang_code)]
+
+
 def build_language_check(
     creative: Dict[str, Any],
     selected_lang_code: str,
@@ -78,23 +93,28 @@ def build_language_check(
     detected = detect_creative_family(creative)
     detected_family = detected["family"]
     expected_family = get_language_family(selected_lang_code)
+    allowed_families = get_allowed_families(selected_lang_code)
     lang_short = get_lang_short(selected_lang_code)
 
     messages: List[str] = []
     blocking = False
     summary = ""
 
-    if detected_family != "unknown" and detected_family != expected_family:
+    if detected_family != "unknown" and detected_family not in allowed_families:
         blocking = True
         summary = "Script language does not match the selected language family."
         messages.append(
-            f"Detected script family: {detected_family}. Selected language expects: {expected_family}."
+            f"Detected script family: {detected_family}. Selected language allows: {', '.join(allowed_families)}."
         )
     elif detected_family == "unknown":
         summary = "Language check is partial because no clear subtitle/voice text was detected."
         messages.append("No strong script language signal was found in subtitle/vo fields.")
     else:
         summary = f"Script language family check passed ({detected_family})."
+        if len(allowed_families) > 1 and detected_family != expected_family:
+            messages.append(
+                f"Detected script family {detected_family} is accepted for {lang_short}, even though the default family is {expected_family}."
+            )
 
     languages = profile.get("languages", {}) if isinstance(profile.get("languages"), dict) else {}
     lang_cfg = languages.get(lang_short, {}) if isinstance(languages.get(lang_short), dict) else {}
