@@ -1,0 +1,23 @@
+version: 1
+status: draft
+
+about:
+  purpose: >
+    Initial placeholder for editorial intent mappings.
+
+principles:
+  - intent is downstream of canonical structure
+  - intent should not replace canonical matching
+  - purpose metadata may later connect slots to editorial selection logic
+
+current_reference_intents:
+  - establish_context
+  - show_capability
+  - build_trust
+  - brand_close
+
+notes:
+  - >
+    v1 placeholder only.
+  - >
+    This file will later connect canonical entries or templates to higher-level editorial purpose.

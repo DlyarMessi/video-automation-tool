@@ -9,8 +9,32 @@ It is the reference for:
 - pool-plan intake
 - director rules
 - UI editing scope
+- canonical vs user-facing field boundaries
 
 ---
+
+## 0. Governance Boundary
+
+The project now formally distinguishes:
+
+- **core matching fields** — machine-critical canonical fields
+- **user-facing semantic fields** — human-readable guidance fields
+- **soft tags** — editorial and workflow metadata
+
+Current core matching fields remain:
+- `scene`
+- `content`
+- `coverage`
+- `move`
+
+Recommended future user-facing semantic fields include:
+- `human_label`
+- `shoot_brief`
+- `success_criteria`
+- `fallback`
+- `purpose`
+
+These are governed conceptually now, even if not yet fully hydrated across runtime structures.
 
 ## 1. Naming Fields
 

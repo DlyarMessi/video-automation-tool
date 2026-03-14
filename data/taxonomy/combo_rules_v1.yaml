@@ -1,0 +1,21 @@
+version: 1
+status: draft
+
+about:
+  purpose: >
+    Initial placeholder for canonical combination rules.
+
+principles:
+  - keep v1 lightweight
+  - define explicit allow/deny guidance later
+  - avoid early DSL complexity
+
+notes:
+  - >
+    This file is not yet wired into runtime validation.
+  - >
+    Current purpose is to establish directory structure and future governance direction.
+
+allowed_overrides: []
+discouraged_combos: []
+deprecated_combos: []

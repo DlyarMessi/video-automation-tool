@@ -1,0 +1,28 @@
+version: 1
+status: draft
+
+about:
+  purpose: >
+    Initial placeholder for the governed canonical registry.
+    This file will later become the single source of truth for canonical shot entries.
+
+principles:
+  - strict canonical core
+  - rich registry direction
+  - policy before expansion
+  - incremental migration
+  - no namespace-heavy content in v1
+
+governed_fields:
+  - scene
+  - content
+  - coverage
+  - move
+
+notes:
+  - >
+    v1 placeholder only. Existing pool plans and runtime logic are not yet rewritten to consume this file directly.
+  - >
+    Future registry entries may attach canonical fields, user-facing metadata, and editorial purpose metadata to one slot identity.
+
+entries: {}
