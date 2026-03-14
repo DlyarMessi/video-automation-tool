@@ -9,6 +9,35 @@ from pathlib import Path
 import streamlit as st
 import yaml
 
+from src.ui_hardening import (
+    load_registry_entries as ui_load_registry_entries,
+    hydrate_slot_from_registry as ui_hydrate_slot_from_registry,
+    attach_pool_row_semantics as ui_attach_pool_row_semantics,
+    build_pool_card_view,
+    get_brand_validation_status as hardening_get_brand_validation_status,
+    build_brand_status_summary,
+)
+from src.ui_brand_ops import (
+    clone_brand_starter_into_project as brandops_clone_brand_starter_into_project,
+    save_brand_logo as brandops_save_brand_logo,
+    save_brand_pool_plan as brandops_save_brand_pool_plan,
+    list_brand_pool_plans as brandops_list_brand_pool_plans,
+    load_pool_plan_from_path as brandops_load_pool_plan_from_path,
+    pop_flash as ui_pop_flash,
+    set_flash as ui_set_flash,
+    ensure_valid_choice as ui_ensure_valid_choice,
+)
+from src.ui_pool_fill_model import prepare_pool_fill_runtime
+from src.ui_state import ensure_ui_session_defaults
+from src.ui_pool_fill_controls import (
+    build_pool_plan_label_map,
+    get_selected_pool_plan_data,
+)
+from src.ui_workspace import (
+    build_workspace_controls_state,
+    compute_storage_state,
+)
+
 from src.render_profile import get_default_fps, get_filter_preset
 from src.language_checks import build_language_check
 from src.material_index import load_asset_index, upsert_asset_record, update_asset_record_fields
@@ -50,6 +79,7 @@ ELEVEN_PROFILE_PATH = TTS_PROFILE_DIR / "elevenlabs.json"
 ELEVEN_SECRETS_PATH = TTS_PROFILE_DIR / "elevenlabs_secrets.json"
 
 POOL_PLAN_DIR = ROOT / "data" / "pool_plans"
+CANONICAL_REGISTRY_PATH = ROOT / "data" / "taxonomy" / "canonical_registry_v1.yaml"
 BRANDS_DIR = ROOT / "data" / "brands"
 DOCS_DIR = ROOT / "docs"
 
@@ -383,6 +413,8 @@ def merge_pool_semantic_fields(slot_rows: list[dict], slots: list[dict]) -> list
     return merged_rows
 
 
+
+
 def render_pool_active_slot_card(row, pool_topic: str, i: int, factory_dir: Path, ext_choice_pool: str):
     scene_name = str(row.get("scene", "")).strip()
     content_name = str(row.get("content", "")).strip()
@@ -401,16 +433,24 @@ def render_pool_active_slot_card(row, pool_topic: str, i: int, factory_dir: Path
     default_hero = bool(defaults.get("hero_safe", False))
     default_outro = bool(defaults.get("outro_safe", False))
 
+    display_label = str(row.get("display_label", "") or "").strip() or str(row.get("slot_label", "Slot")).strip()
+    slot_label_text = str(row.get("slot_label_text", "") or row.get("slot_label", "") or "").strip()
+    canonical_tuple_text = str(row.get("canonical_tuple_text", "") or "").strip()
+    registry_key_text = str(row.get("registry_key_text", "") or "").strip()
+    shoot_brief_text = str(row.get("shoot_brief_text", "") or "").strip()
+
     with st.container(border=True):
-        st.markdown(f"**{row['slot_label']}** {priority_badge(priority)}")
-
-        shoot_brief = str(row.get("shoot_brief", "") or "").strip()
-        if shoot_brief:
-            st.caption(f"📝 {shoot_brief}")
-        else:
-            st.caption(f"💡 {row['framing_label']} · {row['move_label']}")
-
+        st.markdown(f"**{display_label}** {priority_badge(priority)}")
+        if slot_label_text and display_label != slot_label_text:
+            st.caption(f"`{slot_label_text}`")
+        if canonical_tuple_text:
+            st.caption(canonical_tuple_text)
+        if registry_key_text:
+            st.caption(f"registry_key: `{registry_key_text}`")
         st.markdown(f"🎬 `{move_name}` · ⏱️ `{row['duration_label']}` · ⚠️ **missing {missing}**")
+        if shoot_brief_text:
+            st.caption(shoot_brief_text)
+        st.caption(f"💡 {row['framing_label']} · {row['move_label']}")
 
         progress_col, status_col = st.columns([3, 2])
         with progress_col:
@@ -507,10 +547,21 @@ def render_pool_completed_slot_card(row, pool_topic: str, i: int, factory_dir: P
     default_hero = bool(defaults.get("hero_safe", False))
     default_outro = bool(defaults.get("outro_safe", False))
 
-    with st.expander(f"✅ {row['slot_label']} · ready {existing}", expanded=False):
-        shoot_brief = str(row.get("shoot_brief", "") or "").strip()
-        if shoot_brief:
-            st.caption(f"📝 {shoot_brief}")
+    display_label = str(row.get("display_label", "") or "").strip() or str(row.get("slot_label", "Slot")).strip()
+    slot_label_text = str(row.get("slot_label_text", "") or row.get("slot_label", "") or "").strip()
+    canonical_tuple_text = str(row.get("canonical_tuple_text", "") or "").strip()
+    registry_key_text = str(row.get("registry_key_text", "") or "").strip()
+    shoot_brief_text = str(row.get("shoot_brief_text", "") or "").strip()
+
+    with st.expander(f"✅ {display_label} · ready {existing}", expanded=False):
+        if slot_label_text and display_label != slot_label_text:
+            st.caption(f"`{slot_label_text}`")
+        if canonical_tuple_text:
+            st.caption(canonical_tuple_text)
+        if registry_key_text:
+            st.caption(f"registry_key: `{registry_key_text}`")
+        if shoot_brief_text:
+            st.caption(shoot_brief_text)
         st.caption(f"Current clips: {existing} · upload here only if you want replacements or alternates.")
 
         uploads = st.file_uploader(
@@ -555,7 +606,7 @@ def render_pool_completed_slot_card(row, pool_topic: str, i: int, factory_dir: P
         with t3:
             outro_safe_default = st.checkbox("outro_safe", value=default_outro, key=f"pool_fill_v3_done_outro_{pool_topic}_{i}")
 
-        if st.button("Save to Pool", key=f"pool_fill_v3_done_save_{pool_topic}_{i}", use_container_width=True):
+        if st.button("Save Alternate to Pool", key=f"pool_fill_v3_done_save_{pool_topic}_{i}", use_container_width=True):
             if not uploads:
                 st.warning("Please upload at least one clip.")
             else:
@@ -577,7 +628,6 @@ def render_pool_completed_slot_card(row, pool_topic: str, i: int, factory_dir: P
                 )
                 st.success("Saved to pool.")
                 st.rerun()
-
 
 def render_pool_fill_downloads():
     guide_html = DOCS_DIR / "pool_fill_shooting_guide.html"
@@ -684,40 +734,137 @@ def ensure_run_layout(run_dir: Path) -> dict[str, Path]:
     internal_dir.mkdir(parents=True, exist_ok=True)
     return {"run_dir": run_dir, "internal_dir": internal_dir}
 
+
 def list_brand_pool_plans(company: str) -> list[Path]:
-    company_slug = safe_slug(str(company).strip()).lower()
-    brand_dir = BRANDS_DIR / company_slug / "pool_plans"
-
-    plans: list[Path] = []
-    if brand_dir.exists() and brand_dir.is_dir():
-        plans.extend(sorted(brand_dir.glob("*.yaml")))
-        plans.extend(sorted(brand_dir.glob("*.yml")))
-
-    # legacy fallback
-    legacy = POOL_PLAN_DIR / f"{company_slug}.yaml"
-    if legacy.exists():
-        plans.append(legacy)
-
-    # de-duplicate while preserving order
-    seen = set()
-    out = []
-    for p in plans:
-        key = str(p.resolve()) if p.exists() else str(p)
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append(p)
-    return out
+    return brandops_list_brand_pool_plans(ROOT, company, safe_slug, POOL_PLAN_DIR)
 
 
 def load_pool_plan_from_path(path: Path) -> dict:
-    if not path.exists():
+    return brandops_load_pool_plan_from_path(path)
+
+def load_canonical_registry_map():
+    if not CANONICAL_REGISTRY_PATH.exists():
         return {}
+
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        return data if isinstance(data, dict) else {}
+        data = yaml.safe_load(CANONICAL_REGISTRY_PATH.read_text(encoding="utf-8")) or {}
     except Exception:
         return {}
+
+    if not isinstance(data, dict):
+        return {}
+
+    entries = data.get("entries", data)
+    if not isinstance(entries, dict):
+        return {}
+
+    out = {}
+    for k, v in entries.items():
+        if not isinstance(k, str):
+            continue
+        if k.startswith("_") or k in {"version", "meta", "status", "about", "principles", "governed_fields", "notes", "entries"}:
+            continue
+        if isinstance(v, dict):
+            out[k] = v
+    return out
+
+
+def _clone_registry_value(value):
+    if isinstance(value, dict):
+        return dict(value)
+    if isinstance(value, list):
+        return list(value)
+    return value
+
+
+def hydrate_slot_from_registry(slot: dict) -> dict:
+    hydrated = dict(slot) if isinstance(slot, dict) else {}
+    registry_key = str(hydrated.get("registry_key", "") or "").strip()
+    if not registry_key:
+        return hydrated
+
+    registry = load_canonical_registry_map()
+    entry = registry.get(registry_key, {})
+    if not isinstance(entry, dict):
+        return hydrated
+
+    for key in ["human_label", "shoot_brief", "success_criteria", "fallback", "purpose"]:
+        cur = hydrated.get(key)
+        if (cur is None) or (isinstance(cur, str) and not cur.strip()) or (isinstance(cur, list) and not cur):
+            if key in entry:
+                hydrated[key] = _clone_registry_value(entry.get(key))
+
+    entry_defaults = entry.get("defaults", {}) if isinstance(entry.get("defaults", {}), dict) else {}
+    slot_defaults = hydrated.get("defaults", {}) if isinstance(hydrated.get("defaults", {}), dict) else {}
+    merged_defaults = dict(slot_defaults)
+
+    for key in ["energy", "quality_status", "continuity_group", "intro_safe", "hero_safe", "outro_safe"]:
+        if key not in merged_defaults and key in entry_defaults:
+            merged_defaults[key] = _clone_registry_value(entry_defaults.get(key))
+
+    if merged_defaults:
+        hydrated["defaults"] = merged_defaults
+
+    return hydrated
+
+
+def attach_pool_row_semantics(slot_rows: list[dict], hydrated_slots: list[dict]) -> list[dict]:
+    by_registry = {}
+    by_tuple = {}
+
+    for slot in hydrated_slots:
+        if not isinstance(slot, dict):
+            continue
+        rk = str(slot.get("registry_key", "") or "").strip()
+        key_tuple = (
+            str(slot.get("scene", "") or "").strip(),
+            str(slot.get("content", "") or "").strip(),
+            str(slot.get("coverage", "") or "").strip(),
+            str(slot.get("move", "") or "").strip(),
+        )
+        if rk:
+            by_registry[rk] = slot
+        by_tuple[key_tuple] = slot
+
+    out = []
+    for row in slot_rows:
+        if not isinstance(row, dict):
+            out.append(row)
+            continue
+
+        merged = dict(row)
+        row_rk = str(row.get("registry_key", "") or "").strip()
+        key_tuple = (
+            str(row.get("scene", "") or "").strip(),
+            str(row.get("content", "") or "").strip(),
+            str(row.get("coverage", "") or "").strip(),
+            str(row.get("move", "") or "").strip(),
+        )
+
+        source = None
+        if row_rk and row_rk in by_registry:
+            source = by_registry[row_rk]
+        elif key_tuple in by_tuple:
+            source = by_tuple[key_tuple]
+
+        if isinstance(source, dict):
+            for key in ["registry_key", "human_label", "shoot_brief", "success_criteria", "fallback", "purpose"]:
+                cur = merged.get(key)
+                if key in source and ((cur is None) or (isinstance(cur, str) and not cur.strip()) or (isinstance(cur, list) and not cur)):
+                    merged[key] = _clone_registry_value(source.get(key))
+
+            source_defaults = source.get("defaults", {}) if isinstance(source.get("defaults", {}), dict) else {}
+            row_defaults = merged.get("defaults", {}) if isinstance(merged.get("defaults", {}), dict) else {}
+            for dkey, dval in source_defaults.items():
+                if dkey not in row_defaults:
+                    row_defaults[dkey] = _clone_registry_value(dval)
+            if row_defaults:
+                merged["defaults"] = row_defaults
+
+        out.append(merged)
+
+    return out
+
 
 def count_pool_matches(factory_files: list[Path], scene: str, content: str, coverage: str, move: str) -> int:
     scene = safe_slug(scene).lower()
@@ -762,148 +909,25 @@ def list_brand_catalog_names() -> list[str]:
     return sorted([x for x in names if str(x).strip()], key=lambda x: str(x).lower())
 
 
+
 def clone_brand_starter_into_project(brand_name: str, brand_slug: str = "") -> tuple[bool, str]:
-    starter_dir = ROOT / "data" / "brands" / "_starter"
-    brands_dir = ROOT / "data" / "brands"
-
-    if not starter_dir.exists():
-        return False, "Starter brand template is missing at data/brands/_starter/"
-
-    brand_name_clean = str(brand_name or "").strip()
-    if not brand_name_clean:
-        return False, "Please enter a brand name."
-
-    slug = safe_slug(brand_slug or brand_name_clean).lower()
-    if not slug:
-        return False, "Could not derive a valid brand slug."
-
-    if slug == "_starter":
-        return False, "The slug '_starter' is reserved."
-
-    target_dir = brands_dir / slug
-    if target_dir.exists():
-        return False, f"Brand directory already exists: data/brands/{slug}/"
-
-    try:
-        shutil.copytree(starter_dir, target_dir)
-
-        default_plan = target_dir / "pool_plans" / "default.yaml"
-        if default_plan.exists():
-            data = yaml.safe_load(default_plan.read_text(encoding="utf-8")) or {}
-            if isinstance(data, dict):
-                data["brand"] = brand_name_clean
-                default_plan.write_text(
-                    yaml.safe_dump(data, sort_keys=False, allow_unicode=True),
-                    encoding="utf-8",
-                )
-
-        return True, (
-            f"Created brand skeleton: data/brands/{slug}/  |  "
-            f"Next: add logo.png and refine pool_plans/default.yaml"
-        )
-    except Exception as e:
-        return False, f"Failed to create brand skeleton: {e}"
-
+    return brandops_clone_brand_starter_into_project(ROOT, brand_name, safe_slug, brand_slug)
 
 def get_brand_validation_status(company: str) -> dict:
-    company_clean = str(company or "").strip()
-    slug = safe_slug(company_clean).lower()
-    brand_dir = ROOT / "data" / "brands" / slug
-    logo_path = brand_dir / "logo.png"
-    pool_plan_dir = brand_dir / "pool_plans"
-    default_plan_path = pool_plan_dir / "default.yaml"
-    available_plans = []
-    if pool_plan_dir.exists():
-        available_plans = sorted([p.stem for p in pool_plan_dir.glob("*.yaml")])
-
-    return {
-        "company": company_clean,
-        "slug": slug,
-        "brand_dir": brand_dir,
-        "logo_path": logo_path,
-        "pool_plan_dir": pool_plan_dir,
-        "default_plan_path": default_plan_path,
-        "logo_exists": logo_path.exists(),
-        "default_plan_exists": default_plan_path.exists(),
-        "available_plans": available_plans,
-        "plan_count": len(available_plans),
-    }
+    return hardening_get_brand_validation_status(ROOT, company, safe_slug)
 
 
 def save_brand_logo(company: str, uploaded_logo) -> tuple[bool, str]:
-    company_clean = str(company or "").strip()
-    slug = safe_slug(company_clean).lower()
-    if not slug:
-        return False, "Could not determine a valid brand slug."
-
-    if uploaded_logo is None:
-        return False, "Please choose a logo file first."
-
-    brand_dir = ROOT / "data" / "brands" / slug
-    brand_dir.mkdir(parents=True, exist_ok=True)
-    logo_path = brand_dir / "logo.png"
-
-    try:
-        logo_path.write_bytes(uploaded_logo.getbuffer().tobytes())
-        return True, f"Saved logo to data/brands/{slug}/logo.png"
-    except Exception as e:
-        return False, f"Failed to save logo: {e}"
+    return brandops_save_brand_logo(ROOT, company, safe_slug, uploaded_logo)
 
 
 def save_brand_pool_plan(company: str, uploaded_plan, plan_name: str = "") -> tuple[bool, str, str]:
-    company_clean = str(company or "").strip()
-    slug = safe_slug(company_clean).lower()
-    if not slug:
-        return False, "Could not determine a valid brand slug.", ""
-
-    if uploaded_plan is None:
-        return False, "Please choose a YAML file first.", ""
-
-    try:
-        raw = uploaded_plan.getbuffer().tobytes().decode("utf-8")
-    except Exception:
-        return False, "Could not decode uploaded YAML as UTF-8.", ""
-
-    try:
-        data = yaml.safe_load(raw) or {}
-    except Exception as e:
-        return False, f"Invalid YAML: {e}", ""
-
-    if not isinstance(data, dict):
-        return False, "Pool plan YAML must be a dictionary at the top level.", ""
-
-    topics = data.get("topics", [])
-    if not isinstance(topics, list):
-        return False, "Pool plan YAML must contain a list field: topics", ""
-
-    data["brand"] = company_clean
-
-    original_name = ""
-    try:
-        original_name = Path(str(getattr(uploaded_plan, "name", "") or "")).stem
-    except Exception:
-        original_name = ""
-
-    final_name = safe_slug(plan_name or original_name).lower() or "default"
-
-    brand_dir = ROOT / "data" / "brands" / slug
-    pool_plan_dir = brand_dir / "pool_plans"
-    pool_plan_dir.mkdir(parents=True, exist_ok=True)
-    plan_path = pool_plan_dir / f"{final_name}.yaml"
-
-    try:
-        plan_path.write_text(
-            yaml.safe_dump(data, sort_keys=False, allow_unicode=True),
-            encoding="utf-8",
-        )
-        return True, f"Saved pool plan to data/brands/{slug}/pool_plans/{final_name}.yaml", final_name
-    except Exception as e:
-        return False, f"Failed to save pool plan: {e}", ""
+    return brandops_save_brand_pool_plan(ROOT, company, safe_slug, uploaded_plan, plan_name)
 
 
 def render_brand_validation_checklist(company: str):
     status = get_brand_validation_status(company)
-    logo_flash = str(st.session_state.pop("brand_logo_flash_v1", "") or "").strip()
+    logo_flash = ui_pop_flash(st.session_state, "brand_logo_flash_v1")
 
     with st.container(border=True):
         st.markdown("#### Brand Checklist")
@@ -912,11 +936,7 @@ def render_brand_validation_checklist(company: str):
         if logo_flash:
             st.success(logo_flash)
 
-        logo_state = "logo ready" if status["logo_exists"] else "logo optional / not set"
-        plan_state = "default plan ready" if status["default_plan_exists"] else "default plan not set"
-        st.caption(
-            f"Status · {logo_state} · {plan_state} · {status['plan_count']} plan(s)"
-        )
+        st.caption(build_brand_status_summary(status))
 
         if not status["logo_exists"]:
             st.caption("No logo is required. If none is uploaded, watermarking will be skipped.")
@@ -939,11 +959,10 @@ def render_brand_validation_checklist(company: str):
                 ):
                     ok, msg = save_brand_logo(company, uploaded_logo)
                     if ok:
-                        st.session_state["brand_logo_flash_v1"] = msg
+                        ui_set_flash(st.session_state, "brand_logo_flash_v1", msg)
                         st.rerun()
                     else:
                         st.warning(msg)
-
 
 def list_companies(input_root: Path) -> list[str]:
     names: list[str] = []
@@ -979,12 +998,7 @@ def list_companies(input_root: Path) -> list[str]:
 # =========================================================
 # Session
 # =========================================================
-st.session_state.setdefault("active_creative_path", None)
-st.session_state.setdefault("creative_draft", "")
-st.session_state.setdefault("run_dir", None)
-st.session_state.setdefault("shooting_rows", [])
-st.session_state.setdefault("compiled_out_path", None)
-st.session_state.setdefault("work_mode", "Project Mode")
+ensure_ui_session_defaults(st.session_state)
 
 # =========================================================
 # Header
@@ -1177,22 +1191,19 @@ render_brand_validation_checklist(company)
 # =========================================================
 # Storage
 # =========================================================
-storage_ready = True
-storage_error = ""
+storage_state = compute_storage_state(
+    input_root_path=input_root_path,
+    company=company,
+    orientation=orientation,
+    ensure_company_storage_fn=ensure_company_storage,
+    get_storage_dirs_fn=get_storage_dirs,
+)
 
-try:
-    if input_root_path.exists() and not input_root_path.is_dir():
-        storage_ready = False
-        storage_error = f"Footage root exists but is not a directory: {input_root_path}"
-    else:
-        ensure_company_storage(input_root_path, company)
-except Exception as e:
-    storage_ready = False
-    storage_error = str(e)
-
-dirs = get_storage_dirs(input_root_path, orientation, company) if storage_ready else {}
-inbox_dir = dirs.get("inbox") if dirs else None
-factory_dir = dirs.get("factory") if dirs else None
+storage_ready = storage_state["storage_ready"]
+storage_error = storage_state["storage_error"]
+dirs = storage_state["dirs"]
+inbox_dir = storage_state["inbox_dir"]
+factory_dir = storage_state["factory_dir"]
 
 if not storage_ready:
     st.warning("Footage storage is unavailable. You can still edit scripts and settings, but footage actions are disabled.")
@@ -1213,7 +1224,7 @@ if work_mode == "Pool Fill Mode":
         st.stop()
 
     available_pool_plans = list_brand_pool_plans(company)
-    pool_plan_flash = str(st.session_state.pop("pool_plan_manager_flash_v1", "") or "").strip()
+    pool_plan_flash = ui_pop_flash(st.session_state, "pool_plan_manager_flash_v1")
     if pool_plan_flash:
         st.success(pool_plan_flash)
 
@@ -1244,7 +1255,7 @@ if work_mode == "Pool Fill Mode":
             ok, msg, saved_label = save_brand_pool_plan(company, uploaded_plan_file, plan_name_input)
             if ok:
                 st.session_state["pool_plan_select_v4"] = saved_label
-                st.session_state["pool_plan_manager_flash_v1"] = msg
+                ui_set_flash(st.session_state, "pool_plan_manager_flash_v1", msg)
                 st.rerun()
             else:
                 st.warning(msg)
@@ -1253,15 +1264,9 @@ if work_mode == "Pool Fill Mode":
         st.info("No pool plans found for this brand yet. Upload one in Manage Pool Plans to continue.")
         st.stop()
 
-    pool_plan_labels = []
-    pool_plan_map = {}
-    for p in available_pool_plans:
-        label = p.stem
-        pool_plan_labels.append(label)
-        pool_plan_map[label] = p
+    pool_plan_labels, pool_plan_map = build_pool_plan_label_map(available_pool_plans, POOL_PLAN_DIR)
 
-    if "pool_plan_select_v4" in st.session_state and st.session_state["pool_plan_select_v4"] not in pool_plan_labels:
-        st.session_state.pop("pool_plan_select_v4", None)
+    ui_ensure_valid_choice(st.session_state, "pool_plan_select_v4", pool_plan_labels)
 
     toolbar_a, toolbar_b, toolbar_c, toolbar_d = st.columns([1.2, 1.2, 1, 2])
     with toolbar_a:
@@ -1269,13 +1274,19 @@ if work_mode == "Pool Fill Mode":
     with toolbar_b:
         ext_choice_pool = st.selectbox("Default Ext", [".mp4", ".mov", ".m4v", ".mkv"], index=0, key="ext_choice_pool_v4")
     with toolbar_c:
-        selected_plan_path = pool_plan_map[selected_plan_label]
-        pool_plan = load_pool_plan_from_path(selected_plan_path)
-        topics = pool_plan.get("topics", []) if isinstance(pool_plan.get("topics"), list) else []
-        topic_names = [str(t.get("name", "")) for t in topics if isinstance(t, dict) and str(t.get("name", "")).strip()]
+        selected_plan_data = get_selected_pool_plan_data(
+            selected_plan_label=selected_plan_label,
+            pool_plan_map=pool_plan_map,
+            load_pool_plan_from_path_fn=load_pool_plan_from_path,
+        )
+        selected_plan_path = selected_plan_data["selected_plan_path"]
+        pool_plan = selected_plan_data["pool_plan"]
+        topics = selected_plan_data["topics"]
+        topic_names = selected_plan_data["topic_names"]
         if not topic_names:
             st.error("Selected pool plan has no valid topics.")
             st.stop()
+        ui_ensure_valid_choice(st.session_state, "pool_topic_v4", topic_names)
         pool_topic = st.selectbox("Pool Topic", topic_names, key="pool_topic_v4")
     with toolbar_d:
         st.markdown('<div class="top-help"></div>', unsafe_allow_html=True)
@@ -1296,16 +1307,25 @@ if work_mode == "Pool Fill Mode":
 
     factory_files = list_video_files(factory_dir, VIDEO_SUFFIXES)
 
-    selected_topic = None
-    for topic in topics:
-        if isinstance(topic, dict) and str(topic.get("name", "")) == pool_topic:
-            selected_topic = topic
-            break
+    pool_fill_runtime = prepare_pool_fill_runtime(
+        pool_plan=pool_plan,
+        pool_topic=pool_topic,
+        factory_files=factory_files,
+        registry_path=CANONICAL_REGISTRY_PATH,
+        load_registry_entries_fn=ui_load_registry_entries,
+        hydrate_slot_fn=ui_hydrate_slot_from_registry,
+        attach_semantics_fn=ui_attach_pool_row_semantics,
+        build_card_view_fn=build_pool_card_view,
+        build_pool_slot_rows_fn=build_pool_slot_rows,
+        sort_pool_slot_rows_fn=sort_pool_slot_rows,
+        summarize_pool_slot_rows_fn=summarize_pool_slot_rows,
+    )
 
-    slots = selected_topic.get("slots", []) if isinstance(selected_topic, dict) and isinstance(selected_topic.get("slots"), list) else []
-    slot_rows = build_pool_slot_rows(slots, factory_files)
-    slot_rows = sort_pool_slot_rows(slot_rows)
-    summary = summarize_pool_slot_rows(slot_rows)
+    selected_topic = pool_fill_runtime["selected_topic"]
+    slot_rows = pool_fill_runtime["slot_rows"]
+    summary = pool_fill_runtime["summary"]
+    active_rows = pool_fill_runtime["active_rows"]
+    completed_rows = pool_fill_runtime["completed_rows"]
 
     with st.container(border=True):
         st.markdown("#### 📋 Today’s Intake Brief")
@@ -1333,9 +1353,6 @@ if work_mode == "Pool Fill Mode":
 
     st.markdown("### Task Board")
     st.caption("Open missing slots first. Completed slots are folded to the bottom.")
-
-    active_rows = [r for r in slot_rows if int(r.get("missing", 0)) > 0]
-    completed_rows = [r for r in slot_rows if int(r.get("missing", 0)) == 0]
 
     for i, row in enumerate(active_rows):
         render_pool_active_slot_card(
