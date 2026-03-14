@@ -805,6 +805,146 @@ def clone_brand_starter_into_project(brand_name: str, brand_slug: str = "") -> t
         return False, f"Failed to create brand skeleton: {e}"
 
 
+def get_brand_validation_status(company: str) -> dict:
+    company_clean = str(company or "").strip()
+    slug = safe_slug(company_clean).lower()
+    brand_dir = ROOT / "data" / "brands" / slug
+    logo_path = brand_dir / "logo.png"
+    pool_plan_dir = brand_dir / "pool_plans"
+    default_plan_path = pool_plan_dir / "default.yaml"
+    available_plans = []
+    if pool_plan_dir.exists():
+        available_plans = sorted([p.stem for p in pool_plan_dir.glob("*.yaml")])
+
+    return {
+        "company": company_clean,
+        "slug": slug,
+        "brand_dir": brand_dir,
+        "logo_path": logo_path,
+        "pool_plan_dir": pool_plan_dir,
+        "default_plan_path": default_plan_path,
+        "logo_exists": logo_path.exists(),
+        "default_plan_exists": default_plan_path.exists(),
+        "available_plans": available_plans,
+        "plan_count": len(available_plans),
+    }
+
+
+def save_brand_logo(company: str, uploaded_logo) -> tuple[bool, str]:
+    company_clean = str(company or "").strip()
+    slug = safe_slug(company_clean).lower()
+    if not slug:
+        return False, "Could not determine a valid brand slug."
+
+    if uploaded_logo is None:
+        return False, "Please choose a logo file first."
+
+    brand_dir = ROOT / "data" / "brands" / slug
+    brand_dir.mkdir(parents=True, exist_ok=True)
+    logo_path = brand_dir / "logo.png"
+
+    try:
+        logo_path.write_bytes(uploaded_logo.getbuffer().tobytes())
+        return True, f"Saved logo to data/brands/{slug}/logo.png"
+    except Exception as e:
+        return False, f"Failed to save logo: {e}"
+
+
+def save_brand_pool_plan(company: str, uploaded_plan, plan_name: str = "") -> tuple[bool, str, str]:
+    company_clean = str(company or "").strip()
+    slug = safe_slug(company_clean).lower()
+    if not slug:
+        return False, "Could not determine a valid brand slug.", ""
+
+    if uploaded_plan is None:
+        return False, "Please choose a YAML file first.", ""
+
+    try:
+        raw = uploaded_plan.getbuffer().tobytes().decode("utf-8")
+    except Exception:
+        return False, "Could not decode uploaded YAML as UTF-8.", ""
+
+    try:
+        data = yaml.safe_load(raw) or {}
+    except Exception as e:
+        return False, f"Invalid YAML: {e}", ""
+
+    if not isinstance(data, dict):
+        return False, "Pool plan YAML must be a dictionary at the top level.", ""
+
+    topics = data.get("topics", [])
+    if not isinstance(topics, list):
+        return False, "Pool plan YAML must contain a list field: topics", ""
+
+    data["brand"] = company_clean
+
+    original_name = ""
+    try:
+        original_name = Path(str(getattr(uploaded_plan, "name", "") or "")).stem
+    except Exception:
+        original_name = ""
+
+    final_name = safe_slug(plan_name or original_name).lower() or "default"
+
+    brand_dir = ROOT / "data" / "brands" / slug
+    pool_plan_dir = brand_dir / "pool_plans"
+    pool_plan_dir.mkdir(parents=True, exist_ok=True)
+    plan_path = pool_plan_dir / f"{final_name}.yaml"
+
+    try:
+        plan_path.write_text(
+            yaml.safe_dump(data, sort_keys=False, allow_unicode=True),
+            encoding="utf-8",
+        )
+        return True, f"Saved pool plan to data/brands/{slug}/pool_plans/{final_name}.yaml", final_name
+    except Exception as e:
+        return False, f"Failed to save pool plan: {e}", ""
+
+
+def render_brand_validation_checklist(company: str):
+    status = get_brand_validation_status(company)
+    logo_flash = str(st.session_state.pop("brand_logo_flash_v1", "") or "").strip()
+
+    with st.container(border=True):
+        st.markdown("#### Brand Checklist")
+        st.caption(f"Current brand: {status['company']}  |  slug: `{status['slug']}`")
+
+        if logo_flash:
+            st.success(logo_flash)
+
+        logo_state = "logo ready" if status["logo_exists"] else "logo optional / not set"
+        plan_state = "default plan ready" if status["default_plan_exists"] else "default plan not set"
+        st.caption(
+            f"Status · {logo_state} · {plan_state} · {status['plan_count']} plan(s)"
+        )
+
+        if not status["logo_exists"]:
+            st.caption("No logo is required. If none is uploaded, watermarking will be skipped.")
+
+        with st.expander("Logo (optional)", expanded=False):
+            st.caption("Upload a transparent PNG only if you want watermark support for this brand.")
+            logo_a, logo_b = st.columns([2, 1])
+            with logo_a:
+                uploaded_logo = st.file_uploader(
+                    "Upload / Replace Logo",
+                    type=["png"],
+                    key=f"brand_logo_upload_{status['slug']}",
+                    help="Recommended: transparent PNG brand logo.",
+                )
+            with logo_b:
+                if st.button(
+                    "Save Logo",
+                    use_container_width=True,
+                    key=f"brand_logo_save_{status['slug']}",
+                ):
+                    ok, msg = save_brand_logo(company, uploaded_logo)
+                    if ok:
+                        st.session_state["brand_logo_flash_v1"] = msg
+                        st.rerun()
+                    else:
+                        st.warning(msg)
+
+
 def list_companies(input_root: Path) -> list[str]:
     names: list[str] = []
     seen: set[str] = set()
@@ -984,6 +1124,8 @@ else:
 
 top_a, top_b = st.columns([1, 1])
 with top_a:
+    if preferred_company and preferred_company in companies:
+        st.session_state["company_select_top"] = preferred_company
     company = st.selectbox("Company", companies, index=default_idx, key="company_select_top")
 with top_b:
     work_mode = st.radio(
@@ -1030,6 +1172,8 @@ with brand_create_b:
         else:
             st.warning(msg)
 
+render_brand_validation_checklist(company)
+
 # =========================================================
 # Storage
 # =========================================================
@@ -1069,21 +1213,55 @@ if work_mode == "Pool Fill Mode":
         st.stop()
 
     available_pool_plans = list_brand_pool_plans(company)
+    pool_plan_flash = str(st.session_state.pop("pool_plan_manager_flash_v1", "") or "").strip()
+    if pool_plan_flash:
+        st.success(pool_plan_flash)
+
+    with st.expander("Manage Pool Plans", expanded=False):
+        st.caption("Upload the first plan for a new brand, or add / replace plans for the current brand.")
+
+        manage_a, manage_b = st.columns([2, 1])
+        with manage_a:
+            uploaded_plan_file = st.file_uploader(
+                "Upload Plan YAML",
+                type=["yaml", "yml"],
+                key=f"pool_plan_manager_upload_{safe_slug(company).lower()}",
+                help="Upload a YAML pool plan for the current brand.",
+            )
+        with manage_b:
+            plan_name_input = st.text_input(
+                "Save as",
+                value="",
+                placeholder="default / campaign-a / showroom-v2",
+                key=f"pool_plan_manager_name_{safe_slug(company).lower()}",
+            )
+
+        if st.button(
+            "Save Pool Plan",
+            use_container_width=True,
+            key=f"pool_plan_manager_save_{safe_slug(company).lower()}",
+        ):
+            ok, msg, saved_label = save_brand_pool_plan(company, uploaded_plan_file, plan_name_input)
+            if ok:
+                st.session_state["pool_plan_select_v4"] = saved_label
+                st.session_state["pool_plan_manager_flash_v1"] = msg
+                st.rerun()
+            else:
+                st.warning(msg)
+
     if not available_pool_plans:
-        st.error(
-            f"No pool plan found for {company}. Expected brand plans under "
-            f"data/brands/{safe_slug(str(company).strip()).lower()}/pool_plans/"
-        )
+        st.info("No pool plans found for this brand yet. Upload one in Manage Pool Plans to continue.")
         st.stop()
 
     pool_plan_labels = []
     pool_plan_map = {}
     for p in available_pool_plans:
         label = p.stem
-        if p.parent == POOL_PLAN_DIR:
-            label = f"{label} (legacy)"
         pool_plan_labels.append(label)
         pool_plan_map[label] = p
+
+    if "pool_plan_select_v4" in st.session_state and st.session_state["pool_plan_select_v4"] not in pool_plan_labels:
+        st.session_state.pop("pool_plan_select_v4", None)
 
     toolbar_a, toolbar_b, toolbar_c, toolbar_d = st.columns([1.2, 1.2, 1, 2])
     with toolbar_a:
@@ -1103,6 +1281,19 @@ if work_mode == "Pool Fill Mode":
         st.markdown('<div class="top-help"></div>', unsafe_allow_html=True)
         st.caption("Workflow: choose plan → choose topic → inspect missing slots → upload matching clips.")
 
+        try:
+            current_plan_path = pool_plan_map[selected_plan_label]
+            st.download_button(
+                "Download Selected Plan",
+                data=current_plan_path.read_text(encoding="utf-8"),
+                file_name=current_plan_path.name,
+                mime="text/yaml",
+                use_container_width=True,
+                key=f"download_selected_plan_{safe_slug(company).lower()}_{selected_plan_label}",
+            )
+        except Exception:
+            st.caption("Selected plan could not be read for download.")
+
     factory_files = list_video_files(factory_dir, VIDEO_SUFFIXES)
 
     selected_topic = None
@@ -1113,7 +1304,6 @@ if work_mode == "Pool Fill Mode":
 
     slots = selected_topic.get("slots", []) if isinstance(selected_topic, dict) and isinstance(selected_topic.get("slots"), list) else []
     slot_rows = build_pool_slot_rows(slots, factory_files)
-    slot_rows = merge_pool_semantic_fields(slot_rows, slots)
     slot_rows = sort_pool_slot_rows(slot_rows)
     summary = summarize_pool_slot_rows(slot_rows)
 
