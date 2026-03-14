@@ -13,6 +13,7 @@ A production-oriented workflow for short-form brand video generation:
 This project is evolving from a one-off editing helper into a reusable content production system.
 
 Current foundation includes:
+- governed canonical-tag direction
 
 - script-first workflow
 - indexed reusable footage pool
@@ -140,6 +141,7 @@ Voice IDs can be mapped per language short code in:
 ## Important documents
 
 - `PROJECT_STRUCTURE.md` — folder and module layout
+- `CANONICAL_TAG_POLICY.md` — governance rules for canonical tags and public/internal boundaries
 - `SYSTEM_FIELDS.md` — naming, index, pool-plan, rule, and UI field dictionary
 - `TERMINOLOGY.md` — core project vocabulary
 

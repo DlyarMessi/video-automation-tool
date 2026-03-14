@@ -2,6 +2,15 @@
 
 ## Product-level terms
 
+- **Canonical Tags**  
+  The internal core matching language built from `scene + content + coverage + move`.
+
+- **Public-Facing Fields**  
+  Human-readable labels and guidance fields shown to users, operators, or contributors.
+
+- **Rich Central Registry**  
+  The long-term design direction where canonical identity, user-facing explanation, and editorial metadata attach to one governed registry entry.
+
 - **Script-First**  
   The workflow starts from a structured script.
 

@@ -31,6 +31,9 @@ Core vocabulary for the project.
 ### `docs/`
 Human-facing reference documents.
 
+### `CANONICAL_TAG_POLICY.md`
+Policy document defining canonical-tag governance and future public/internal schema boundaries.
+
 ### `data/`
 Project data assets and presets.
 
@@ -60,6 +63,14 @@ Recommended structure:
 Current example:
 
 `data/brands/siglen/pool_plans/default.yaml`
+
+### `data/taxonomy/`
+Early taxonomy and governance placeholder files.
+
+Current files:
+- `data/taxonomy/canonical_registry_v1.yaml`
+- `data/taxonomy/combo_rules_v1.yaml`
+- `data/taxonomy/intent_mappings_v1.yaml`
 
 ### `data/render_presets.json`
 Render defaults, subtitle family mapping, subtitle presets, and filter presets.
