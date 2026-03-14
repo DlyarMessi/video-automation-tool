@@ -976,7 +976,11 @@ input_root_path = Path(input_root) if "input_root" in locals() else INPUT_ROOT_D
 output_root_path = OUTPUT_ROOT_DEFAULT
 
 companies = list_companies(input_root_path)
-default_idx = companies.index("Siglen") if "Siglen" in companies else (0 if companies else None)
+preferred_company = str(st.session_state.pop("pending_company_select_top", "") or "").strip()
+if preferred_company and preferred_company in companies:
+    default_idx = companies.index(preferred_company)
+else:
+    default_idx = companies.index("Siglen") if "Siglen" in companies else (0 if companies else None)
 
 top_a, top_b = st.columns([1, 1])
 with top_a:
@@ -997,14 +1001,32 @@ with brand_create_a:
         placeholder="e.g. Acme Elevators",
         key="create_brand_name_v1_main",
     )
+
+brand_creation_flash = str(st.session_state.pop("brand_creation_flash_v1", "") or "").strip()
+if brand_creation_flash:
+    st.success(brand_creation_flash)
 with brand_create_b:
     slug_preview = safe_slug(new_brand_name).lower() if new_brand_name.strip() else ""
+    brand_dir_exists = bool(slug_preview) and (ROOT / "data" / "brands" / slug_preview).exists()
+    create_disabled = (not new_brand_name.strip()) or (not slug_preview) or brand_dir_exists
+
     st.caption(f"Slug: {slug_preview or '(waiting)'}")
-    if st.button("Create Brand Skeleton", use_container_width=True, key="create_brand_skeleton_v1_main"):
+    if brand_dir_exists:
+        st.caption("Status: brand slug already exists")
+    elif slug_preview:
+        st.caption("Next required asset: logo.png")
+
+    if st.button(
+        "Create Brand Skeleton",
+        use_container_width=True,
+        key="create_brand_skeleton_v1_main",
+        disabled=create_disabled,
+    ):
         ok, msg = clone_brand_starter_into_project(new_brand_name)
         if ok:
-            st.success(msg)
-            st.caption("Reload or rerun if the new brand does not appear immediately in the Company selector.")
+            st.session_state["pending_company_select_top"] = new_brand_name.strip()
+            st.session_state["brand_creation_flash_v1"] = msg
+            st.rerun()
         else:
             st.warning(msg)
 
