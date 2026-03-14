@@ -6,6 +6,7 @@ topics:
     content: building
     coverage: wide
     move: static
+    registry_key: factory.building.wide.static
     target: 8
     priority: high
     human_label: Factory exterior wide establishing shot
@@ -32,6 +33,7 @@ topics:
     content: building
     coverage: hero
     move: orbit
+    registry_key: factory.building.hero.orbit
     target: 6
     priority: high
     human_label: Factory hero orbit shot
@@ -56,6 +58,7 @@ topics:
     content: automation
     coverage: wide
     move: static
+    registry_key: factory.automation.wide.static
     target: 10
     priority: high
     human_label: Automation line wide shot
@@ -81,6 +84,7 @@ topics:
     content: automation
     coverage: medium
     move: slide
+    registry_key: factory.automation.medium.slide
     target: 10
     priority: high
     human_label: Automation medium slide shot
@@ -105,6 +109,7 @@ topics:
     content: automation
     coverage: detail
     move: static
+    registry_key: factory.automation.detail.static
     target: 12
     priority: high
     human_label: Automation process detail
@@ -132,6 +137,7 @@ topics:
     content: testing
     coverage: medium
     move: static
+    registry_key: tower.testing.medium.static
     target: 8
     priority: high
     human_label: Test tower operation medium shot
@@ -158,6 +164,7 @@ topics:
     content: testing
     coverage: detail
     move: static
+    registry_key: tower.testing.detail.static
     target: 10
     priority: high
     human_label: Test tower proof detail
@@ -183,6 +190,7 @@ topics:
     content: panel
     coverage: detail
     move: static
+    registry_key: tower.panel.detail.static
     target: 8
     priority: medium
     human_label: Tower control panel detail
@@ -208,6 +216,7 @@ topics:
     content: inspection
     coverage: detail
     move: static
+    registry_key: factory.inspection.detail.static
     target: 8
     priority: medium
     human_label: Inspection detail shot
@@ -235,6 +244,7 @@ topics:
     content: storage
     coverage: wide
     move: static
+    registry_key: warehouse.storage.wide.static
     target: 8
     priority: high
     human_label: Warehouse storage wide shot
@@ -260,6 +270,7 @@ topics:
     content: storage
     coverage: detail
     move: static
+    registry_key: warehouse.storage.detail.static
     target: 8
     priority: medium
     human_label: Warehouse storage detail
@@ -284,6 +295,7 @@ topics:
     content: shipment
     coverage: medium
     move: follow
+    registry_key: loading.shipment.medium.follow
     target: 8
     priority: high
     human_label: Shipment follow shot
@@ -309,6 +321,7 @@ topics:
     content: shipment
     coverage: detail
     move: static
+    registry_key: loading.shipment.detail.static
     target: 8
     priority: medium
     human_label: Loading process detail
@@ -333,6 +346,7 @@ topics:
     content: shipment
     coverage: detail
     move: static
+    registry_key: weighing.shipment.detail.static
     target: 6
     priority: medium
     human_label: Shipment weighing detail
@@ -359,6 +373,7 @@ topics:
     content: product
     coverage: wide
     move: static
+    registry_key: showroom.product.wide.static
     target: 8
     priority: high
     human_label: Showroom product wide shot
@@ -384,6 +399,7 @@ topics:
     content: product
     coverage: medium
     move: slide
+    registry_key: showroom.product.medium.slide
     target: 8
     priority: high
     human_label: Showroom product slide shot
@@ -408,6 +424,7 @@ topics:
     content: cabin
     coverage: detail
     move: static
+    registry_key: showroom.cabin.detail.static
     target: 10
     priority: medium
     human_label: Cabin detail shot
@@ -432,6 +449,7 @@ topics:
     content: panel
     coverage: detail
     move: static
+    registry_key: showroom.panel.detail.static
     target: 8
     priority: medium
     human_label: Showroom panel detail
@@ -457,6 +475,7 @@ topics:
     content: product
     coverage: hero
     move: orbit
+    registry_key: showroom.product.hero.orbit
     target: 6
     priority: high
     human_label: Showroom product hero orbit

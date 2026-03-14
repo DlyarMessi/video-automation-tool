@@ -1,28 +1,691 @@
 version: 1
-status: draft
-
+status: seeded-from-siglen-v1
 about:
-  purpose: >
-    Initial placeholder for the governed canonical registry.
-    This file will later become the single source of truth for canonical shot entries.
+  purpose: 'Initial placeholder for the governed canonical registry. This file will
+    later become the single source of truth for canonical shot entries.
 
+    '
 principles:
-  - strict canonical core
-  - rich registry direction
-  - policy before expansion
-  - incremental migration
-  - no namespace-heavy content in v1
-
+- strict canonical core
+- rich registry direction
+- policy before expansion
+- incremental migration
+- no namespace-heavy content in v1
 governed_fields:
-  - scene
-  - content
-  - coverage
-  - move
-
+- scene
+- content
+- coverage
+- move
 notes:
-  - >
-    v1 placeholder only. Existing pool plans and runtime logic are not yet rewritten to consume this file directly.
-  - >
-    Future registry entries may attach canonical fields, user-facing metadata, and editorial purpose metadata to one slot identity.
+- 'v1 placeholder only. Existing pool plans and runtime logic are not yet rewritten
+  to consume this file directly.
 
-entries: {}
+  '
+- 'Future registry entries may attach canonical fields, user-facing metadata, and
+  editorial purpose metadata to one slot identity.
+
+  '
+entries:
+  factory.automation.detail.static:
+    status: active
+    canonical:
+      scene: factory
+      content: automation
+      coverage: detail
+      move: static
+    public:
+      human_label: Automation process detail
+      shoot_brief: Capture a stable close detail of automated machinery, robotic movement,
+        or a precise production process.
+      success_criteria:
+      - The detail clearly feels automated rather than generic factory footage
+      - The frame is tight enough to show precision
+      - The shot is stable and visually clean
+      fallback:
+      - Use another machine detail if the original process is inaccessible
+      - Use a different robotic or mechanical close detail if it still clearly signals
+        automation
+    story:
+      purpose_text: Provide precise visual proof of automated production
+    operational:
+      defaults:
+        energy: high
+        quality_status: approved
+        continuity_group: factory_automation
+        intro_safe: false
+        hero_safe: false
+        outro_safe: false
+      source_examples:
+      - brand: siglen
+        plan: default
+        topic: Factory Strength
+        target: 12
+        priority: high
+  factory.automation.medium.slide:
+    status: active
+    canonical:
+      scene: factory
+      content: automation
+      coverage: medium
+      move: slide
+    public:
+      human_label: Automation medium slide shot
+      shoot_brief: Capture a smooth side movement across the automated production
+        area with one main machine or process clearly readable.
+      success_criteria:
+      - The movement feels controlled and smooth
+      - One main automation subject remains readable throughout the shot
+      - The shot feels more dynamic than a static overview
+      fallback:
+      - Use a shorter controlled side move if space is limited
+      - Use a slow push or alternate side angle if sliding is not practical
+    story:
+      purpose_text: Show automation capability with more dynamic motion
+    operational:
+      defaults:
+        energy: medium
+        quality_status: approved
+        continuity_group: factory_automation
+        intro_safe: false
+        hero_safe: false
+        outro_safe: false
+      source_examples:
+      - brand: siglen
+        plan: default
+        topic: Factory Strength
+        target: 10
+        priority: high
+  factory.automation.wide.static:
+    status: active
+    canonical:
+      scene: factory
+      content: automation
+      coverage: wide
+      move: static
+    public:
+      human_label: Automation line wide shot
+      shoot_brief: Capture a stable wide shot that clearly shows the automated production
+        area, machines, and workflow context.
+      success_criteria:
+      - The automation area is clearly recognizable
+      - The frame shows enough space to understand the production setup
+      - The shot feels stable and usable as a capability overview
+      fallback:
+      - Use a slightly tighter static angle if the full line cannot be framed cleanly
+      - Use another wide automation area if it still communicates scale and automation
+        clearly
+    story:
+      purpose_text: Show manufacturing capability and automation scale
+    operational:
+      defaults:
+        energy: medium
+        quality_status: approved
+        continuity_group: factory_automation
+        intro_safe: true
+        hero_safe: false
+        outro_safe: false
+      source_examples:
+      - brand: siglen
+        plan: default
+        topic: Factory Strength
+        target: 10
+        priority: high
+  factory.building.hero.orbit:
+    status: active
+    canonical:
+      scene: factory
+      content: building
+      coverage: hero
+      move: orbit
+    public:
+      human_label: Factory hero orbit shot
+      shoot_brief: Capture a premium-looking orbit or curved movement around the factory
+        exterior for brand-level usage.
+      success_criteria:
+      - The movement feels smooth and intentional
+      - The building remains the clear hero subject
+      - The shot feels premium enough for key brand moments or closing use
+      fallback:
+      - Use a slow diagonal reveal if a full orbit is not practical
+      - Use a controlled push or side move that still feels cinematic and brand-led
+    story:
+      purpose_text: Create a premium brand-scale hero image
+    operational:
+      defaults:
+        energy: medium
+        quality_status: approved
+        continuity_group: factory_building
+        intro_safe: false
+        hero_safe: true
+        outro_safe: true
+      source_examples:
+      - brand: siglen
+        plan: default
+        topic: Factory Strength
+        target: 6
+        priority: high
+  factory.building.wide.static:
+    status: active
+    canonical:
+      scene: factory
+      content: building
+      coverage: wide
+      move: static
+    public:
+      human_label: Factory exterior wide establishing shot
+      shoot_brief: Capture a stable wide shot that clearly shows the factory building,
+        scale, and surrounding context.
+      success_criteria:
+      - The full building or main facade is clearly visible
+      - The shot feels stable and usable as an opening context shot
+      - Brand or facility identity is readable if available
+      fallback:
+      - Use a slightly tighter static exterior if the full facade cannot be captured
+        cleanly
+      - Use a higher or more diagonal angle if it still clearly communicates factory
+        scale
+    story:
+      purpose_text: Establish context and show factory scale
+    operational:
+      defaults:
+        energy: medium
+        quality_status: approved
+        continuity_group: factory_building
+        intro_safe: true
+        hero_safe: false
+        outro_safe: false
+      source_examples:
+      - brand: siglen
+        plan: default
+        topic: Factory Strength
+        target: 8
+        priority: high
+  factory.inspection.detail.static:
+    status: active
+    canonical:
+      scene: factory
+      content: inspection
+      coverage: detail
+      move: static
+    public:
+      human_label: Inspection detail shot
+      shoot_brief: Capture a clear close detail of manual or visual inspection work,
+        showing checking, reviewing, or confirming product quality.
+      success_criteria:
+      - Inspection activity is obvious from the frame
+      - The detail feels precise rather than generic factory footage
+      - The shot can support a quality-control message without extra explanation
+      fallback:
+      - Use another close inspection action if the original check point is unavailable
+      - Use a different operator quality-check detail if it still clearly signals
+        inspection work
+    story:
+      purpose_text: Show quality control and manual verification
+    operational:
+      defaults:
+        energy: low
+        quality_status: approved
+        continuity_group: factory_testing
+        intro_safe: false
+        hero_safe: false
+        outro_safe: false
+      source_examples:
+      - brand: siglen
+        plan: default
+        topic: Quality & Safety
+        target: 8
+        priority: medium
+  loading.shipment.detail.static:
+    status: active
+    canonical:
+      scene: loading
+      content: shipment
+      coverage: detail
+      move: static
+    public:
+      human_label: Loading process detail
+      shoot_brief: Capture a stable close detail from the shipment loading process,
+        such as handling, package movement, or loading verification.
+      success_criteria:
+      - The shot clearly belongs to the shipment workflow
+      - The detail feels operational and specific
+      - The frame is stable enough for trust-building use
+      fallback:
+      - Use another close loading-stage detail if the original action is blocked
+      - Use a nearby package handling detail if it still clearly supports shipment
+        execution
+    story:
+      purpose_text: Show shipment execution through close operational proof
+    operational:
+      defaults:
+        energy: medium
+        quality_status: approved
+        continuity_group: loading_shipment
+        intro_safe: false
+        hero_safe: false
+        outro_safe: false
+      source_examples:
+      - brand: siglen
+        plan: default
+        topic: Warehouse & Delivery
+        target: 8
+        priority: medium
+  loading.shipment.medium.follow:
+    status: active
+    canonical:
+      scene: loading
+      content: shipment
+      coverage: medium
+      move: follow
+    public:
+      human_label: Shipment follow shot
+      shoot_brief: Follow the moving shipment workflow, such as loading, transfer,
+        or dispatch, with smooth subject-led motion.
+      success_criteria:
+      - The movement clearly follows the shipment action
+      - The logistics workflow is understandable from the shot
+      - The motion feels smooth rather than shaky or accidental
+      fallback:
+      - Use a side-tracking or front-follow angle if the original path is blocked
+      - Use a medium static workflow shot if follow movement is impossible but shipment
+        handling remains clear
+    story:
+      purpose_text: Show real delivery workflow and operational readiness
+    operational:
+      defaults:
+        energy: high
+        quality_status: approved
+        continuity_group: loading_shipment
+        intro_safe: false
+        hero_safe: false
+        outro_safe: false
+      source_examples:
+      - brand: siglen
+        plan: default
+        topic: Warehouse & Delivery
+        target: 8
+        priority: high
+  showroom.cabin.detail.static:
+    status: active
+    canonical:
+      scene: showroom
+      content: cabin
+      coverage: detail
+      move: static
+    public:
+      human_label: Cabin detail shot
+      shoot_brief: Capture a stable close detail of the product cabin area, interior
+        finish, or cabin-specific design detail in the showroom.
+      success_criteria:
+      - The detail clearly belongs to the cabin or interior area
+      - The frame highlights finish, craftsmanship, or design clarity
+      - The shot feels intentional and premium rather than random
+      fallback:
+      - Use another cabin-area detail if the original angle is blocked
+      - Use a nearby interior product detail if it still clearly represents cabin
+        quality
+    story:
+      purpose_text: Show cabin design quality and product finish detail
+    operational:
+      defaults:
+        energy: low
+        quality_status: approved
+        continuity_group: showroom_product
+        intro_safe: false
+        hero_safe: false
+        outro_safe: false
+      source_examples:
+      - brand: siglen
+        plan: default
+        topic: Product Showcase
+        target: 10
+        priority: medium
+  showroom.panel.detail.static:
+    status: active
+    canonical:
+      scene: showroom
+      content: panel
+      coverage: detail
+      move: static
+    public:
+      human_label: Showroom panel detail
+      shoot_brief: Capture a stable close detail of the showroom-side panel, interface,
+        buttons, or product control area.
+      success_criteria:
+      - The panel or interface is the main subject
+      - The detail feels product-related and presentation-ready
+      - The shot is clean enough for premium product explanation or support footage
+      fallback:
+      - Use another interface or control-area close detail if needed
+      - Use a nearby feature-control detail if it still clearly represents the product
+        panel experience
+    story:
+      purpose_text: Support the product feature narrative with interface detail
+    operational:
+      defaults:
+        energy: low
+        quality_status: approved
+        continuity_group: showroom_product
+        intro_safe: false
+        hero_safe: false
+        outro_safe: false
+      source_examples:
+      - brand: siglen
+        plan: default
+        topic: Product Showcase
+        target: 8
+        priority: medium
+  showroom.product.hero.orbit:
+    status: active
+    canonical:
+      scene: showroom
+      content: product
+      coverage: hero
+      move: orbit
+    public:
+      human_label: Showroom product hero orbit
+      shoot_brief: Capture a premium hero-style orbit around the featured product
+        in the showroom, keeping the product dominant and polished.
+      success_criteria:
+      - The product is the unmistakable hero subject
+      - The movement feels premium, smooth, and intentional
+      - The shot is strong enough for headline or closing brand usage
+      fallback:
+      - Use a premium slide or reveal if a full orbit is not practical
+      - Use a stable hero framing if movement compromises product clarity
+    story:
+      purpose_text: Create a premium product hero shot for brand emphasis
+    operational:
+      defaults:
+        energy: medium
+        quality_status: approved
+        continuity_group: showroom_product
+        intro_safe: false
+        hero_safe: true
+        outro_safe: true
+      source_examples:
+      - brand: siglen
+        plan: default
+        topic: Product Showcase
+        target: 6
+        priority: high
+  showroom.product.medium.slide:
+    status: active
+    canonical:
+      scene: showroom
+      content: product
+      coverage: medium
+      move: slide
+    public:
+      human_label: Showroom product slide shot
+      shoot_brief: Capture a smooth side movement around the showroom product while
+        keeping the product dominant and clearly readable.
+      success_criteria:
+      - The movement feels smooth and premium
+      - The product remains the main subject
+      - The shot feels more polished than a static showroom overview
+      fallback:
+      - Use a shorter slide or controlled reveal if full side movement is constrained
+      - Use a premium push if it keeps the product presentation clean
+    story:
+      purpose_text: Present the product with a more polished and premium motion layer
+    operational:
+      defaults:
+        energy: medium
+        quality_status: approved
+        continuity_group: showroom_product
+        intro_safe: false
+        hero_safe: false
+        outro_safe: false
+      source_examples:
+      - brand: siglen
+        plan: default
+        topic: Product Showcase
+        target: 8
+        priority: high
+  showroom.product.wide.static:
+    status: active
+    canonical:
+      scene: showroom
+      content: product
+      coverage: wide
+      move: static
+    public:
+      human_label: Showroom product wide shot
+      shoot_brief: Capture a stable wide shot of the showroom that clearly presents
+        the featured product in a clean display environment.
+      success_criteria:
+      - The showroom context is visually clear
+      - The product is still readable as the primary subject
+      - The shot feels clean and presentation-ready
+      fallback:
+      - Use another wide showroom angle if the original display area is crowded
+      - Use a slightly tighter static composition if it still communicates product
+        showcase context
+    story:
+      purpose_text: Establish product showcase context in a clean display environment
+    operational:
+      defaults:
+        energy: medium
+        quality_status: approved
+        continuity_group: showroom_product
+        intro_safe: true
+        hero_safe: false
+        outro_safe: false
+      source_examples:
+      - brand: siglen
+        plan: default
+        topic: Product Showcase
+        target: 8
+        priority: high
+  tower.panel.detail.static:
+    status: active
+    canonical:
+      scene: tower
+      content: panel
+      coverage: detail
+      move: static
+    public:
+      human_label: Tower control panel detail
+      shoot_brief: Capture a close stable detail of the tower-side control panel,
+        screen, buttons, or instrumentation used in testing.
+      success_criteria:
+      - The panel or interface is the clear main subject
+      - Important indicators, screens, or controls are readable or visually meaningful
+      - The shot feels technical and controlled rather than random
+      fallback:
+      - Use another nearby test interface if the exact panel is inaccessible
+      - Capture a different instrument detail if it still clearly supports the testing
+        workflow
+    story:
+      purpose_text: Support the quality and testing narrative with technical detail
+    operational:
+      defaults:
+        energy: low
+        quality_status: approved
+        continuity_group: tower_testing
+        intro_safe: false
+        hero_safe: false
+        outro_safe: false
+      source_examples:
+      - brand: siglen
+        plan: default
+        topic: Quality & Safety
+        target: 8
+        priority: medium
+  tower.testing.detail.static:
+    status: active
+    canonical:
+      scene: tower
+      content: testing
+      coverage: detail
+      move: static
+    public:
+      human_label: Test tower proof detail
+      shoot_brief: Capture a stable detail that acts as proof of testing, such as
+        movement, indicators, machinery, or a testing interface.
+      success_criteria:
+      - The detail clearly supports the claim that testing is actively happening
+      - The frame is tight enough to feel precise and technical
+      - The shot remains stable and visually clean
+      fallback:
+      - Use another tower testing detail if the original detail is not accessible
+      - Capture a different close proof point such as panel readout, movement interface,
+        or mechanical testing detail
+    story:
+      purpose_text: Provide precise visual proof of quality testing
+    operational:
+      defaults:
+        energy: medium
+        quality_status: approved
+        continuity_group: tower_testing
+        intro_safe: false
+        hero_safe: false
+        outro_safe: false
+      source_examples:
+      - brand: siglen
+        plan: default
+        topic: Quality & Safety
+        target: 10
+        priority: high
+  tower.testing.medium.static:
+    status: active
+    canonical:
+      scene: tower
+      content: testing
+      coverage: medium
+      move: static
+    public:
+      human_label: Test tower operation medium shot
+      shoot_brief: Capture a stable medium shot that clearly shows elevator testing
+        activity happening in the tower area.
+      success_criteria:
+      - Testing activity is visually understandable without extra explanation
+      - The frame includes enough surrounding context to identify the area as a testing
+        environment
+      - The shot is stable and readable for trust-building use
+      fallback:
+      - Use a slightly wider static shot if medium framing cannot explain the testing
+        clearly
+      - Use a different tower testing angle if it still proves active testing behavior
+    story:
+      purpose_text: Build trust by showing real testing in progress
+    operational:
+      defaults:
+        energy: medium
+        quality_status: approved
+        continuity_group: tower_testing
+        intro_safe: false
+        hero_safe: false
+        outro_safe: false
+      source_examples:
+      - brand: siglen
+        plan: default
+        topic: Quality & Safety
+        target: 8
+        priority: high
+  warehouse.storage.detail.static:
+    status: active
+    canonical:
+      scene: warehouse
+      content: storage
+      coverage: detail
+      move: static
+    public:
+      human_label: Warehouse storage detail
+      shoot_brief: Capture a close stable detail of organized storage, labeling, stacked
+        goods, or shelf-level warehouse order.
+      success_criteria:
+      - The detail clearly represents storage rather than generic cargo
+      - The frame feels organized and operationally clean
+      - The detail can support a warehouse reliability message
+      fallback:
+      - Use another shelf, label, or stacked-goods detail if needed
+      - Use a different close inventory detail if it still communicates order and
+        control
+    story:
+      purpose_text: Support the warehouse organization narrative with detail proof
+    operational:
+      defaults:
+        energy: low
+        quality_status: approved
+        continuity_group: warehouse_storage
+        intro_safe: false
+        hero_safe: false
+        outro_safe: false
+      source_examples:
+      - brand: siglen
+        plan: default
+        topic: Warehouse & Delivery
+        target: 8
+        priority: medium
+  warehouse.storage.wide.static:
+    status: active
+    canonical:
+      scene: warehouse
+      content: storage
+      coverage: wide
+      move: static
+    public:
+      human_label: Warehouse storage wide shot
+      shoot_brief: Capture a stable wide shot of the storage area that shows organized
+        inventory, warehouse scale, and operational readiness.
+      success_criteria:
+      - Storage organization is visually clear
+      - The frame communicates warehouse scale and order
+      - The shot feels usable as a logistics overview
+      fallback:
+      - Use another wide warehouse aisle if the original section is cluttered
+      - Use a slightly elevated or diagonal wide angle if it still shows organized
+        storage clearly
+    story:
+      purpose_text: Show logistics organization and storage readiness
+    operational:
+      defaults:
+        energy: medium
+        quality_status: approved
+        continuity_group: warehouse_storage
+        intro_safe: true
+        hero_safe: false
+        outro_safe: false
+      source_examples:
+      - brand: siglen
+        plan: default
+        topic: Warehouse & Delivery
+        target: 8
+        priority: high
+  weighing.shipment.detail.static:
+    status: active
+    canonical:
+      scene: weighing
+      content: shipment
+      coverage: detail
+      move: static
+    public:
+      human_label: Shipment weighing detail
+      shoot_brief: Capture a close stable detail of the weighing step in the shipment
+        process, such as scale readout, package placement, or weight confirmation.
+      success_criteria:
+      - The weighing action is clear and specific
+      - The detail feels like a real operational proof point
+      - The frame is stable enough for trust-building usage
+      fallback:
+      - Use another weighing-related close detail if the scale readout is hard to
+        capture
+      - Use a nearby shipment verification detail if it still supports process credibility
+    story:
+      purpose_text: Support delivery credibility with a process-proof detail
+    operational:
+      defaults:
+        energy: low
+        quality_status: approved
+        continuity_group: loading_shipment
+        intro_safe: false
+        hero_safe: false
+        outro_safe: false
+      source_examples:
+      - brand: siglen
+        plan: default
+        topic: Warehouse & Delivery
+        target: 6
+        priority: medium

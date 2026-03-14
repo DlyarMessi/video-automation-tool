@@ -270,19 +270,34 @@ def save_pool_uploads(
         cur += 1
 
 
+def load_canonical_registry_entries() -> dict[str, dict]:
+    registry_path = ROOT / "data" / "taxonomy" / "canonical_registry_v1.yaml"
+    if not registry_path.exists():
+        return {}
+    try:
+        data = yaml.safe_load(registry_path.read_text(encoding="utf-8")) or {}
+        entries = data.get("entries", {}) if isinstance(data.get("entries"), dict) else {}
+        return entries if isinstance(entries, dict) else {}
+    except Exception:
+        return {}
+
+
 def merge_pool_semantic_fields(slot_rows: list[dict], slots: list[dict]) -> list[dict]:
-    semantic_map: dict[tuple[str, str, str, str], dict] = {}
+    slot_semantic_map: dict[tuple[str, str, str, str], dict] = {}
 
     for slot in slots:
         if not isinstance(slot, dict):
             continue
+
         key = (
             str(slot.get("scene", "") or "").strip().lower(),
             str(slot.get("content", "") or "").strip().lower(),
             str(slot.get("coverage", "") or "").strip().lower(),
             str(slot.get("move", "") or "").strip().lower(),
         )
-        semantic_map[key] = {
+
+        slot_semantic_map[key] = {
+            "registry_key": str(slot.get("registry_key", "") or "").strip(),
             "human_label": str(slot.get("human_label", "") or "").strip(),
             "shoot_brief": str(slot.get("shoot_brief", "") or "").strip(),
             "purpose": str(slot.get("purpose", "") or "").strip(),
@@ -290,7 +305,9 @@ def merge_pool_semantic_fields(slot_rows: list[dict], slots: list[dict]) -> list
             "fallback": slot.get("fallback") if isinstance(slot.get("fallback"), list) else [],
         }
 
+    registry_entries = load_canonical_registry_entries()
     merged_rows: list[dict] = []
+
     for row in slot_rows:
         if not isinstance(row, dict):
             merged_rows.append(row)
@@ -303,23 +320,53 @@ def merge_pool_semantic_fields(slot_rows: list[dict], slots: list[dict]) -> list
             str(merged.get("coverage", "") or "").strip().lower(),
             str(merged.get("move", "") or "").strip().lower(),
         )
-        semantic = semantic_map.get(key, {})
+
+        slot_semantic = slot_semantic_map.get(key, {})
+        computed_registry_key = ".".join(key)
+        registry_key = str(
+            slot_semantic.get("registry_key", "")
+            or merged.get("registry_key", "")
+            or computed_registry_key
+        ).strip()
+
+        if registry_key:
+            merged["registry_key"] = registry_key
+
+        registry_entry = registry_entries.get(registry_key, {}) if isinstance(registry_entries.get(registry_key, {}), dict) else {}
+        registry_public = registry_entry.get("public", {}) if isinstance(registry_entry.get("public"), dict) else {}
+        registry_story = registry_entry.get("story", {}) if isinstance(registry_entry.get("story"), dict) else {}
 
         canonical_label = str(merged.get("slot_label", "") or "").strip()
-        human_label = str(semantic.get("human_label", "") or "").strip()
-        if human_label:
+        registry_human_label = str(registry_public.get("human_label", "") or "").strip()
+        slot_human_label = str(slot_semantic.get("human_label", "") or "").strip()
+        preferred_human_label = registry_human_label or slot_human_label
+
+        if preferred_human_label:
             merged["canonical_slot_label"] = canonical_label
-            merged["slot_label"] = human_label
+            merged["slot_label"] = preferred_human_label
+            merged["human_label"] = preferred_human_label
 
-        for field in ("human_label", "shoot_brief", "purpose"):
-            value = str(semantic.get(field, "") or "").strip()
-            if value:
-                merged[field] = value
+        registry_shoot_brief = str(registry_public.get("shoot_brief", "") or "").strip()
+        slot_shoot_brief = str(slot_semantic.get("shoot_brief", "") or "").strip()
+        preferred_shoot_brief = registry_shoot_brief or slot_shoot_brief
+        if preferred_shoot_brief:
+            merged["shoot_brief"] = preferred_shoot_brief
 
-        if semantic.get("success_criteria"):
-            merged["success_criteria"] = semantic["success_criteria"]
-        if semantic.get("fallback"):
-            merged["fallback"] = semantic["fallback"]
+        registry_purpose = str(registry_story.get("purpose_text", "") or "").strip()
+        slot_purpose = str(slot_semantic.get("purpose", "") or "").strip()
+        preferred_purpose = registry_purpose or slot_purpose
+        if preferred_purpose:
+            merged["purpose"] = preferred_purpose
+
+        registry_success = registry_public.get("success_criteria") if isinstance(registry_public.get("success_criteria"), list) else []
+        slot_success = slot_semantic.get("success_criteria") if isinstance(slot_semantic.get("success_criteria"), list) else []
+        if registry_success or slot_success:
+            merged["success_criteria"] = registry_success or slot_success
+
+        registry_fallback = registry_public.get("fallback") if isinstance(registry_public.get("fallback"), list) else []
+        slot_fallback = slot_semantic.get("fallback") if isinstance(slot_semantic.get("fallback"), list) else []
+        if registry_fallback or slot_fallback:
+            merged["fallback"] = registry_fallback or slot_fallback
 
         merged_rows.append(merged)
 
