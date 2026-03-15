@@ -37,6 +37,11 @@ from src.ui_workspace import (
     build_workspace_controls_state,
     compute_storage_state,
 )
+from src.brand_workspace import (
+    provision_brand_workspace,
+    scan_brand_workspace,
+    delete_brand_workspace,
+)
 from src.ui_provider_settings import render_ai_provider_settings
 from src.ui_ai_entry import render_ai_script_entry_panel
 
@@ -1007,7 +1012,7 @@ ensure_ui_session_defaults(st.session_state)
 # =========================================================
 st.markdown("## 🎬 Video Automation Tool")
 st.markdown(
-    "<span class='muted'>Project Mode: script → tasks → render · Pool Fill Mode: plan-driven asset intake</span>",
+    "<span class='muted'>Workflow: Project Mode (planning & script generation) → Pool Fill Mode (asset coverage and gap closure)</span>",
     unsafe_allow_html=True,
 )
 
@@ -1138,13 +1143,17 @@ preferred_company = str(st.session_state.pop("pending_company_select_top", "") o
 if preferred_company and preferred_company in companies:
     default_idx = companies.index(preferred_company)
 else:
-    default_idx = companies.index("Siglen") if "Siglen" in companies else (0 if companies else None)
+    default_idx = 0 if companies else None
 
 top_a, top_b = st.columns([1, 1])
 with top_a:
-    if preferred_company and preferred_company in companies:
-        st.session_state["company_select_top"] = preferred_company
-    company = st.selectbox("Company", companies, index=default_idx, key="company_select_top")
+    if companies:
+        if preferred_company and preferred_company in companies:
+            st.session_state["company_select_top"] = preferred_company
+        company = st.selectbox("Company", companies, index=default_idx, key="company_select_top")
+    else:
+        company = ""
+        st.info("No company workspace found yet. Create your first company workspace to start planning.")
 with top_b:
     work_mode = st.radio(
         "Work Mode",
@@ -1156,7 +1165,7 @@ with top_b:
 brand_create_a, brand_create_b = st.columns([2, 1])
 with brand_create_a:
     new_brand_name = st.text_input(
-        "Create Brand",
+        "Create Company Workspace",
         value="",
         placeholder="e.g. Acme Elevators",
         key="create_brand_name_v1_main",
@@ -1172,36 +1181,77 @@ with brand_create_b:
 
     st.caption(f"Slug: {slug_preview or '(waiting)'}")
     if brand_dir_exists:
-        st.caption("Status: brand slug already exists")
+        st.caption("Status: company workspace already exists")
     elif slug_preview:
-        st.caption("Next required asset: logo.png")
+        st.caption("Creates managed company folders and starter brand config")
 
     if st.button(
-        "Create Brand Skeleton",
+        "Create Company Workspace",
         use_container_width=True,
         key="create_brand_skeleton_v1_main",
         disabled=create_disabled,
     ):
         ok, msg = clone_brand_starter_into_project(new_brand_name)
         if ok:
+            provision_brand_workspace(
+                root=ROOT,
+                company=new_brand_name.strip(),
+                slugify=safe_slug,
+                input_root=input_root_path,
+            )
             st.session_state["pending_company_select_top"] = new_brand_name.strip()
             st.session_state["brand_creation_flash_v1"] = msg
             st.rerun()
         else:
             st.warning(msg)
 
-render_brand_validation_checklist(company)
+if company:
+    with st.expander("Delete Company Workspace", expanded=False):
+        st.caption("Danger zone: deletion removes only managed directories for this company.")
+        deletion_scan = scan_brand_workspace(root=ROOT, company=company, slugify=safe_slug, input_root=input_root_path)
+        rows = deletion_scan["paths"]
+        st.dataframe(rows, hide_index=True, use_container_width=True)
+
+        requires_confirm = bool(deletion_scan["total_files"] > 0)
+        if requires_confirm:
+            st.warning(f"This workspace currently contains {deletion_scan['total_files']} file(s). Type the exact company name to enable deletion.")
+            delete_confirm_name = st.text_input("Type company name to confirm", value="", key="delete_company_confirm_name_v1")
+            delete_enabled = delete_confirm_name.strip() == company
+        else:
+            st.caption("No files detected under managed paths. Deletion can proceed without typed confirmation.")
+            delete_enabled = True
+
+        if st.button("Delete Company Workspace", key="delete_company_workspace_v1", disabled=not delete_enabled):
+            result = delete_brand_workspace(root=ROOT, company=company, slugify=safe_slug, input_root=input_root_path)
+            st.success(f"Deleted {len(result['deleted'])} managed path(s).")
+            st.session_state.pop("company_select_top", None)
+            st.rerun()
+
+if company:
+    render_brand_validation_checklist(company)
+else:
+    st.caption("Create your first company workspace above, then select it to continue.")
+    st.stop()
 
 # =========================================================
 # Storage
 # =========================================================
-storage_state = compute_storage_state(
-    input_root_path=input_root_path,
-    company=company,
-    orientation=orientation,
-    ensure_company_storage_fn=ensure_company_storage,
-    get_storage_dirs_fn=get_storage_dirs,
-)
+if company:
+    storage_state = compute_storage_state(
+        input_root_path=input_root_path,
+        company=company,
+        orientation=orientation,
+        ensure_company_storage_fn=ensure_company_storage,
+        get_storage_dirs_fn=get_storage_dirs,
+    )
+else:
+    storage_state = {
+        "storage_ready": False,
+        "storage_error": "No company selected.",
+        "dirs": {},
+        "inbox_dir": None,
+        "factory_dir": None,
+    }
 
 storage_ready = storage_state["storage_ready"]
 storage_error = storage_state["storage_error"]
@@ -1215,7 +1265,7 @@ if not storage_ready:
     if storage_error:
         st.caption(f"Reason: {storage_error}")
 
-if work_mode == "Project Mode":
+if work_mode == "Project Mode" and company:
     render_ai_script_entry_panel(
         root=ROOT,
         company=company,
@@ -1229,7 +1279,7 @@ if work_mode == "Project Mode":
 if work_mode == "Pool Fill Mode":
     st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
     st.markdown("## Pool Fill Mode")
-    st.caption("Topic-driven intake board for reusable footage. Focus on missing slots first, then backfill alternates.")
+    st.caption("Coverage stage after planning: use pool plans to close footage gaps and backfill required slot coverage.")
 
     if not storage_ready or not factory_dir:
         st.info("Footage storage is unavailable. Pool Fill Mode is currently disabled.")
@@ -1302,7 +1352,7 @@ if work_mode == "Pool Fill Mode":
         pool_topic = st.selectbox("Pool Topic", topic_names, key="pool_topic_v4")
     with toolbar_d:
         st.markdown('<div class="top-help"></div>', unsafe_allow_html=True)
-        st.caption("Workflow: choose plan → choose topic → inspect missing slots → upload matching clips.")
+        st.caption("Workflow continuity: planning defines needs → Pool Fill closes missing coverage with matching clips.")
 
         try:
             current_plan_path = pool_plan_map[selected_plan_label]
@@ -1394,37 +1444,81 @@ if work_mode == "Pool Fill Mode":
 # Project Mode · Step 1
 # =========================================================
 st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
-st.markdown("## Step 1 · Creative Script → Task Rows")
-st.caption("Use this mode when you already have a script and want task rows + final rendering.")
+st.markdown("## Project Planning")
+st.caption("Choose your planning path. AI-first is primary. Existing script remains fast for manual workflows.")
 
-src_mode = st.selectbox("Script Source", ["Paste Script YAML", "Use Existing Script YAML"], key="src_mode")
+planning_path = st.radio(
+    "Planning Path",
+    ["Create with AI (Primary)", "Use Existing Script (Manual)"],
+    horizontal=True,
+    key="planning_path_v1",
+)
+
+src_mode = "Paste Script YAML"
+if planning_path == "Use Existing Script (Manual)":
+    src_mode = st.selectbox("Manual Script Source", ["Paste Script YAML", "Use Existing Script YAML"], key="src_mode")
+
+if planning_path == "Create with AI (Primary)":
+    st.info("Use the Create with AI section above to compile and draft script intent. Manual YAML is available below only when needed.")
+
 colA, colB = st.columns([2, 1])
 
 selected_path: Path | None = None
 with colA:
-    if src_mode == "Paste Script YAML":
-        st.session_state["creative_draft"] = st.text_area(
-            "Script YAML",
-            value=st.session_state.get("creative_draft", ""),
-            height=180,
-            placeholder="Paste your Creative Script YAML here…",
-            label_visibility="collapsed",
-        )
+    if planning_path == "Create with AI (Primary)":
+        with st.expander("Manual YAML (optional downstream)", expanded=False):
+            st.caption("Keep this collapsed unless you intentionally want to continue via manual YAML.")
+            st.session_state["creative_draft"] = st.text_area(
+                "Script YAML",
+                value=st.session_state.get("creative_draft", ""),
+                height=180,
+                placeholder="Paste your Creative Script YAML here…",
+                label_visibility="collapsed",
+            )
     else:
-        creative_dir = CREATIVE_ROOT / company
-        creative_dir.mkdir(parents=True, exist_ok=True)
-        files = sorted(creative_dir.glob("*.yaml"))
-        if not files:
-            st.warning("No script YAML files were found for this company.")
+        if src_mode == "Paste Script YAML":
+            st.session_state["creative_draft"] = st.text_area(
+                "Script YAML",
+                value=st.session_state.get("creative_draft", ""),
+                height=180,
+                placeholder="Paste your Creative Script YAML here…",
+                label_visibility="collapsed",
+            )
         else:
-            selected_path = st.selectbox("Select Script YAML", files, format_func=lambda p: p.name, key="select_yaml")
-            st.caption("The selected script will be used as-is.")
+            creative_dir = CREATIVE_ROOT / company
+            creative_dir.mkdir(parents=True, exist_ok=True)
+            files = sorted(creative_dir.glob("*.yaml"))
+            if not files:
+                st.warning("No script YAML files were found for this company.")
+            else:
+                selected_path = st.selectbox("Select Script YAML", files, format_func=lambda p: p.name, key="select_yaml")
+                st.caption("The selected script will be used as-is.")
 
 with colB:
     st.markdown("**Actions**")
-    generate_btn = st.button("Generate Task Rows", width="stretch", key="generate_tasks")
+    draft_text = str(st.session_state.get("creative_draft", "") or "").strip()
+    if planning_path == "Create with AI (Primary)":
+        generate_ready = bool(draft_text)
+        generate_help = "In AI-primary mode, paste manual YAML in the optional manual section before generating task rows."
+    elif src_mode == "Use Existing Script YAML":
+        generate_ready = selected_path is not None
+        generate_help = "Select an existing script YAML to generate task rows."
+    else:
+        generate_ready = bool(draft_text)
+        generate_help = "Paste script YAML to generate task rows."
+
+    generate_btn = st.button(
+        "Generate Task Rows",
+        use_container_width=True,
+        key="generate_tasks",
+        disabled=not generate_ready,
+        help=generate_help,
+    )
     compact_view = st.checkbox("Compact View", value=True, key="compact_view")
     export_html = st.checkbox("Export Printable HTML", value=True, key="export_html")
+
+    if not generate_ready:
+        st.caption(generate_help)
 
 if generate_btn:
     if src_mode == "Use Existing Script YAML" and selected_path:
