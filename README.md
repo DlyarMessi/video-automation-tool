@@ -31,14 +31,19 @@ Current foundation includes:
 ## Current operator workflow
 
 ### Project Mode
-Used when you already have a creative script and want to:
+AI-first planning workflow with two paths:
+
+- **Create with AI (Primary):** quick brief, heuristic prefill, governed compile/generate
+- **Use Existing Script (Manual):** fast direct YAML path for existing workflows
+
+Project mode is used to:
 
 - generate task rows
 - review footage readiness
 - render final output
 
 ### Pool Fill Mode
-Used when you want to build the reusable material pool directly.
+Downstream coverage/gap-closure stage after planning.
 
 Current capabilities include:
 
@@ -50,6 +55,8 @@ Current capabilities include:
 - auto-name clips into the factory pool
 - auto-update `asset_index.json`
 - download a phone-friendly HTML shooting guide
+
+See `docs/STORAGE_MODEL_AND_WORKSPACES.md` for workspace provisioning and storage guidance.
 
 ---
 
