@@ -14,6 +14,8 @@ from src.intake_models import NormalizedIntakeBrief
 from src.script_pipeline import build_default_compiler_bundle, response_to_dict, run_script_pipeline
 from src.script_provider_gemini import GeminiScriptProvider
 from src.script_provider_manual import ManualScriptProvider
+from src.script_provider_openrouter import OpenRouterScriptProvider
+from src.script_provider_config import load_openrouter_config
 
 
 def load_brief(path: Path) -> NormalizedIntakeBrief:
@@ -39,10 +41,11 @@ def load_brief(path: Path) -> NormalizedIntakeBrief:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the script intake -> compile -> provider pipeline.")
     parser.add_argument("--intake", required=True, help="Path to normalized intake YAML/JSON file")
-    parser.add_argument("--provider", default="manual", choices=["manual", "gemini"], help="Provider mode")
+    parser.add_argument("--provider", default="manual", choices=["manual", "gemini", "openrouter"], help="Provider mode")
     parser.add_argument("--manual-response", default="", help="Optional local YAML/JSON for manual provider")
     parser.add_argument("--gemini-api-key", default="", help="Gemini API key (not used in scaffold)")
     parser.add_argument("--gemini-model", default="gemini-1.5-pro", help="Gemini model name")
+    parser.add_argument("--openrouter-model", default="", help="Optional OpenRouter model override")
     parser.add_argument("--out", default="", help="Optional output JSON file path")
     args = parser.parse_args()
 
@@ -51,8 +54,18 @@ def main() -> None:
 
     if args.provider == "manual":
         provider = ManualScriptProvider(Path(args.manual_response) if args.manual_response else None)
-    else:
+    elif args.provider == "gemini":
         provider = GeminiScriptProvider(api_key=args.gemini_api_key, model=args.gemini_model)
+    else:
+        cfg = load_openrouter_config(model_override=args.openrouter_model)
+        if not cfg.api_key:
+            raise RuntimeError("OPENROUTER_API_KEY is required when --provider openrouter")
+        provider = OpenRouterScriptProvider(
+            api_key=cfg.api_key,
+            model=cfg.model,
+            site_url=cfg.site_url,
+            app_name=cfg.app_name,
+        )
 
     result = run_script_pipeline(brief=brief, provider=provider, bundle=bundle)
     payload = response_to_dict(result)

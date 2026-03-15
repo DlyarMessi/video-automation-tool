@@ -168,6 +168,10 @@ Current providers:
   - scaffold only in v1
   - includes prompt-builder and parsing/API placeholders
   - no network call implemented yet
+- `OpenRouterScriptProvider` (`src/script_provider_openrouter.py`)
+  - first live provider integration using OpenRouter OpenAI-compatible chat API
+  - consumes normalized brief + compiled constraints + style references + provider hints in prompt
+  - parses strict JSON output into `ScriptProviderResponse`
 
 ## Pipeline entry
 
@@ -190,6 +194,16 @@ Pipeline return object (v1):
 - `provider_response`
 
 `run_script_pipeline(...)` also accepts optional `style_references` and forwards them to `ScriptProviderRequest.style_references`.
+
+## OpenRouter mode (first live provider)
+
+OpenRouter mode is optional and env-driven:
+
+- required: `OPENROUTER_API_KEY`
+- optional: `OPENROUTER_MODEL` (default `openrouter/free`)
+- optional attribution headers: `OPENROUTER_SITE_URL`, `OPENROUTER_APP_NAME`
+
+See `docs/OPENROUTER_PROVIDER_SETUP.md` for usage and examples.
 
 ## Manual mode
 
