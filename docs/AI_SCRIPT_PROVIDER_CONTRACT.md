@@ -244,3 +244,6 @@ The compile contract and governed constraints stay constant while provider imple
 - no taxonomy redesign
 - no bypass of existing pool-plan/canonical governance
 - no broad refactor of render/director systems
+
+
+DeepSeek setup and usage: `docs/DEEPSEEK_PROVIDER_SETUP.md`.

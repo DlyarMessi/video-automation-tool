@@ -23,18 +23,30 @@ class AILocalSettingsTests(unittest.TestCase):
             settings = load_ai_provider_settings(root)
             self.assertEqual(settings.provider, "manual")
             self.assertEqual(settings.openrouter_model, "openrouter/free")
+            self.assertEqual(settings.deepseek_model, "deepseek-chat")
+            self.assertEqual(settings.deepseek_base_url, "https://api.deepseek.com")
 
     def test_save_and_load_provider_settings(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
-            saved = AIProviderSettings(provider="openrouter", openrouter_api_key="abc", openrouter_model="m")
+            saved = AIProviderSettings(
+                provider="deepseek",
+                openrouter_api_key="abc",
+                openrouter_model="m",
+                deepseek_api_key="dsk",
+                deepseek_model="deepseek-chat",
+                deepseek_base_url="https://api.deepseek.com",
+            )
             path = save_ai_provider_settings(root, saved)
             self.assertEqual(path, provider_settings_path(root))
 
             loaded = load_ai_provider_settings(root)
-            self.assertEqual(loaded.provider, "openrouter")
+            self.assertEqual(loaded.provider, "deepseek")
             self.assertEqual(loaded.openrouter_api_key, "abc")
             self.assertEqual(loaded.openrouter_model, "m")
+            self.assertEqual(loaded.deepseek_api_key, "dsk")
+            self.assertEqual(loaded.deepseek_model, "deepseek-chat")
+            self.assertEqual(loaded.deepseek_base_url, "https://api.deepseek.com")
 
     def test_save_ai_run_payload(self) -> None:
         with tempfile.TemporaryDirectory() as td:
