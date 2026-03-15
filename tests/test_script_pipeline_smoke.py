@@ -15,6 +15,7 @@ from src.intake_models import (
 from src.script_pipeline import run_script_pipeline
 from src.script_provider_base import ScriptProvider
 from src.script_provider_manual import ManualScriptProvider
+from src.script_provider_openrouter import OpenRouterScriptProvider
 
 
 class _CapturingProvider(ScriptProvider):
@@ -44,6 +45,20 @@ class _CapturingProvider(ScriptProvider):
         )
 
 
+
+
+class _MockOpenRouterProvider(OpenRouterScriptProvider):
+    def _post_json(self, payload):
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": "{\"script_draft\":{\"title\":\"Live Draft\",\"key_message\":\"K\",\"creative_brief\":\"B\",\"sections\":[{\"section_id\":\"S01\",\"purpose\":\"P\",\"narration\":\"N\",\"on_screen_text\":\"O\",\"success_criteria\":\"C\"}],\"warnings\":[]},\"pool_plan_draft\":{\"rows\":[],\"warnings\":[]},\"unresolved_risks\":[],\"confidence_notes\":[\"mocked\"]}"
+                    }
+                }
+            ]
+        }
+
 class ScriptPipelineSmokeTests(unittest.TestCase):
     def test_pipeline_runs_with_manual_provider(self) -> None:
         brief = NormalizedIntakeBrief(
@@ -64,6 +79,20 @@ class ScriptPipelineSmokeTests(unittest.TestCase):
         self.assertTrue(result.compiled_constraints.orientation in {"portrait", "landscape"})
         self.assertTrue(result.provider_response.script_draft.title)
         self.assertGreaterEqual(len(result.provider_response.script_draft.sections), 1)
+
+
+    def test_pipeline_runs_with_mock_openrouter_provider(self) -> None:
+        brief = NormalizedIntakeBrief(brand_name="Siglen", objective="proof")
+        bundle = CompilerBundle(
+            canonical_registry={"entries": {"x": {"canonical": {"move": "static"}}}},
+            combo_rules={},
+            intent_mappings={"mappings": []},
+        )
+        provider = _MockOpenRouterProvider(api_key="k", model="openrouter/free")
+
+        result = run_script_pipeline(brief=brief, provider=provider, bundle=bundle)
+        self.assertEqual(result.provider_response.script_draft.title, "Live Draft")
+        self.assertEqual(result.provider_response.confidence_notes, ["mocked"])
 
     def test_pipeline_passes_style_references_to_provider(self) -> None:
         brief = NormalizedIntakeBrief(brand_name="Siglen")
