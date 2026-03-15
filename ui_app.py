@@ -1023,121 +1023,8 @@ if not SRC_MAIN.exists():
 # =========================================================
 # Sidebar
 # =========================================================
-with st.sidebar:
-    st.markdown("## Controls")
-    orientation = st.radio("Layout", ["portrait", "landscape"], horizontal=True)
-
-    st.markdown("### Language")
-    lang_options = [
-        ("English", "en-US"),
-        ("French", "fr-FR"),
-        ("Spanish", "es-ES"),
-        ("Russian", "ru-RU"),
-        ("Arabic", "ar-SA"),
-        ("Uyghur", "ug-CN"),
-        ("Kazakh", "kk-KZ"),
-        ("Uzbek", "uz-UZ"),
-        ("Tajik", "tg-TJ"),
-        ("Other…", "other"),
-    ]
-    lang_labels = [f"{n} ({c})" if c != "other" else n for n, c in lang_options]
-    sel = st.selectbox("Language", lang_labels, index=0)
-    sel_code = dict(zip(lang_labels, [c for _, c in lang_options]))[sel]
-    if sel_code == "other":
-        lang_code = st.text_input("Custom Language (BCP-47)", value="", placeholder="e.g. zh-CN / en-GB").strip()
-    else:
-        lang_code = sel_code
-    if not lang_code:
-        lang_code = "en-US"
-
-    st.markdown("### ElevenLabs")
-    profile = ensure_default_eleven_profile()
-    saved_key = load_eleven_api_key()
-    eleven_key = st.text_input("API Key", value=saved_key, type="password")
-
-    model_id = st.selectbox(
-        "TTS Model",
-        ["eleven_multilingual_v2", "eleven_turbo_v2_5", "eleven_flash_v2_5", "eleven_v3"],
-        index=0,
-    )
-
-    lang_short = (lang_code.split("-")[0] if lang_code else "en").lower()
-    cur_voice_id = str(((profile.get("languages", {}) or {}).get(lang_short, {}) or {}).get("voice_id", "") or "")
-    voice_id_input = st.text_input(
-        f"Voice ID ({lang_short})",
-        value=cur_voice_id,
-        help="Must be an ElevenLabs voice_id.",
-    )
-
-    save_a, save_b = st.columns([1, 1])
-    with save_a:
-        if st.button("Save TTS", width="stretch"):
-            if eleven_key.strip():
-                save_eleven_api_key(eleven_key.strip())
-
-            prof = load_eleven_profile()
-            prof.setdefault("defaults", {})
-            prof.setdefault("languages", {})
-
-            if isinstance(prof.get("defaults"), dict):
-                prof["defaults"]["model_id"] = model_id
-                prof["defaults"].setdefault("output_format", "mp3_44100_128")
-
-            if isinstance(prof.get("languages"), dict):
-                prof["languages"].setdefault(lang_short, {})
-                if isinstance(prof["languages"][lang_short], dict):
-                    prof["languages"][lang_short]["voice_id"] = voice_id_input.strip()
-
-            save_eleven_profile(prof)
-            st.success("Saved")
-
-    with save_b:
-        with st.popover("Voice Map"):
-            langs = profile.get("languages", {}) if isinstance(profile.get("languages", {}), dict) else {}
-            rows_map = [{"lang": k, "voice_id": (v or {}).get("voice_id", "")} for k, v in sorted(langs.items())]
-            st.dataframe(rows_map, width="stretch", hide_index=True)
-
-    ai_provider_settings = render_ai_provider_settings(root=ROOT)
-
-    st.markdown("### Output Defaults")
-    target_fps = get_default_fps()
-    filter_preset_name = st.selectbox("Visual Filter", ["clean", "industrial", "warm_brand"], index=1)
-    _ = get_filter_preset(filter_preset_name)
-    st.caption(f"FPS: {target_fps}  |  Filter: {filter_preset_name}")
-
-    with st.expander("Advanced", expanded=False):
-        input_root = st.text_input("Footage Root", value=str(INPUT_ROOT_DEFAULT))
-        verbose = st.checkbox("Verbose Logs (Dev)", value=False)
-
-# =========================================================
-# ENV
-# =========================================================
-ENV = os.environ.copy()
-
-_api = load_eleven_api_key()
-if _api:
-    ENV["ELEVENLABS_API_KEY"] = _api
-
-_prof = load_eleven_profile()
-_defaults = _prof.get("defaults", {}) if isinstance(_prof.get("defaults", {}), dict) else {}
-
-
-ENV["ELEVENLABS_MODEL_ID"] = str(_defaults.get("model_id", "eleven_multilingual_v2"))
-ENV["ELEVENLABS_OUTPUT_FORMAT"] = str(_defaults.get("output_format", "mp3_44100_128"))
-
-_langs = _prof.get("languages", {}) if isinstance(_prof.get("languages", {}), dict) else {}
-for k, v in _langs.items():
-    if isinstance(v, dict):
-        vid = str(v.get("voice_id", "") or "").strip()
-        if vid:
-            ENV[f"ELEVENLABS_VOICE_ID_{k.upper()}"] = vid
-
-# =========================================================
-# Top controls
-# =========================================================
-input_root_path = Path(input_root) if "input_root" in locals() else INPUT_ROOT_DEFAULT
-output_root_path = OUTPUT_ROOT_DEFAULT
-
+input_root = str(INPUT_ROOT_DEFAULT)
+input_root_path = Path(input_root)
 companies = list_companies(input_root_path)
 preferred_company = str(st.session_state.pop("pending_company_select_top", "") or "").strip()
 if preferred_company and preferred_company in companies:
@@ -1145,25 +1032,18 @@ if preferred_company and preferred_company in companies:
 else:
     default_idx = 0 if companies else None
 
-top_a, top_b = st.columns([1, 1])
-with top_a:
+with st.sidebar:
+    st.markdown("## Workspace")
+    st.caption("Global company context for planning, coverage, and export workflows.")
+
     if companies:
         if preferred_company and preferred_company in companies:
             st.session_state["company_select_top"] = preferred_company
-        company = st.selectbox("Company", companies, index=default_idx, key="company_select_top")
+        company = st.selectbox("Current Company", companies, index=default_idx, key="company_select_top")
     else:
         company = ""
-        st.info("No company workspace found yet. Create your first company workspace to start planning.")
-with top_b:
-    work_mode = st.radio(
-        "Work Mode",
-        ["Project Mode", "Pool Fill Mode"],
-        horizontal=True,
-        key="work_mode",
-    )
+        st.info("Create your first company workspace to get started.")
 
-brand_create_a, brand_create_b = st.columns([2, 1])
-with brand_create_a:
     new_brand_name = st.text_input(
         "Create Company Workspace",
         value="",
@@ -1171,10 +1051,6 @@ with brand_create_a:
         key="create_brand_name_v1_main",
     )
 
-brand_creation_flash = str(st.session_state.pop("brand_creation_flash_v1", "") or "").strip()
-if brand_creation_flash:
-    st.success(brand_creation_flash)
-with brand_create_b:
     slug_preview = safe_slug(new_brand_name).lower() if new_brand_name.strip() else ""
     brand_dir_exists = bool(slug_preview) and (ROOT / "data" / "brands" / slug_preview).exists()
     create_disabled = (not new_brand_name.strip()) or (not slug_preview) or brand_dir_exists
@@ -1205,32 +1081,161 @@ with brand_create_b:
         else:
             st.warning(msg)
 
-if company:
-    with st.expander("Delete Company Workspace", expanded=False):
-        st.caption("Danger zone: deletion removes only managed directories for this company.")
-        deletion_scan = scan_brand_workspace(root=ROOT, company=company, slugify=safe_slug, input_root=input_root_path)
-        rows = deletion_scan["paths"]
-        st.dataframe(rows, hide_index=True, use_container_width=True)
+    st.markdown("### Workflow")
+    work_mode = st.radio(
+        "Current Stage",
+        ["Script Planning / Project Mode", "Shoot Tasks / Coverage / Pool Fill"],
+        key="work_mode",
+    )
+    st.caption("Render / Export becomes available after planning and coverage completion.")
 
-        requires_confirm = bool(deletion_scan["total_files"] > 0)
-        if requires_confirm:
-            st.warning(f"This workspace currently contains {deletion_scan['total_files']} file(s). Type the exact company name to enable deletion.")
-            delete_confirm_name = st.text_input("Type company name to confirm", value="", key="delete_company_confirm_name_v1")
-            delete_enabled = delete_confirm_name.strip() == company
+    with st.expander("System Settings", expanded=False):
+        orientation = st.radio("Default Format", ["portrait", "landscape"], horizontal=True)
+
+        st.markdown("### Language")
+        lang_options = [
+            ("English", "en-US"),
+            ("French", "fr-FR"),
+            ("Spanish", "es-ES"),
+            ("Russian", "ru-RU"),
+            ("Arabic", "ar-SA"),
+            ("Uyghur", "ug-CN"),
+            ("Kazakh", "kk-KZ"),
+            ("Uzbek", "uz-UZ"),
+            ("Tajik", "tg-TJ"),
+            ("Other…", "other"),
+        ]
+        lang_labels = [f"{n} ({c})" if c != "other" else n for n, c in lang_options]
+        sel = st.selectbox("Global Default Language", lang_labels, index=0)
+        sel_code = dict(zip(lang_labels, [c for _, c in lang_options]))[sel]
+        if sel_code == "other":
+            lang_code = st.text_input("Custom Language (BCP-47)", value="", placeholder="e.g. zh-CN / en-GB").strip()
         else:
-            st.caption("No files detected under managed paths. Deletion can proceed without typed confirmation.")
-            delete_enabled = True
+            lang_code = sel_code
+        if not lang_code:
+            lang_code = "en-US"
 
-        if st.button("Delete Company Workspace", key="delete_company_workspace_v1", disabled=not delete_enabled):
-            result = delete_brand_workspace(root=ROOT, company=company, slugify=safe_slug, input_root=input_root_path)
-            st.success(f"Deleted {len(result['deleted'])} managed path(s).")
-            st.session_state.pop("company_select_top", None)
-            st.rerun()
+        st.markdown("### ElevenLabs")
+        profile = ensure_default_eleven_profile()
+        saved_key = load_eleven_api_key()
+        eleven_key = st.text_input("API Key", value=saved_key, type="password")
+
+        model_id = st.selectbox(
+            "TTS Model",
+            ["eleven_multilingual_v2", "eleven_turbo_v2_5", "eleven_flash_v2_5", "eleven_v3"],
+            index=0,
+        )
+
+        lang_short = (lang_code.split("-")[0] if lang_code else "en").lower()
+        cur_voice_id = str(((profile.get("languages", {}) or {}).get(lang_short, {}) or {}).get("voice_id", "") or "")
+        voice_id_input = st.text_input(
+            f"Voice ID ({lang_short})",
+            value=cur_voice_id,
+            help="Must be an ElevenLabs voice_id.",
+        )
+
+        save_a, save_b = st.columns([1, 1])
+        with save_a:
+            if st.button("Save TTS", use_container_width=True):
+                if eleven_key.strip():
+                    save_eleven_api_key(eleven_key.strip())
+
+                prof = load_eleven_profile()
+                prof.setdefault("defaults", {})
+                prof.setdefault("languages", {})
+
+                if isinstance(prof.get("defaults"), dict):
+                    prof["defaults"]["model_id"] = model_id
+                    prof["defaults"].setdefault("output_format", "mp3_44100_128")
+
+                if isinstance(prof.get("languages"), dict):
+                    prof["languages"].setdefault(lang_short, {})
+                    if isinstance(prof["languages"][lang_short], dict):
+                        prof["languages"][lang_short]["voice_id"] = voice_id_input.strip()
+
+                save_eleven_profile(prof)
+                st.success("Saved")
+
+        with save_b:
+            with st.popover("Voice Map"):
+                langs = profile.get("languages", {}) if isinstance(profile.get("languages", {}), dict) else {}
+                rows_map = [{"lang": k, "voice_id": (v or {}).get("voice_id", "")} for k, v in sorted(langs.items())]
+                st.dataframe(rows_map, width="stretch", hide_index=True)
+
+        ai_provider_settings = render_ai_provider_settings(root=ROOT)
+
+        st.markdown("### Output Defaults")
+        target_fps = get_default_fps()
+        filter_preset_name = st.selectbox("Visual Filter", ["clean", "industrial", "warm_brand"], index=1)
+        _ = get_filter_preset(filter_preset_name)
+        st.caption(f"FPS: {target_fps}  |  Filter: {filter_preset_name}")
+
+        with st.expander("Advanced", expanded=False):
+            input_root = st.text_input("Footage Root", value=str(INPUT_ROOT_DEFAULT))
+            verbose = st.checkbox("Verbose Logs (Dev)", value=False)
+
+        if company:
+            with st.expander("Danger Zone", expanded=False):
+                st.caption("Delete only if you want to remove this company workspace and managed files.")
+                deletion_scan = scan_brand_workspace(root=ROOT, company=company, slugify=safe_slug, input_root=Path(input_root))
+                rows = deletion_scan["paths"]
+                st.dataframe(rows, hide_index=True, use_container_width=True)
+
+                requires_confirm = bool(deletion_scan["total_files"] > 0)
+                if requires_confirm:
+                    st.warning(f"This workspace currently contains {deletion_scan['total_files']} file(s). Type the exact company name to enable deletion.")
+                    delete_confirm_name = st.text_input("Type company name to confirm", value="", key="delete_company_confirm_name_v1")
+                    delete_enabled = delete_confirm_name.strip() == company
+                else:
+                    st.caption("No files detected under managed paths. Deletion can proceed without typed confirmation.")
+                    delete_enabled = True
+
+                if st.button("Delete Company Workspace", key="delete_company_workspace_v1", disabled=not delete_enabled):
+                    result = delete_brand_workspace(root=ROOT, company=company, slugify=safe_slug, input_root=Path(input_root))
+                    st.success(f"Deleted {len(result['deleted'])} managed path(s).")
+                    st.session_state.pop("company_select_top", None)
+                    st.rerun()
+
+# =========================================================
+# ENV
+# =========================================================
+ENV = os.environ.copy()
+
+_api = load_eleven_api_key()
+if _api:
+    ENV["ELEVENLABS_API_KEY"] = _api
+
+_prof = load_eleven_profile()
+_defaults = _prof.get("defaults", {}) if isinstance(_prof.get("defaults", {}), dict) else {}
+
+
+ENV["ELEVENLABS_MODEL_ID"] = str(_defaults.get("model_id", "eleven_multilingual_v2"))
+ENV["ELEVENLABS_OUTPUT_FORMAT"] = str(_defaults.get("output_format", "mp3_44100_128"))
+
+_langs = _prof.get("languages", {}) if isinstance(_prof.get("languages", {}), dict) else {}
+for k, v in _langs.items():
+    if isinstance(v, dict):
+        vid = str(v.get("voice_id", "") or "").strip()
+        if vid:
+            ENV[f"ELEVENLABS_VOICE_ID_{k.upper()}"] = vid
+
+# =========================================================
+# Top controls
+# =========================================================
+input_root_path = Path(input_root) if "input_root" in locals() else INPUT_ROOT_DEFAULT
+output_root_path = OUTPUT_ROOT_DEFAULT
+
+brand_creation_flash = str(st.session_state.pop("brand_creation_flash_v1", "") or "").strip()
+if brand_creation_flash:
+    st.success(brand_creation_flash)
+
+normalized_work_mode = "Project Mode" if work_mode == "Script Planning / Project Mode" else "Pool Fill Mode"
 
 if company:
     render_brand_validation_checklist(company)
 else:
-    st.caption("Create your first company workspace above, then select it to continue.")
+    st.markdown("### Welcome")
+    st.info("Create your first company workspace from the sidebar to start your workflow.")
     st.stop()
 
 # =========================================================
@@ -1265,21 +1270,13 @@ if not storage_ready:
     if storage_error:
         st.caption(f"Reason: {storage_error}")
 
-if work_mode == "Project Mode" and company:
-    render_ai_script_entry_panel(
-        root=ROOT,
-        company=company,
-        orientation=orientation,
-        provider_settings=ai_provider_settings,
-    )
-
 # =========================================================
 # Pool Fill Mode (independent page)
 # =========================================================
-if work_mode == "Pool Fill Mode":
+if normalized_work_mode == "Pool Fill Mode":
     st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
-    st.markdown("## Pool Fill Mode")
-    st.caption("Coverage stage after planning: use pool plans to close footage gaps and backfill required slot coverage.")
+    st.markdown("## Shoot Tasks · Coverage & Missing Assets")
+    st.caption("Footage gap-closure stage after planning: use pool plans to close missing coverage and complete required assets.")
 
     if not storage_ready or not factory_dir:
         st.info("Footage storage is unavailable. Pool Fill Mode is currently disabled.")
@@ -1445,68 +1442,69 @@ if work_mode == "Pool Fill Mode":
 # =========================================================
 st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
 st.markdown("## Project Planning")
-st.caption("Choose your planning path. AI-first is primary. Existing script remains fast for manual workflows.")
+st.caption("Pick a planning path: AI Script Planning is the default workflow, and Import Existing Script stays available for manual control.")
 
-planning_path = st.radio(
-    "Planning Path",
-    ["Create with AI (Primary)", "Use Existing Script (Manual)"],
-    horizontal=True,
-    key="planning_path_v1",
-)
+ai_tab, manual_tab = st.tabs(["✨ AI Script Planning", "📝 Import Existing Script"])
 
 src_mode = "Paste Script YAML"
-if planning_path == "Use Existing Script (Manual)":
-    src_mode = st.selectbox("Manual Script Source", ["Paste Script YAML", "Use Existing Script YAML"], key="src_mode")
-
-if planning_path == "Create with AI (Primary)":
-    st.info("Use the Create with AI section above to compile and draft script intent. Manual YAML is available below only when needed.")
-
-colA, colB = st.columns([2, 1])
-
 selected_path: Path | None = None
-with colA:
-    if planning_path == "Create with AI (Primary)":
-        with st.expander("Manual YAML (optional downstream)", expanded=False):
-            st.caption("Keep this collapsed unless you intentionally want to continue via manual YAML.")
-            st.session_state["creative_draft"] = st.text_area(
-                "Script YAML",
-                value=st.session_state.get("creative_draft", ""),
-                height=180,
-                placeholder="Paste your Creative Script YAML here…",
-                label_visibility="collapsed",
-            )
-    else:
-        if src_mode == "Paste Script YAML":
-            st.session_state["creative_draft"] = st.text_area(
-                "Script YAML",
-                value=st.session_state.get("creative_draft", ""),
-                height=180,
-                placeholder="Paste your Creative Script YAML here…",
-                label_visibility="collapsed",
-            )
-        else:
-            creative_dir = CREATIVE_ROOT / company
-            creative_dir.mkdir(parents=True, exist_ok=True)
-            files = sorted(creative_dir.glob("*.yaml"))
-            if not files:
-                st.warning("No script YAML files were found for this company.")
-            else:
-                selected_path = st.selectbox("Select Script YAML", files, format_func=lambda p: p.name, key="select_yaml")
-                st.caption("The selected script will be used as-is.")
 
-with colB:
-    st.markdown("**Actions**")
+generate_ready = False
+generate_help = ""
+
+with ai_tab:
+    render_ai_script_entry_panel(
+        root=ROOT,
+        company=company,
+        orientation=orientation,
+        global_language=lang_code,
+        provider_settings=ai_provider_settings,
+    )
+    with st.expander("Manual YAML fallback (optional)", expanded=False):
+        st.caption("Use this only when you intentionally want to import or paste an existing script.")
+        st.session_state["creative_draft"] = st.text_area(
+            "Script YAML",
+            value=st.session_state.get("creative_draft", ""),
+            height=180,
+            placeholder="Paste your Creative Script YAML here…",
+            label_visibility="collapsed",
+            key="script_yaml_ai_fallback_v1",
+        )
     draft_text = str(st.session_state.get("creative_draft", "") or "").strip()
-    if planning_path == "Create with AI (Primary)":
-        generate_ready = bool(draft_text)
-        generate_help = "In AI-primary mode, paste manual YAML in the optional manual section before generating task rows."
-    elif src_mode == "Use Existing Script YAML":
+    generate_ready = bool(draft_text)
+    generate_help = "Paste manual YAML in the optional fallback panel to generate task rows."
+
+with manual_tab:
+    src_mode = st.selectbox("Manual Script Source", ["Paste Script YAML", "Use Existing Script YAML"], key="src_mode")
+    if src_mode == "Paste Script YAML":
+        st.session_state["creative_draft"] = st.text_area(
+            "Script YAML",
+            value=st.session_state.get("creative_draft", ""),
+            height=180,
+            placeholder="Paste your Creative Script YAML here…",
+            label_visibility="collapsed",
+            key="script_yaml_manual_v1",
+        )
+    else:
+        creative_dir = CREATIVE_ROOT / company
+        creative_dir.mkdir(parents=True, exist_ok=True)
+        files = sorted(creative_dir.glob("*.yaml"))
+        if not files:
+            st.warning("No script YAML files were found for this company.")
+        else:
+            selected_path = st.selectbox("Select Script YAML", files, format_func=lambda p: p.name, key="select_yaml")
+            st.caption("The selected script will be used as-is.")
+
+    draft_text = str(st.session_state.get("creative_draft", "") or "").strip()
+    if src_mode == "Use Existing Script YAML":
         generate_ready = selected_path is not None
         generate_help = "Select an existing script YAML to generate task rows."
     else:
         generate_ready = bool(draft_text)
         generate_help = "Paste script YAML to generate task rows."
 
+action_a, action_b = st.columns([1, 1])
+with action_a:
     generate_btn = st.button(
         "Generate Task Rows",
         use_container_width=True,
@@ -1514,11 +1512,12 @@ with colB:
         disabled=not generate_ready,
         help=generate_help,
     )
+with action_b:
     compact_view = st.checkbox("Compact View", value=True, key="compact_view")
-    export_html = st.checkbox("Export Printable HTML", value=True, key="export_html")
+export_html = st.checkbox("Export Printable HTML", value=True, key="export_html")
 
-    if not generate_ready:
-        st.caption(generate_help)
+if not generate_ready:
+    st.caption(generate_help)
 
 if generate_btn:
     if src_mode == "Use Existing Script YAML" and selected_path:
@@ -1633,7 +1632,7 @@ if rows and run_dir:
                 data=html_path.read_text(encoding="utf-8"),
                 file_name=html_path.name,
                 mime="text/html",
-                width="stretch",
+                use_container_width=True,
             )
 
 # =========================================================
@@ -1860,7 +1859,7 @@ if not storage_ready:
 elif not (active_creative_path and run_dir and compiled_out and active_creative_path.exists()):
     st.info("Generate Task Rows in Step 1 first.")
 else:
-    if st.button("Create Video", width="stretch", key="create_video"):
+    if st.button("Create Video", use_container_width=True, key="create_video"):
         progress = st.progress(0)
         status = st.empty()
 
@@ -1913,4 +1912,4 @@ else:
             progress.progress(100)
             st.error(f"Unexpected Error: {e}")
 
-    st.link_button("Open Run Folder", f"file://{run_dir}", width="stretch")
+    st.link_button("Open Run Folder", f"file://{run_dir}", use_container_width=True)

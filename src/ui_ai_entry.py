@@ -208,17 +208,32 @@ def _clear_edited_state() -> None:
     st.session_state["ai_structured_edited_fields_v1"] = set()
 
 
-def render_ai_script_entry_panel(*, root: Path, company: str, orientation: str, provider_settings: AIProviderSettings) -> None:
+def render_ai_script_entry_panel(
+    *,
+    root: Path,
+    company: str,
+    orientation: str,
+    global_language: str,
+    provider_settings: AIProviderSettings,
+) -> None:
     import streamlit as st
 
     st.markdown("### Create with AI")
-    st.caption("Primary workflow: Quick Brief → auto-prefill structured brief → compile constraints → provider draft.")
+    st.caption("1) Describe your video · 2) Review what the system understood · 3) Generate draft")
 
     context_key = f"{company}::{orientation}"
+    initial_language = str(st.session_state.get("ai_quick_lang_v1", "Use global default") or "Use global default")
+    if initial_language == "Use global default":
+        initial_language = str(global_language or "en-US")
+
+    initial_orientation = str(st.session_state.get("ai_quick_orientation_v1", "Use global default") or "Use global default")
+    if initial_orientation == "Use global default":
+        initial_orientation = orientation
+
     context_default_brief = NormalizedIntakeBrief(
         brand_name=company,
-        language=str(st.session_state.get("ai_quick_lang_v1", "en-US") or "en-US"),
-        orientation=orientation,
+        language=initial_language,
+        orientation=initial_orientation,
         duration_s=int(st.session_state.get("ai_quick_duration_v1", 45) or 45),
         notes=str(st.session_state.get("ai_quick_brief_v1", "") or ""),
     )
@@ -235,9 +250,9 @@ def render_ai_script_entry_panel(*, root: Path, company: str, orientation: str, 
 
     qa, qb, qc, qd, qe = st.columns([1, 1, 1, 1, 1])
     with qa:
-        quick_language = st.selectbox("Output Language", ["en-US", "fr-FR", "es-ES", "ar-SA", "ru-RU"], key="ai_quick_lang_v1")
+        quick_language = st.selectbox("This draft only · Output Language", ["Use global default", "en-US", "fr-FR", "es-ES", "ar-SA", "ru-RU"], key="ai_quick_lang_v1")
     with qb:
-        quick_orientation = st.selectbox("Format", ["portrait", "landscape"], index=0 if orientation == "portrait" else 1, key="ai_quick_orientation_v1")
+        quick_orientation = st.selectbox("This draft only · Format", ["Use global default", "portrait", "landscape"], key="ai_quick_orientation_v1")
     with qc:
         quick_duration = st.selectbox("Approx. Duration", [30, 45, 60, 90], index=1, key="ai_quick_duration_v1")
     with qd:
@@ -245,72 +260,79 @@ def render_ai_script_entry_panel(*, root: Path, company: str, orientation: str, 
     with qe:
         quick_footage = st.selectbox("Existing Footage", ["Yes", "Partially", "No"], key="ai_quick_has_footage_v1")
 
+    effective_language = str(st.session_state.get("ai_quick_lang_v1") or "Use global default")
+    if effective_language == "Use global default":
+        effective_language = str(global_language or "en-US")
+
+    effective_orientation = str(st.session_state.get("ai_quick_orientation_v1") or "Use global default")
+    if effective_orientation == "Use global default":
+        effective_orientation = orientation
+
     default_brief = NormalizedIntakeBrief(
         brand_name=company,
-        language=quick_language,
-        orientation=quick_orientation,
+        language=effective_language,
+        orientation=effective_orientation,
         duration_s=int(quick_duration),
         notes=quick_brief,
     )
 
-    with st.expander("Advanced Details (structured brief)", expanded=False):
-        st.caption("V1 heuristic prefill assistance. You can review and edit every field here.")
+    with st.expander("Check what the system understood", expanded=False):
+        st.caption("Review extracted brief details before generating. Your manual edits are protected.")
         brief = _render_structured_fields(default_brief)
 
     action_a, action_b, action_c = st.columns(3)
-    if action_a.button("Auto-prefill Structured Brief", key="ai_quick_prefill_v1", use_container_width=True):
+    if action_a.button("Refresh extracted brief", key="ai_quick_prefill_v1", use_container_width=True):
         merged = build_merged_brief_from_quick_input(
             current=brief,
             edited_fields=_get_edited_fields(st.session_state),
             quick_brief=quick_brief,
             company=company,
-            output_language=quick_language,
-            orientation=quick_orientation,
+            output_language=effective_language,
+            orientation=effective_orientation,
             duration_s=int(quick_duration),
             emphasis=quick_emphasis,
             has_existing_footage=quick_footage,
         )
         _write_structured_brief_to_state(merged)
-        st.success("Structured brief prefilled. Review/edit Advanced Details before compile.")
+        st.success("Extracted brief refreshed. Review details before generating your draft.")
 
-    if action_b.button("Rebuild from Quick Brief", key="ai_quick_rebuild_v1", use_container_width=True):
+    if action_b.button("Rebuild from brief", key="ai_quick_rebuild_v1", use_container_width=True):
         _clear_edited_state()
         rebuilt = build_merged_brief_from_quick_input(
             current=brief,
             edited_fields=set(),
             quick_brief=quick_brief,
             company=company,
-            output_language=quick_language,
-            orientation=quick_orientation,
+            output_language=effective_language,
+            orientation=effective_orientation,
             duration_s=int(quick_duration),
             emphasis=quick_emphasis,
             has_existing_footage=quick_footage,
         )
         _write_structured_brief_to_state(rebuilt)
-        st.success("Structured brief rebuilt from Quick Brief.")
+        st.success("Extracted brief rebuilt from your quick brief.")
 
-    if action_c.button("Reset Structured Brief", key="ai_quick_reset_structured_v1", use_container_width=True):
+    if action_c.button("Reset extracted brief", key="ai_quick_reset_structured_v1", use_container_width=True):
         _clear_edited_state()
         reset_brief = NormalizedIntakeBrief(
             brand_name=company,
-            language=quick_language,
-            orientation=quick_orientation,
+            language=effective_language,
+            orientation=effective_orientation,
             duration_s=int(quick_duration),
             notes=quick_brief,
         )
         _write_structured_brief_to_state(reset_brief)
-        st.success("Structured brief reset to baseline defaults.")
+        st.success("Extracted brief reset to baseline defaults.")
 
-    run_a, run_b, run_c = st.columns(3)
-    if run_a.button("Compile + Generate Draft", use_container_width=True, key="ai_run_generate_v2"):
+    if st.button("✨ Generate Draft", use_container_width=True, key="ai_run_generate_v2"):
         try:
             effective_brief = build_merged_brief_from_quick_input(
                 current=brief,
                 edited_fields=_get_edited_fields(st.session_state),
                 quick_brief=quick_brief,
                 company=company,
-                output_language=quick_language,
-                orientation=quick_orientation,
+                output_language=effective_language,
+                orientation=effective_orientation,
                 duration_s=int(quick_duration),
                 emphasis=quick_emphasis,
                 has_existing_footage=quick_footage,
@@ -326,43 +348,44 @@ def render_ai_script_entry_panel(*, root: Path, company: str, orientation: str, 
                 "compiled_constraints": asdict(result.compiled_constraints),
                 "provider_response": asdict(result.provider_response),
             }
-            st.success("Compile + generation completed.")
+            st.success("Draft generated successfully.")
         except Exception as e:
             st.error(f"AI pipeline run failed: {e}")
 
-    if run_b.button("Compile Only", use_container_width=True, key="ai_run_compile_only_v2"):
-        try:
-            effective_brief = build_merged_brief_from_quick_input(
-                current=brief,
-                edited_fields=_get_edited_fields(st.session_state),
-                quick_brief=quick_brief,
-                company=company,
-                output_language=quick_language,
-                orientation=quick_orientation,
-                duration_s=int(quick_duration),
-                emphasis=quick_emphasis,
-                has_existing_footage=quick_footage,
-            )
-            _write_structured_brief_to_state(effective_brief)
-            normalized, constraints, _ = compile_intake_brief(effective_brief, root=root)
-            st.session_state["ai_entry_last_result_v1"] = {
-                "mode": "compile_only",
-                "provider": provider_settings.provider,
-                "normalized_brief": asdict(normalized),
-                "compiled_constraints": asdict(constraints),
-                "provider_response": None,
-            }
-            st.success("Compile-only completed.")
-        except Exception as e:
-            st.error(f"Compile-only failed: {e}")
+    with st.expander("Secondary actions", expanded=False):
+        if st.button("Rebuild constraints only", use_container_width=True, key="ai_run_compile_only_v2"):
+            try:
+                effective_brief = build_merged_brief_from_quick_input(
+                    current=brief,
+                    edited_fields=_get_edited_fields(st.session_state),
+                    quick_brief=quick_brief,
+                    company=company,
+                    output_language=effective_language,
+                    orientation=effective_orientation,
+                    duration_s=int(quick_duration),
+                    emphasis=quick_emphasis,
+                    has_existing_footage=quick_footage,
+                )
+                _write_structured_brief_to_state(effective_brief)
+                normalized, constraints, _ = compile_intake_brief(effective_brief, root=root)
+                st.session_state["ai_entry_last_result_v1"] = {
+                    "mode": "compile_only",
+                    "provider": provider_settings.provider,
+                    "normalized_brief": asdict(normalized),
+                    "compiled_constraints": asdict(constraints),
+                    "provider_response": None,
+                }
+                st.success("Compile-only completed.")
+            except Exception as e:
+                st.error(f"Compile-only failed: {e}")
 
-    if run_c.button("Save Result", use_container_width=True, key="ai_run_save_v2"):
-        last = st.session_state.get("ai_entry_last_result_v1")
-        if not isinstance(last, dict):
-            st.warning("No result to save yet.")
-        else:
-            path = save_ai_run_payload(root, last, brand_name=brief.brand_name)
-            st.success(f"Saved: {path}")
+        if st.button("Save result", use_container_width=True, key="ai_run_save_v2"):
+            last = st.session_state.get("ai_entry_last_result_v1")
+            if not isinstance(last, dict):
+                st.warning("No result to save yet.")
+            else:
+                path = save_ai_run_payload(root, last, brand_name=brief.brand_name)
+                st.success(f"Saved: {path}")
 
     latest = st.session_state.get("ai_entry_last_result_v1")
     if isinstance(latest, dict):
