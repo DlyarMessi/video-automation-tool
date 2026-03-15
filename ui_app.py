@@ -37,6 +37,8 @@ from src.ui_workspace import (
     build_workspace_controls_state,
     compute_storage_state,
 )
+from src.ui_provider_settings import render_ai_provider_settings
+from src.ui_ai_entry import render_ai_script_entry_panel
 
 from src.render_profile import get_default_fps, get_filter_preset
 from src.language_checks import build_language_check
@@ -1090,6 +1092,8 @@ with st.sidebar:
             rows_map = [{"lang": k, "voice_id": (v or {}).get("voice_id", "")} for k, v in sorted(langs.items())]
             st.dataframe(rows_map, width="stretch", hide_index=True)
 
+    ai_provider_settings = render_ai_provider_settings(root=ROOT)
+
     st.markdown("### Output Defaults")
     target_fps = get_default_fps()
     filter_preset_name = st.selectbox("Visual Filter", ["clean", "industrial", "warm_brand"], index=1)
@@ -1210,6 +1214,14 @@ if not storage_ready:
     st.caption(f"Footage Root: {input_root_path}")
     if storage_error:
         st.caption(f"Reason: {storage_error}")
+
+if work_mode == "Project Mode":
+    render_ai_script_entry_panel(
+        root=ROOT,
+        company=company,
+        orientation=orientation,
+        provider_settings=ai_provider_settings,
+    )
 
 # =========================================================
 # Pool Fill Mode (independent page)

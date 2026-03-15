@@ -57,8 +57,24 @@ python3 scripts/run_script_pipeline.py \
 python3 scripts/run_script_pipeline.py --intake /path/to/intake.json --provider manual
 ```
 
-## Deferred by design
+## Streamlit beta UI entry
 
-- UI/sidebar integration for provider settings is intentionally deferred.
-- Real provider selection UX in Streamlit is intentionally deferred.
-- The OpenRouter provider is additive to the existing contract layer; it is not a contract redesign.
+The Streamlit app now includes a minimal **AI Script Entry (Beta)** panel and sidebar **AI Provider Settings**:
+
+- Provider selector (`manual`, `openrouter`)
+- Local-only OpenRouter API key + model storage
+- Compile-only and compile+generate run controls
+- Result rendering for normalized brief, compiled constraints, and provider response
+
+Local settings and saved runs are written under:
+
+- `.workspace/ai/provider_settings.json`
+- `.workspace/ai/ai_runs/<timestamp>_<brand>.json`
+
+These paths are git-ignored and intended for local workspace use only.
+
+## Still deferred
+
+- OpenAI and Gemini UI provider controls
+- Multi-agent orchestration UX
+- Automatic writing into formal production pool-plan files
