@@ -24,6 +24,9 @@ assets/processed/
 
 # Optional private assets
 input_videos/
+
+# Local AI UI settings/runs
+.workspace/
 # =========================================================
 # Generated reports / exports
 # =========================================================
