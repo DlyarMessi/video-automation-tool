@@ -9,9 +9,10 @@ from src.intake_prefill import build_merged_brief_from_quick_input
 from src.intake_validation import normalize_and_validate_brief
 from src.script_pipeline import build_default_compiler_bundle, run_script_pipeline
 from src.intake_compiler import compile_brief_to_constraints
-from src.script_provider_config import load_openrouter_config
+from src.script_provider_config import load_deepseek_config, load_openrouter_config
 from src.script_provider_manual import ManualScriptProvider
 from src.script_provider_openrouter import OpenRouterScriptProvider
+from src.script_provider_deepseek import DeepSeekScriptProvider
 
 
 STRUCTURED_FIELDS = [
@@ -76,6 +77,13 @@ def _build_provider(settings: AIProviderSettings):
             model=settings.openrouter_model or cfg.model,
             site_url=cfg.site_url,
             app_name=cfg.app_name,
+        )
+    if settings.provider == "deepseek":
+        cfg = load_deepseek_config(model_override=settings.deepseek_model)
+        return DeepSeekScriptProvider(
+            api_key=settings.deepseek_api_key or cfg.api_key,
+            model=settings.deepseek_model or cfg.model,
+            base_url=settings.deepseek_base_url or cfg.base_url,
         )
     return ManualScriptProvider()
 
