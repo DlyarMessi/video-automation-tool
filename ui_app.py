@@ -895,6 +895,24 @@ def list_companies() -> list[str]:
     return list_managed_brand_names(root=ROOT)
 
 
+def render_brand_validation_checklist(company: str) -> None:
+    """Render lightweight brand setup status for the active company."""
+    status = hardening_get_brand_validation_status(ROOT, company, safe_slug)
+    st.caption(build_brand_status_summary(status))
+
+    logo_ready = bool(status.get("logo_exists"))
+    default_plan_ready = bool(status.get("default_plan_exists"))
+    available_plans = status.get("available_plans", [])
+    if not isinstance(available_plans, list):
+        available_plans = []
+
+    all_ready = logo_ready and default_plan_ready
+    with st.expander("Brand Validation Checklist", expanded=not all_ready):
+        st.markdown(f"- {'✅' if logo_ready else '⚪'} Brand logo ({status.get('logo_path')})")
+        st.markdown(f"- {'✅' if default_plan_ready else '⚪'} Default pool plan ({status.get('default_plan_path')})")
+        st.markdown(f"- ℹ️ Available plans: **{', '.join(available_plans) if available_plans else 'none'}**")
+
+
 # =========================================================
 # Session
 # =========================================================
