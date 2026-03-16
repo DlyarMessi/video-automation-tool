@@ -68,6 +68,7 @@ from src.workflow import (
     next_index_for,
     patch_compiled_yaml,
     summarize_factory_coverage,
+    allocate_coverage_across_beats,
     ensure_company_storage,
     get_storage_dirs,
     classify_orientation,
@@ -1649,15 +1650,39 @@ elif rows:
                     else:
                         st.warning("No asset changes were saved.")
 
-    for beat_no in sorted(beats_map.keys()):
+    matched_by_key: dict[tuple[str, str], list[Path]] = {}
+    for f in factory_files:
+        stem = f.stem.lower()
+        parts = stem.split("_")
+        if len(parts) < 4:
+            continue
+        if parts[0] != "factory":
+            continue
+        key = (parts[1], parts[2])
+        matched_by_key.setdefault(key, []).append(f)
+
+    ordered_beat_nos = sorted(beats_map.keys())
+    beat_needs: list[dict[tuple[str, str], int]] = []
+    for beat_no in ordered_beat_nos:
+        need: dict[tuple[str, str], int] = {}
+        for rr in beats_map[beat_no]:
+            key = (
+                safe_slug(str(rr.get("Category", "") or "")).lower(),
+                safe_slug(str(rr.get("Shot", "") or "")).lower(),
+            )
+            need[key] = need.get(key, 0) + 1
+        beat_needs.append(need)
+
+    availability = {k: len(v) for k, v in matched_by_key.items()} if auto_use_factory else {}
+    beat_ready_missing = allocate_coverage_across_beats(beat_needs, availability)
+
+    for beat_idx, beat_no in enumerate(ordered_beat_nos):
         beat_rows = beats_map[beat_no]
         beat_title = beat_rows[0].get("BeatPurpose") or f"Beat {beat_no}"
 
         with st.expander(f"Beat {beat_no} · {beat_title}", expanded=False):
-            need: dict[tuple[str, str], int] = {}
-            for rr in beat_rows:
-                key = (rr["Category"], rr["Shot"])
-                need[key] = need.get(key, 0) + 1
+            need = beat_needs[beat_idx]
+            beat_status = beat_ready_missing[beat_idx]
 
             for (cat, shot), n_need in need.items():
                 scene_name = "factory"
@@ -1665,12 +1690,8 @@ elif rows:
                 coverage_name = shot
                 move_name = "static"
 
-                matched = [
-                    p for p in factory_files
-                    if p.name.lower().startswith(f"{safe_slug(scene_name)}_{safe_slug(content_name)}_{safe_slug(coverage_name)}_")
-                ]
-                ready = min(n_need, len(matched)) if auto_use_factory else 0
-                missing = n_need - ready
+                matched = matched_by_key.get((cat, shot), [])
+                ready, missing = beat_status.get((cat, shot), (0, int(n_need)))
 
                 st.markdown(f"**{cat.upper()} · {shot.upper()}** — required {n_need}, ready {ready}, missing {missing}")
 

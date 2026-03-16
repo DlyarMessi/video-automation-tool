@@ -341,16 +341,38 @@ def next_index_for(factory_dir: Path, category: str, shot: str, custom: str, ext
     return mx + 1
 
 
+def allocate_coverage_across_beats(
+    beat_needs: list[dict[tuple[str, str], int]],
+    available_by_key: dict[tuple[str, str], int],
+) -> list[dict[tuple[str, str], tuple[int, int]]]:
+    remaining = dict(available_by_key)
+    out: list[dict[tuple[str, str], tuple[int, int]]] = []
+
+    for need in beat_needs:
+        beat_out: dict[tuple[str, str], tuple[int, int]] = {}
+        for key, required in need.items():
+            available = int(remaining.get(key, 0) or 0)
+            ready = min(int(required), available)
+            missing = int(required) - ready
+            remaining[key] = max(available - ready, 0)
+            beat_out[key] = (ready, missing)
+        out.append(beat_out)
+
+    return out
+
+
 def summarize_factory_coverage(rows: list[dict], factory_dir: Path) -> dict[str, int]:
     factory_files = list_video_files(factory_dir, VIDEO_SUFFIXES)
     need_by: dict[tuple[str, str], int] = {}
     for r in rows:
-        need_by[(r["Category"], r["Shot"])] = need_by.get((r["Category"], r["Shot"]), 0) + 1
+        cat = safe_slug(str(r.get("Category", "") or "")).lower()
+        shot = safe_slug(str(r.get("Shot", "") or "")).lower()
+        need_by[(cat, shot)] = need_by.get((cat, shot), 0) + 1
 
     match_counts: dict[tuple[str, str], int] = {}
     for (cat, shot), _need in need_by.items():
-        pat = re.compile(rf"^factory_{re.escape(cat)}_{re.escape(shot)}_.*", re.IGNORECASE)
-        match_counts[(cat, shot)] = len([p for p in factory_files if pat.match(p.name)])
+        prefix = f"factory_{cat}_{shot}_"
+        match_counts[(cat, shot)] = len([p for p in factory_files if p.name.lower().startswith(prefix)])
 
     total_need = sum(need_by.values())
     total_ready = sum(min(need, match_counts.get(k, 0)) for k, need in need_by.items())
