@@ -22,6 +22,15 @@ def _split_items(value: str) -> list[str]:
     return out
 
 
+
+
+def _split_label_value(line: str) -> str:
+    raw = str(line or "")
+    for sep in (":", "："):
+        if sep in raw:
+            return raw.split(sep, 1)[1].strip()
+    return ""
+
 def _looks_like_language(text: str) -> str:
     lower = text.lower()
     if "english" in lower or "en-us" in lower:
@@ -35,6 +44,21 @@ def _looks_like_language(text: str) -> str:
     if "russian" in lower or "ru-ru" in lower:
         return "ru-RU"
     return ""
+
+
+# NOTE: Transitional extractor.
+# Current behavior is a lightweight heuristic parser for predictable UX in Create with AI.
+# Keep this stable for now; future iterations can extend LABEL_ALIASES to support
+# Chinese tags (受众/目标/必须包含/风格/避免/产品) and more free-form NLU extraction
+# without changing the compile/provider contract.
+LABEL_ALIASES: dict[str, tuple[str, ...]] = {
+    "must_include": ("must include:", "include:", "必须包含:", "必须包含："),
+    "avoid": ("avoid:", "exclude:", "避免:", "避免："),
+    "audience": ("audience:", "受众:", "受众："),
+    "objective": ("objective:", "goal:", "目标:", "目标："),
+    "product": ("product:", "service:", "产品:", "产品："),
+    "style": ("tone:", "style:", "风格:", "风格："),
+}
 
 
 def infer_brief_from_quick_input(
@@ -75,18 +99,18 @@ def infer_brief_from_quick_input(
 
     for line in [ln.strip() for ln in text.splitlines() if ln.strip()]:
         lower = line.lower()
-        if lower.startswith(("must include:", "include:")):
-            must_include.extend(_split_items(line.split(":", 1)[1]))
-        elif lower.startswith(("avoid:", "exclude:")):
-            notes["avoid"] = ", ".join(_split_items(line.split(":", 1)[1]))
-        elif lower.startswith(("audience:",)):
-            notes["audience"] = line.split(":", 1)[1].strip()
-        elif lower.startswith(("objective:", "goal:")):
-            notes["objective"] = line.split(":", 1)[1].strip()
-        elif lower.startswith(("product:", "service:")):
-            notes["product"] = line.split(":", 1)[1].strip()
-        elif lower.startswith(("tone:", "style:")):
-            style_keywords.extend(_split_items(line.split(":", 1)[1]))
+        if lower.startswith(LABEL_ALIASES["must_include"]):
+            must_include.extend(_split_items(_split_label_value(line)))
+        elif lower.startswith(LABEL_ALIASES["avoid"]):
+            notes["avoid"] = ", ".join(_split_items(_split_label_value(line)))
+        elif lower.startswith(LABEL_ALIASES["audience"]):
+            notes["audience"] = _split_label_value(line).strip()
+        elif lower.startswith(LABEL_ALIASES["objective"]):
+            notes["objective"] = _split_label_value(line).strip()
+        elif lower.startswith(LABEL_ALIASES["product"]):
+            notes["product"] = _split_label_value(line).strip()
+        elif lower.startswith(LABEL_ALIASES["style"]):
+            style_keywords.extend(_split_items(_split_label_value(line)))
 
     brief = NormalizedIntakeBrief(
         brand_name=company,
