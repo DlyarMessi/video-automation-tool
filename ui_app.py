@@ -41,9 +41,11 @@ from src.brand_workspace import (
     provision_brand_workspace,
     scan_brand_workspace,
     delete_brand_workspace,
+    list_managed_brand_names,
 )
 from src.ui_provider_settings import render_ai_provider_settings
 from src.ui_ai_entry import render_ai_script_entry_panel
+from src.ui_local_prefs import load_ui_local_prefs, remember_last_company, clear_last_company
 
 from src.render_profile import get_default_fps, get_filter_preset
 from src.language_checks import build_language_check
@@ -888,119 +890,10 @@ def count_pool_matches(factory_files: list[Path], scene: str, content: str, cove
         ]
     )
 
-def list_brand_catalog_names() -> list[str]:
-    brands_dir = ROOT / "data" / "brands"
-    if not brands_dir.exists():
-        return []
+def list_companies() -> list[str]:
+    """Company selector source of truth: managed brand workspaces only."""
+    return list_managed_brand_names(root=ROOT)
 
-    names: list[str] = []
-
-    for brand_dir in brands_dir.iterdir():
-        if not brand_dir.is_dir():
-            continue
-        if brand_dir.name.startswith(".") or brand_dir.name == "_starter":
-            continue
-
-        default_plan = brand_dir / "pool_plans" / "default.yaml"
-        display_name = ""
-        if default_plan.exists():
-            try:
-                data = yaml.safe_load(default_plan.read_text(encoding="utf-8")) or {}
-                if isinstance(data, dict):
-                    display_name = str(data.get("brand", "") or "").strip()
-            except Exception:
-                pass
-
-        names.append(display_name or brand_dir.name)
-
-    return sorted([x for x in names if str(x).strip()], key=lambda x: str(x).lower())
-
-
-
-def clone_brand_starter_into_project(brand_name: str, brand_slug: str = "") -> tuple[bool, str]:
-    return brandops_clone_brand_starter_into_project(ROOT, brand_name, safe_slug, brand_slug)
-
-def get_brand_validation_status(company: str) -> dict:
-    return hardening_get_brand_validation_status(ROOT, company, safe_slug)
-
-
-def save_brand_logo(company: str, uploaded_logo) -> tuple[bool, str]:
-    return brandops_save_brand_logo(ROOT, company, safe_slug, uploaded_logo)
-
-
-def save_brand_pool_plan(company: str, uploaded_plan, plan_name: str = "") -> tuple[bool, str, str]:
-    return brandops_save_brand_pool_plan(ROOT, company, safe_slug, uploaded_plan, plan_name)
-
-
-def render_brand_validation_checklist(company: str):
-    status = get_brand_validation_status(company)
-    logo_flash = ui_pop_flash(st.session_state, "brand_logo_flash_v1")
-
-    with st.container(border=True):
-        st.markdown("#### Brand Checklist")
-        st.caption(f"Current brand: {status['company']}  |  slug: `{status['slug']}`")
-
-        if logo_flash:
-            st.success(logo_flash)
-
-        st.caption(build_brand_status_summary(status))
-
-        if not status["logo_exists"]:
-            st.caption("No logo is required. If none is uploaded, watermarking will be skipped.")
-
-        with st.expander("Logo (optional)", expanded=False):
-            st.caption("Upload a transparent PNG only if you want watermark support for this brand.")
-            logo_a, logo_b = st.columns([2, 1])
-            with logo_a:
-                uploaded_logo = st.file_uploader(
-                    "Upload / Replace Logo",
-                    type=["png"],
-                    key=f"brand_logo_upload_{status['slug']}",
-                    help="Recommended: transparent PNG brand logo.",
-                )
-            with logo_b:
-                if st.button(
-                    "Save Logo",
-                    use_container_width=True,
-                    key=f"brand_logo_save_{status['slug']}",
-                ):
-                    ok, msg = save_brand_logo(company, uploaded_logo)
-                    if ok:
-                        ui_set_flash(st.session_state, "brand_logo_flash_v1", msg)
-                        st.rerun()
-                    else:
-                        st.warning(msg)
-
-def list_companies(input_root: Path) -> list[str]:
-    names: list[str] = []
-    seen: set[str] = set()
-
-    def add_name(value: str) -> None:
-        clean = str(value or "").strip()
-        if not clean:
-            return
-        key = clean.casefold()
-        if key in seen:
-            return
-        seen.add(key)
-        names.append(clean)
-
-    if CREATIVE_ROOT.exists():
-        for p in CREATIVE_ROOT.iterdir():
-            if p.is_dir():
-                add_name(p.name)
-
-    for ori in ("portrait", "landscape"):
-        ori_root = input_root / ori
-        if ori_root.exists():
-            for p in ori_root.iterdir():
-                if p.is_dir():
-                    add_name(p.name)
-
-    for brand_name in list_brand_catalog_names():
-        add_name(brand_name)
-
-    return sorted(names, key=lambda x: str(x).lower())
 
 # =========================================================
 # Session
@@ -1025,10 +918,14 @@ if not SRC_MAIN.exists():
 # =========================================================
 input_root = str(INPUT_ROOT_DEFAULT)
 input_root_path = Path(input_root)
-companies = list_companies(input_root_path)
+companies = list_companies()
+ui_prefs = load_ui_local_prefs(ROOT)
 preferred_company = str(st.session_state.pop("pending_company_select_top", "") or "").strip()
+remembered_company = str(ui_prefs.last_company or "").strip()
 if preferred_company and preferred_company in companies:
     default_idx = companies.index(preferred_company)
+elif remembered_company and remembered_company in companies:
+    default_idx = companies.index(remembered_company)
 else:
     default_idx = 0 if companies else None
 
@@ -1040,6 +937,7 @@ with st.sidebar:
         if preferred_company and preferred_company in companies:
             st.session_state["company_select_top"] = preferred_company
         company = st.selectbox("Current Company", companies, index=default_idx, key="company_select_top")
+        remember_last_company(ROOT, company)
     else:
         company = ""
         st.info("Create your first company workspace to get started.")
@@ -1047,7 +945,7 @@ with st.sidebar:
     new_brand_name = st.text_input(
         "Create Company Workspace",
         value="",
-        placeholder="e.g. Acme Elevators",
+        placeholder="e.g. Northwind, Blue Harbor, Acme",
         key="create_brand_name_v1_main",
     )
 
@@ -1075,7 +973,9 @@ with st.sidebar:
                 slugify=safe_slug,
                 input_root=input_root_path,
             )
-            st.session_state["pending_company_select_top"] = new_brand_name.strip()
+            created_company = new_brand_name.strip()
+            st.session_state["pending_company_select_top"] = created_company
+            remember_last_company(ROOT, created_company)
             st.session_state["brand_creation_flash_v1"] = msg
             st.rerun()
         else:
@@ -1191,7 +1091,10 @@ with st.sidebar:
                     delete_enabled = True
 
                 if st.button("Delete Company Workspace", key="delete_company_workspace_v1", disabled=not delete_enabled):
-                    result = delete_brand_workspace(root=ROOT, company=company, slugify=safe_slug, input_root=Path(input_root))
+                    deleted_company = company
+                    result = delete_brand_workspace(root=ROOT, company=deleted_company, slugify=safe_slug, input_root=Path(input_root))
+                    if load_ui_local_prefs(ROOT).last_company == deleted_company:
+                        clear_last_company(ROOT)
                     st.success(f"Deleted {len(result['deleted'])} managed path(s).")
                     st.session_state.pop("company_select_top", None)
                     st.rerun()

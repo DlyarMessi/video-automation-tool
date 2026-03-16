@@ -89,5 +89,27 @@ Style: clean, premium""",
         self.assertEqual(merged.duration_s, 60)
 
 
+    def test_infer_brief_supports_chinese_label_aliases(self) -> None:
+        brief, _ = infer_brief_from_quick_input(
+            quick_brief="""受众：小企业客户
+目标：建立品牌认知
+必须包含：产品展示, 使用场景
+风格：真实、清晰
+产品：智能门锁""",
+            company="Northwind",
+            output_language="zh-CN",
+            orientation="portrait",
+            duration_s=45,
+            emphasis="Balanced",
+            has_existing_footage="Yes",
+        )
+
+        self.assertEqual(brief.audience, "小企业客户")
+        self.assertEqual(brief.objective, "建立品牌认知")
+        self.assertIn("产品展示", brief.must_include)
+        self.assertIn("使用场景", brief.must_include)
+        self.assertEqual(brief.product_name, "智能门锁")
+
+
 if __name__ == "__main__":
     unittest.main()

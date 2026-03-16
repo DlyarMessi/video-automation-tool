@@ -227,7 +227,7 @@ def render_ai_script_entry_panel(
     import streamlit as st
 
     st.markdown("### Create with AI")
-    st.caption("1) Describe your video · 2) Review what the system understood · 3) Generate draft")
+    st.caption("1) Describe your video · 2) Review extracted understanding · 3) Generate draft")
 
     context_key = f"{company}::{orientation}"
     initial_language = str(st.session_state.get("ai_quick_lang_v1", "Use global default") or "Use global default")
@@ -249,11 +249,15 @@ def render_ai_script_entry_panel(
         reset_structured_state_for_context(st.session_state, context_default_brief)
         st.session_state["ai_structured_context_v1"] = context_key
 
+    # Transitional UX note: the current quick-brief parser is intentionally heuristic-first.
+    # It favors stable extraction for today's Create with AI flow and should remain compatible
+    # while we later add richer natural-language understanding and Chinese labels support
+    # (e.g. 受众/目标/必须包含/风格/避免/产品).
     quick_brief = st.text_area(
         "Quick Brief",
         key="ai_quick_brief_v1",
         height=160,
-        placeholder="Describe your video goal in natural language. Example:\nAudience: operations teams\nObjective: show reliability and quality proof\nMust include: factory line, testing closeups",
+        placeholder="Describe your video goal in natural language. Example:\nAudience: retail buyers and channel partners\nObjective: explain why this product solves a key pain point\nMust include: product demo, customer scenario, proof point",
     )
 
     qa, qb, qc, qd, qe = st.columns([1, 1, 1, 1, 1])
