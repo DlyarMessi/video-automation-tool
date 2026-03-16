@@ -382,8 +382,10 @@ def summarize_factory_coverage(rows: list[dict], factory_dir: Path) -> dict[str,
 
     match_counts: dict[tuple[str, str], int] = {}
     for (cat, shot), _need in need_by.items():
-        prefix = f"factory_{cat}_{shot}_"
-        match_counts[(cat, shot)] = len([p for p in factory_files if p.name.lower().startswith(prefix)])
+        prefixes = [f"factory_{cat}_{shot}_", f"factory_factory_{cat}_{shot}_"]
+        match_counts[(cat, shot)] = len(
+            [p for p in factory_files if any(p.name.lower().startswith(prefix) for prefix in prefixes)]
+        )
 
     total_need = sum(need_by.values())
     total_ready = sum(min(need, match_counts.get(k, 0)) for k, need in need_by.items())

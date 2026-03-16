@@ -57,6 +57,21 @@ class WorkflowCoverageTests(unittest.TestCase):
 
         self.assertEqual(nxt, 2)
 
+    def test_summarize_factory_coverage_counts_double_factory_scene_prefix(self) -> None:
+        rows = [
+            {"Category": "Line", "Shot": "Hero"},
+        ]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            factory_dir = Path(tmp)
+            (factory_dir / "factory_factory_line_hero_static_01.mp4").write_bytes(b"x")
+
+            summary = summarize_factory_coverage(rows, factory_dir)
+
+        self.assertEqual(summary["total_need"], 1)
+        self.assertEqual(summary["total_ready"], 1)
+        self.assertEqual(summary["total_missing"], 0)
+
     def test_summarize_factory_coverage_slug_normalizes_row_values(self) -> None:
         rows = [
             {"Category": "Factory Line", "Shot": "Wide Shot"},
