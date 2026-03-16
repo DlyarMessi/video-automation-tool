@@ -328,12 +328,13 @@ def next_index_for(factory_dir: Path, scene: str, content: str, coverage: str, m
     if not ext.startswith("."):
         ext = "." + ext
 
-    coverage_group = rf"(?:_{re.escape(coverage)})?" if coverage else ""
-    move_group = rf"(?:_{re.escape(move)})?" if move else ""
-    pat = re.compile(
-        rf"^factory_{re.escape(scene)}_{re.escape(content)}{coverage_group}{move_group}_(\d\d){re.escape(ext)}$",
-        re.IGNORECASE,
-    )
+    core = f"factory_{scene}_{content}"
+    if coverage:
+        core += f"_{coverage}"
+    if move:
+        core += f"_{move}"
+
+    pat = re.compile(rf"^{re.escape(core)}_(\d\d){re.escape(ext)}$", re.IGNORECASE)
     mx = 0
     if not factory_dir.exists():
         return 1
