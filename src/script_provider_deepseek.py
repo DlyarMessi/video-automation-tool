@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import time
+from http import client as httpclient
 from dataclasses import asdict
 from typing import Any
 from urllib import error as urlerror
@@ -131,6 +133,32 @@ class DeepSeekScriptProvider(ScriptProvider):
         return mentions_response_format and indicates_unsupported
 
     def _post_json(self, payload: dict[str, Any]) -> dict[str, Any]:
+        max_attempts = 2
+        last_exc: Exception | None = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                return self._post_json_once(payload)
+            except DeepSeekProviderError as exc:
+                last_exc = exc
+                if not self._is_retryable_disconnect_error(exc):
+                    raise
+                if attempt >= max_attempts:
+                    break
+                time.sleep(0.4)
+        raise last_exc if last_exc is not None else DeepSeekProviderError("DeepSeek transient connection error after retry: unknown failure")
+
+    @staticmethod
+    def _is_retryable_disconnect_reason(reason: Any) -> bool:
+        return isinstance(reason, (httpclient.RemoteDisconnected, TimeoutError, ConnectionResetError))
+
+    @classmethod
+    def _is_retryable_disconnect_error(cls, exc: DeepSeekProviderError) -> bool:
+        cause = exc.__cause__
+        if isinstance(cause, urlerror.URLError):
+            return cls._is_retryable_disconnect_reason(cause.reason)
+        return cls._is_retryable_disconnect_reason(cause)
+
+    def _post_json_once(self, payload: dict[str, Any]) -> dict[str, Any]:
         body = json.dumps(payload).encode("utf-8")
         req = urlrequest.Request(
             self.endpoint,
@@ -146,18 +174,27 @@ class DeepSeekScriptProvider(ScriptProvider):
             if payload.get("response_format") and self._is_response_format_unsupported_error(err_body):
                 retry_payload = dict(payload)
                 retry_payload.pop("response_format", None)
-                return self._post_json(retry_payload)
+                return self._post_json_once(retry_payload)
             detail = f"HTTP {getattr(e, 'code', 'unknown')}"
             if err_body:
                 detail += f" body={err_body[:500]}"
-            raise DeepSeekProviderError(f"DeepSeek request failed: {detail}") from e
+            if int(getattr(e, "code", 0) or 0) in (401, 403):
+                raise DeepSeekProviderError(f"DeepSeek auth/config error: {detail}") from e
+            raise DeepSeekProviderError(f"DeepSeek provider request error: {detail}") from e
+        except urlerror.URLError as e:
+            reason = getattr(e, "reason", None)
+            if self._is_retryable_disconnect_reason(reason):
+                raise DeepSeekProviderError(
+                    f"DeepSeek transient connection error (retryable): {reason}"
+                ) from e
+            raise DeepSeekProviderError(f"DeepSeek connection error: {reason or e}") from e
         except Exception as e:
             raise DeepSeekProviderError(f"DeepSeek request failed: {e}") from e
 
         try:
             parsed = json.loads(raw)
         except Exception as e:
-            raise DeepSeekProviderError(f"DeepSeek returned non-JSON response: {raw[:500]}") from e
+            raise DeepSeekProviderError(f"DeepSeek malformed response error: non-JSON body: {raw[:500]}") from e
         if not isinstance(parsed, dict):
             raise DeepSeekProviderError("DeepSeek response root must be object")
         return parsed
@@ -182,7 +219,7 @@ class DeepSeekScriptProvider(ScriptProvider):
         try:
             data = json.loads(cleaned)
         except Exception as e:
-            raise DeepSeekProviderError(f"Could not parse model JSON output: {text[:500]}") from e
+            raise DeepSeekProviderError(f"DeepSeek malformed response error: could not parse model JSON output: {text[:500]}") from e
         if not isinstance(data, dict):
             raise DeepSeekProviderError("Model JSON output must be object")
         return data
