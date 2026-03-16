@@ -45,6 +45,10 @@ TRANSIENT_TEXT_KEYS = [
     "ai_adv_notes_text_v2",
 ]
 
+PENDING_STRUCTURED_BRIEF_KEY = "ai_pending_structured_brief_v1"
+PENDING_ACTION_KEY = "ai_pending_ai_action_v1"
+STRUCTURED_FLASH_KEY = "ai_structured_flash_v1"
+
 
 def parse_list_text(value: str) -> list[str]:
     parts = str(value or "").replace("\n", ",").split(",")
@@ -178,35 +182,56 @@ def _render_structured_fields(default_brief: NormalizedIntakeBrief) -> Normalize
     )
 
 
+def _write_structured_brief_to_session_state(session_state, brief: NormalizedIntakeBrief) -> None:
+    for field_name in STRUCTURED_FIELDS:
+        session_state[_field_key(field_name)] = getattr(brief, field_name)
+
+    session_state["ai_adv_style_text_v2"] = ", ".join(brief.style_keywords)
+    session_state["ai_adv_must_text_v2"] = ", ".join(brief.must_include)
+    session_state["ai_adv_avoid_text_v2"] = ", ".join(brief.avoid)
+    session_state["ai_adv_locations_text_v2"] = ", ".join(brief.available_locations)
+    session_state["ai_adv_assets_text_v2"] = ", ".join(brief.available_assets)
+    session_state["ai_adv_people_text_v2"] = ", ".join(brief.available_people)
+    session_state["ai_adv_evidence_text_v2"] = ", ".join(brief.evidence_priorities)
+    session_state["ai_adv_notes_text_v2"] = brief.notes
+
+
 def _write_structured_brief_to_state(brief: NormalizedIntakeBrief) -> None:
     import streamlit as st
 
-    for field_name in STRUCTURED_FIELDS:
-        st.session_state[_field_key(field_name)] = getattr(brief, field_name)
+    _write_structured_brief_to_session_state(st.session_state, brief)
 
-    st.session_state["ai_adv_style_text_v2"] = ", ".join(brief.style_keywords)
-    st.session_state["ai_adv_must_text_v2"] = ", ".join(brief.must_include)
-    st.session_state["ai_adv_avoid_text_v2"] = ", ".join(brief.avoid)
-    st.session_state["ai_adv_locations_text_v2"] = ", ".join(brief.available_locations)
-    st.session_state["ai_adv_assets_text_v2"] = ", ".join(brief.available_assets)
-    st.session_state["ai_adv_people_text_v2"] = ", ".join(brief.available_people)
-    st.session_state["ai_adv_evidence_text_v2"] = ", ".join(brief.evidence_priorities)
-    st.session_state["ai_adv_notes_text_v2"] = brief.notes
+
+def _queue_pending_structured_brief(brief: NormalizedIntakeBrief, *, flash_level: str, flash_message: str, pending_action: str = "") -> None:
+    import streamlit as st
+
+    st.session_state[PENDING_STRUCTURED_BRIEF_KEY] = asdict(brief)
+    st.session_state[STRUCTURED_FLASH_KEY] = {"level": flash_level, "message": flash_message}
+    if pending_action:
+        st.session_state[PENDING_ACTION_KEY] = pending_action
+    st.rerun()
+
+
+def _apply_pending_structured_brief(session_state, fallback_brief: NormalizedIntakeBrief) -> bool:
+    payload = session_state.pop(PENDING_STRUCTURED_BRIEF_KEY, None)
+    if not isinstance(payload, dict):
+        return False
+
+    try:
+        brief = NormalizedIntakeBrief(**payload)
+    except Exception:
+        brief = fallback_brief
+
+    _write_structured_brief_to_session_state(session_state, brief)
+    return True
 
 
 def reset_structured_state_for_context(session_state, default_brief: NormalizedIntakeBrief) -> None:
-    for field_name in STRUCTURED_FIELDS:
-        session_state[_field_key(field_name)] = getattr(default_brief, field_name)
-
-    session_state["ai_adv_style_text_v2"] = ", ".join(default_brief.style_keywords)
-    session_state["ai_adv_must_text_v2"] = ", ".join(default_brief.must_include)
-    session_state["ai_adv_avoid_text_v2"] = ", ".join(default_brief.avoid)
-    session_state["ai_adv_locations_text_v2"] = ", ".join(default_brief.available_locations)
-    session_state["ai_adv_assets_text_v2"] = ", ".join(default_brief.available_assets)
-    session_state["ai_adv_people_text_v2"] = ", ".join(default_brief.available_people)
-    session_state["ai_adv_evidence_text_v2"] = ", ".join(default_brief.evidence_priorities)
-    session_state["ai_adv_notes_text_v2"] = default_brief.notes
+    _write_structured_brief_to_session_state(session_state, default_brief)
     session_state["ai_structured_edited_fields_v1"] = set()
+    session_state.pop(PENDING_STRUCTURED_BRIEF_KEY, None)
+    session_state.pop(PENDING_ACTION_KEY, None)
+    session_state.pop(STRUCTURED_FLASH_KEY, None)
     session_state.pop("ai_entry_last_result_v1", None)
 
 
@@ -288,12 +313,58 @@ def render_ai_script_entry_panel(
         notes=quick_brief,
     )
 
+    _apply_pending_structured_brief(st.session_state, default_brief)
+
+    flash = st.session_state.pop(STRUCTURED_FLASH_KEY, None)
+    if isinstance(flash, dict):
+        msg = str(flash.get("message", "") or "").strip()
+        level = str(flash.get("level", "info") or "info").strip().lower()
+        if msg:
+            if level == "warning":
+                st.warning(msg)
+            elif level == "success":
+                st.success(msg)
+            else:
+                st.info(msg)
+
     with st.expander("Check what the system understood", expanded=False):
         st.caption("Review extracted brief details before generating. Your manual edits are protected.")
         brief = _render_structured_fields(default_brief)
 
+    pending_action = str(st.session_state.pop(PENDING_ACTION_KEY, "") or "").strip().lower()
+    if pending_action == "generate":
+        try:
+            provider = _build_provider(provider_settings)
+            _, _, bundle = compile_intake_brief(brief, root=root)
+            result = run_script_pipeline(brief=normalize_and_validate_brief(brief), provider=provider, bundle=bundle)
+            st.session_state["ai_entry_last_result_v1"] = {
+                "mode": "compile_generate",
+                "provider": provider.provider_name,
+                "normalized_brief": asdict(result.normalized_brief),
+                "compiled_constraints": asdict(result.compiled_constraints),
+                "provider_response": asdict(result.provider_response),
+            }
+            st.success("Draft generated successfully.")
+        except Exception as e:
+            st.error(f"AI pipeline run failed: {e}")
+    elif pending_action == "compile_only":
+        try:
+            normalized, constraints, _ = compile_intake_brief(brief, root=root)
+            st.session_state["ai_entry_last_result_v1"] = {
+                "mode": "compile_only",
+                "provider": provider_settings.provider,
+                "normalized_brief": asdict(normalized),
+                "compiled_constraints": asdict(constraints),
+                "provider_response": None,
+            }
+            st.success("Compile-only completed.")
+        except Exception as e:
+            st.error(f"Compile-only failed: {e}")
+
     action_a, action_b, action_c = st.columns(3)
     if action_a.button("Refresh extracted brief", key="ai_quick_prefill_v1", use_container_width=True):
+        if not str(quick_brief or "").strip():
+            st.session_state[STRUCTURED_FLASH_KEY] = {"level": "warning", "message": "Quick Brief is empty. Using safe defaults to refresh extracted brief."}
         merged = build_merged_brief_from_quick_input(
             current=brief,
             edited_fields=_get_edited_fields(st.session_state),
@@ -305,11 +376,16 @@ def render_ai_script_entry_panel(
             emphasis=quick_emphasis,
             has_existing_footage=quick_footage,
         )
-        _write_structured_brief_to_state(merged)
-        st.success("Extracted brief refreshed. Review details before generating your draft.")
+        _queue_pending_structured_brief(
+            merged,
+            flash_level="success",
+            flash_message="Extracted brief refreshed. Review details before generating your draft.",
+        )
 
     if action_b.button("Rebuild from brief", key="ai_quick_rebuild_v1", use_container_width=True):
         _clear_edited_state()
+        if not str(quick_brief or "").strip():
+            st.session_state[STRUCTURED_FLASH_KEY] = {"level": "warning", "message": "Quick Brief is empty. Rebuilding extracted brief from baseline defaults."}
         rebuilt = build_merged_brief_from_quick_input(
             current=brief,
             edited_fields=set(),
@@ -321,11 +397,16 @@ def render_ai_script_entry_panel(
             emphasis=quick_emphasis,
             has_existing_footage=quick_footage,
         )
-        _write_structured_brief_to_state(rebuilt)
-        st.success("Extracted brief rebuilt from your quick brief.")
+        _queue_pending_structured_brief(
+            rebuilt,
+            flash_level="success",
+            flash_message="Extracted brief rebuilt from your quick brief.",
+        )
 
     if action_c.button("Reset extracted brief", key="ai_quick_reset_structured_v1", use_container_width=True):
         _clear_edited_state()
+        if not str(quick_brief or "").strip():
+            st.session_state[STRUCTURED_FLASH_KEY] = {"level": "info", "message": "Quick Brief is empty. Resetting to baseline defaults."}
         reset_brief = NormalizedIntakeBrief(
             brand_name=company,
             language=effective_language,
@@ -333,10 +414,15 @@ def render_ai_script_entry_panel(
             duration_s=int(quick_duration),
             notes=quick_brief,
         )
-        _write_structured_brief_to_state(reset_brief)
-        st.success("Extracted brief reset to baseline defaults.")
+        _queue_pending_structured_brief(
+            reset_brief,
+            flash_level="success",
+            flash_message="Extracted brief reset to baseline defaults.",
+        )
 
     if st.button("✨ Generate Draft", use_container_width=True, key="ai_run_generate_v2"):
+        if not str(quick_brief or "").strip():
+            st.session_state[STRUCTURED_FLASH_KEY] = {"level": "warning", "message": "Quick Brief is empty. Generating with baseline defaults."}
         try:
             effective_brief = build_merged_brief_from_quick_input(
                 current=brief,
@@ -349,23 +435,19 @@ def render_ai_script_entry_panel(
                 emphasis=quick_emphasis,
                 has_existing_footage=quick_footage,
             )
-            _write_structured_brief_to_state(effective_brief)
-            provider = _build_provider(provider_settings)
-            _, _, bundle = compile_intake_brief(effective_brief, root=root)
-            result = run_script_pipeline(brief=normalize_and_validate_brief(effective_brief), provider=provider, bundle=bundle)
-            st.session_state["ai_entry_last_result_v1"] = {
-                "mode": "compile_generate",
-                "provider": provider.provider_name,
-                "normalized_brief": asdict(result.normalized_brief),
-                "compiled_constraints": asdict(result.compiled_constraints),
-                "provider_response": asdict(result.provider_response),
-            }
-            st.success("Draft generated successfully.")
+            _queue_pending_structured_brief(
+                effective_brief,
+                flash_level="success",
+                flash_message="Structured brief updated before draft generation.",
+                pending_action="generate",
+            )
         except Exception as e:
             st.error(f"AI pipeline run failed: {e}")
 
     with st.expander("Secondary actions", expanded=False):
         if st.button("Rebuild constraints only", use_container_width=True, key="ai_run_compile_only_v2"):
+            if not str(quick_brief or "").strip():
+                st.session_state[STRUCTURED_FLASH_KEY] = {"level": "warning", "message": "Quick Brief is empty. Rebuilding constraints with baseline defaults."}
             try:
                 effective_brief = build_merged_brief_from_quick_input(
                     current=brief,
@@ -378,16 +460,12 @@ def render_ai_script_entry_panel(
                     emphasis=quick_emphasis,
                     has_existing_footage=quick_footage,
                 )
-                _write_structured_brief_to_state(effective_brief)
-                normalized, constraints, _ = compile_intake_brief(effective_brief, root=root)
-                st.session_state["ai_entry_last_result_v1"] = {
-                    "mode": "compile_only",
-                    "provider": provider_settings.provider,
-                    "normalized_brief": asdict(normalized),
-                    "compiled_constraints": asdict(constraints),
-                    "provider_response": None,
-                }
-                st.success("Compile-only completed.")
+                _queue_pending_structured_brief(
+                    effective_brief,
+                    flash_level="success",
+                    flash_message="Structured brief updated before constraint rebuild.",
+                    pending_action="compile_only",
+                )
             except Exception as e:
                 st.error(f"Compile-only failed: {e}")
 
