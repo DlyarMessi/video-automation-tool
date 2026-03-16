@@ -44,6 +44,19 @@ class WorkflowCoverageTests(unittest.TestCase):
 
         self.assertEqual(nxt, 3)
 
+
+    def test_next_index_for_ignores_files_missing_required_coverage_or_move(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            factory_dir = Path(tmp)
+            (factory_dir / "factory_factory_floor_wide_shot_closeup_slide_01.mp4").write_bytes(b"x")
+            (factory_dir / "factory_factory_floor_wide_shot_09.mp4").write_bytes(b"x")
+            (factory_dir / "factory_factory_floor_wide_shot_closeup_08.mp4").write_bytes(b"x")
+            (factory_dir / "factory_factory_floor_wide_shot_slide_07.mp4").write_bytes(b"x")
+
+            nxt = next_index_for(factory_dir, "Factory Floor", "Wide Shot", "closeup", "slide", ".mp4")
+
+        self.assertEqual(nxt, 2)
+
     def test_summarize_factory_coverage_slug_normalizes_row_values(self) -> None:
         rows = [
             {"Category": "Factory Line", "Shot": "Wide Shot"},
