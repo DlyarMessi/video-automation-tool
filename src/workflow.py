@@ -303,27 +303,38 @@ def render_html_task_table(rows: list[dict]) -> str:
 # =========================================================
 # Footage pool helpers
 # =========================================================
-def build_factory_filename(category: str, shot: str, custom: str, idx: int, ext: str) -> str:
-    category = safe_slug(category).lower()
-    shot = safe_slug(shot).lower()
-    custom = safe_slug(custom).lower()
-    core = f"factory_{category}_{shot}"
-    if custom:
-        core += f"_{custom}"
+def build_factory_filename(scene: str, content: str, coverage: str, move: str, idx: int, ext: str) -> str:
+    scene = safe_slug(scene).lower()
+    content = safe_slug(content).lower()
+    coverage = safe_slug(coverage).lower()
+    move = safe_slug(move).lower()
+
+    core = f"factory_{scene}_{content}"
+    if coverage:
+        core += f"_{coverage}"
+    if move:
+        core += f"_{move}"
     core += f"_{idx:02d}"
     if not ext.startswith("."):
         ext = "." + ext
     return f"{core}{ext}"
 
 
-def next_index_for(factory_dir: Path, category: str, shot: str, custom: str, ext: str) -> int:
-    category = category.lower()
-    shot = shot.lower()
-    custom = safe_slug(custom).lower()
-    pat = re.compile(
-        rf"^factory_{re.escape(category)}_{re.escape(shot)}(?:_{re.escape(custom)})?_(\d\d){re.escape(ext)}$",
-        re.IGNORECASE,
-    )
+def next_index_for(factory_dir: Path, scene: str, content: str, coverage: str, move: str, ext: str) -> int:
+    scene = safe_slug(scene).lower()
+    content = safe_slug(content).lower()
+    coverage = safe_slug(coverage).lower()
+    move = safe_slug(move).lower()
+    if not ext.startswith("."):
+        ext = "." + ext
+
+    core = f"factory_{scene}_{content}"
+    if coverage:
+        core += f"_{coverage}"
+    if move:
+        core += f"_{move}"
+
+    pat = re.compile(rf"^{re.escape(core)}_(\d\d){re.escape(ext)}$", re.IGNORECASE)
     mx = 0
     if not factory_dir.exists():
         return 1
