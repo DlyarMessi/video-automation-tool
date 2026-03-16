@@ -9,6 +9,7 @@ from src.brand_workspace import (
     delete_brand_workspace,
     provision_brand_workspace,
     scan_brand_workspace,
+    list_managed_brand_names,
 )
 from src.workflow import safe_slug
 
@@ -52,6 +53,21 @@ class BrandWorkspaceTests(unittest.TestCase):
                     "output_landscape",
                 ],
             )
+
+
+    def test_list_managed_brand_names_ignores_legacy_orphans(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "data" / "brands" / "northwind" / "pool_plans").mkdir(parents=True)
+            (root / "data" / "brands" / "northwind" / "pool_plans" / "default.yaml").write_text(
+                "brand: Northwind\n", encoding="utf-8"
+            )
+            # legacy/orphan style folders should not affect selector source of truth
+            (root / "creative_scripts" / "Ghost Brand").mkdir(parents=True)
+            (root / "input_videos" / "portrait" / "Ghost Brand").mkdir(parents=True)
+
+            names = list_managed_brand_names(root=root)
+            self.assertEqual(names, ["Northwind"])
 
 
 if __name__ == "__main__":

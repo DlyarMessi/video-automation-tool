@@ -98,3 +98,40 @@ def delete_brand_workspace(*, root: Path, company: str, slugify: Callable[[str],
         deleted.append(str(target))
 
     return {"deleted": deleted, "skipped": skipped}
+
+
+def list_managed_brand_names(*, root: Path) -> list[str]:
+    """Return selector-safe brand names from managed workspaces only."""
+    brands_dir = root / "data" / "brands"
+    if not brands_dir.exists():
+        return []
+
+    names: list[str] = []
+    seen: set[str] = set()
+
+    for brand_dir in sorted(brands_dir.iterdir(), key=lambda p: p.name.lower()):
+        if not brand_dir.is_dir():
+            continue
+        if brand_dir.name.startswith(".") or brand_dir.name == "_starter":
+            continue
+
+        display_name = ""
+        default_plan = brand_dir / "pool_plans" / "default.yaml"
+        if default_plan.exists():
+            try:
+                for line in default_plan.read_text(encoding="utf-8").splitlines():
+                    stripped = str(line or "").strip()
+                    if stripped.lower().startswith("brand:"):
+                        display_name = stripped.split(":", 1)[1].strip().strip('"\'')
+                        break
+            except Exception:
+                display_name = ""
+
+        candidate = display_name or brand_dir.name
+        key = candidate.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        names.append(candidate)
+
+    return names
