@@ -1658,7 +1658,13 @@ elif rows:
             continue
         if parts[0] != "factory":
             continue
-        key = (parts[1], parts[2])
+
+        key = None
+        if len(parts) >= 5 and parts[1] == "factory":
+            key = (parts[2], parts[3])
+        else:
+            key = (parts[1], parts[2])
+
         matched_by_key.setdefault(key, []).append(f)
 
     ordered_beat_nos = sorted(beats_map.keys())
@@ -1776,7 +1782,10 @@ elif rows:
                             st.write(f"- {msg}")
 
                     if saved_count > 0:
-                        st.success(f"Saved {saved_count} clip(s) to the Factory Pool. Refreshing…")
+                        st.success(
+                            f"✅ Saved {saved_count} clip(s) to the Factory Pool. "
+                            "Coverage and Step 2 status have been refreshed."
+                        )
                         st.rerun()
                     elif not rejected_msgs:
                         st.info("No clips were saved.")
