@@ -30,7 +30,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from moviepy import (
-    MultiplyColor,
     AudioFileClip,
     CompositeAudioClip,
     CompositeVideoClip,
@@ -40,6 +39,17 @@ from moviepy import (
     concatenate_videoclips,
     vfx,
 )
+
+try:
+    from moviepy import MultiplyColor as _MultiplyColor
+except Exception:
+    try:
+        from moviepy.video.fx.MultiplyColor import MultiplyColor as _MultiplyColor
+    except Exception:
+        try:
+            from moviepy.video.fx.multiply_color import MultiplyColor as _MultiplyColor
+        except Exception:
+            _MultiplyColor = None
 
 from config import (
     AUDIO_CODEC,
@@ -145,8 +155,8 @@ def _apply_filter_preset(video, project: dict):
     out = video
 
     try:
-        if brightness != 1.0:
-            out = out.with_effects([MultiplyColor(brightness)])
+        if brightness != 1.0 and _MultiplyColor is not None:
+            out = out.with_effects([_MultiplyColor(brightness)])
     except Exception:
         pass
 
@@ -158,8 +168,11 @@ def _apply_filter_preset(video, project: dict):
 
     try:
         # MoviePy 2.x Effect name may differ by build; keep conservative fallback
-        if saturation != 1.0 and hasattr(vfx, "MultiplyColor"):
-            out = out.with_effects([vfx.MultiplyColor(saturation)])
+        if saturation != 1.0:
+            if hasattr(vfx, "MultiplyColor"):
+                out = out.with_effects([vfx.MultiplyColor(saturation)])
+            elif _MultiplyColor is not None:
+                out = out.with_effects([_MultiplyColor(saturation)])
     except Exception:
         pass
 
