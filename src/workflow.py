@@ -352,6 +352,47 @@ def next_index_for(factory_dir: Path, scene: str, content: str, coverage: str, m
     return mx + 1
 
 
+def normalize_demo_coverage_token(token: str) -> str:
+    normalized = safe_slug(str(token or "")).lower()
+    if normalized in {"hero", "wide"} or normalized.startswith("hero_") or normalized.startswith("wide_"):
+        return "hero"
+    if normalized == "medium" or normalized.startswith("medium_"):
+        return "medium"
+    if normalized in {"detail", "close", "closeup"} or normalized.startswith("detail_") or normalized.startswith("close_"):
+        return "detail"
+    return normalized
+
+
+def parse_factory_filename_key(path: Path) -> tuple[str, str] | None:
+    stem = path.stem.lower()
+    parts = stem.split("_")
+    if len(parts) < 4 or parts[0] != "factory":
+        return None
+
+    if len(parts) >= 5 and parts[1] == "factory":
+        content = parts[2]
+        coverage = parts[3]
+    else:
+        content = parts[1]
+        coverage = parts[2]
+
+    content_key = safe_slug(content).lower()
+    coverage_key = normalize_demo_coverage_token(coverage)
+    if not content_key or not coverage_key:
+        return None
+    return content_key, coverage_key
+
+
+def count_factory_clips_by_key(factory_files: list[Path]) -> dict[tuple[str, str], int]:
+    counts: dict[tuple[str, str], int] = {}
+    for path in factory_files:
+        key = parse_factory_filename_key(path)
+        if key is None:
+            continue
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
 def allocate_coverage_across_beats(
     beat_needs: list[dict[tuple[str, str], int]],
     available_by_key: dict[tuple[str, str], int],
@@ -377,15 +418,10 @@ def summarize_factory_coverage(rows: list[dict], factory_dir: Path) -> dict[str,
     need_by: dict[tuple[str, str], int] = {}
     for r in rows:
         cat = safe_slug(str(r.get("Category", "") or "")).lower()
-        shot = safe_slug(str(r.get("Shot", "") or "")).lower()
+        shot = normalize_demo_coverage_token(str(r.get("Shot", "") or ""))
         need_by[(cat, shot)] = need_by.get((cat, shot), 0) + 1
 
-    match_counts: dict[tuple[str, str], int] = {}
-    for (cat, shot), _need in need_by.items():
-        prefixes = [f"factory_{cat}_{shot}_", f"factory_factory_{cat}_{shot}_"]
-        match_counts[(cat, shot)] = len(
-            [p for p in factory_files if any(p.name.lower().startswith(prefix) for prefix in prefixes)]
-        )
+    match_counts = count_factory_clips_by_key(factory_files)
 
     total_need = sum(need_by.values())
     total_ready = sum(min(need, match_counts.get(k, 0)) for k, need in need_by.items())

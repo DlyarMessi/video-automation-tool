@@ -69,9 +69,11 @@ from src.workflow import (
     patch_compiled_yaml,
     summarize_factory_coverage,
     allocate_coverage_across_beats,
+    parse_factory_filename_key,
     ensure_company_storage,
     get_storage_dirs,
     classify_orientation,
+    normalize_demo_coverage_token,
 )
 
 # =========================================================
@@ -1652,20 +1654,9 @@ elif rows:
 
     matched_by_key: dict[tuple[str, str], list[Path]] = {}
     for f in factory_files:
-        stem = f.stem.lower()
-        parts = stem.split("_")
-        if len(parts) < 4:
-            continue
-        if parts[0] != "factory":
-            continue
-
-        key = None
-        if len(parts) >= 5 and parts[1] == "factory":
-            key = (parts[2], parts[3])
-        else:
-            key = (parts[1], parts[2])
-
-        matched_by_key.setdefault(key, []).append(f)
+        clip_key = parse_factory_filename_key(f)
+        if clip_key is not None:
+            matched_by_key.setdefault(clip_key, []).append(f)
 
     ordered_beat_nos = sorted(beats_map.keys())
     beat_needs: list[dict[tuple[str, str], int]] = []
@@ -1674,7 +1665,7 @@ elif rows:
         for rr in beats_map[beat_no]:
             key = (
                 safe_slug(str(rr.get("Category", "") or "")).lower(),
-                safe_slug(str(rr.get("Shot", "") or "")).lower(),
+                normalize_demo_coverage_token(str(rr.get("Shot", "") or "")),
             )
             need[key] = need.get(key, 0) + 1
         beat_needs.append(need)
