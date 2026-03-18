@@ -871,7 +871,20 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
     # ✅ Phase 0: VO（只做一次）
     # =========================
     vo_cache = output_dir / "cache_tts"
-    vo_result = build_voiceover_track(project, dsl_shots, total_duration=0, cache_dir=vo_cache)
+    planned_visual_duration = sum(
+        float((shot or {}).get("duration", 0) or 0)
+        for shot in dsl_shots
+        if isinstance(shot, dict)
+    )
+    vo_result = build_voiceover_track(
+        project,
+        dsl_shots,
+        total_duration=planned_visual_duration,
+        cache_dir=vo_cache,
+    )
+    if vo_result:
+        for warning in vo_result.get("warnings", []):
+            logger.warning("%s", warning.get("message", warning))
 
     # =========================
     # ✅ Phase 1: 生成画面
@@ -943,6 +956,14 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
         # ✅ Phase 3: 拼视频 + 合成音轨
         # =========================
         final_video = concatenate_videoclips(final_clips, method="compose")
+        vo_timeline_duration = float((vo_result or {}).get("timeline_duration", 0.0) or 0.0)
+        if vo_timeline_duration > float(final_video.duration) and final_clips:
+            extra_hold = vo_timeline_duration - float(final_video.duration)
+            last_clip = final_clips[-1]
+            freeze_frame = last_clip.get_frame(max(float(last_clip.duration) - 0.05, 0.0))
+            hold_clip = ImageClip(freeze_frame)
+            hold_clip = hold_clip.with_duration(extra_hold) if hasattr(hold_clip, "with_duration") else hold_clip.set_duration(extra_hold)
+            final_video = concatenate_videoclips([final_video, hold_clip], method="compose")
 
         audio_cfg = project.get("audio", {}) if isinstance(project.get("audio", {}), dict) else {}
         ducking = float(audio_cfg.get("ducking", 1.0))
