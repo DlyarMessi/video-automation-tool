@@ -79,7 +79,7 @@ from config import (
 
 from script_loader import load_script
 from material_index import load_asset_index, find_asset_record
-from workflow import compile_creative_dict, apply_runtime_overrides_to_production_dict
+from workflow import compile_creative_dict, apply_runtime_overrides_to_production_dict, MOVE_TOKEN_VOCAB
 
 logger = logging.getLogger("video_automation")
 
@@ -336,11 +336,7 @@ def parse_legacy_txt(script_path: Path) -> List[ShotLegacy]:
 class MaterialPicker:
     """Stateful picker for 'random'/'next' patterns with anti-repeat scheduling."""
 
-    MOVE_TOKENS = {
-        "static", "panl", "panr", "tiltu", "tiltd", "slidel", "slider",
-        "pushin", "pullout", "follow", "pov", "orbit", "reveal", "expand",
-        "zoom"
-    }
+    MOVE_TOKENS = set(MOVE_TOKEN_VOCAB)
 
     def __init__(self, input_dir: Path):
         self.input_dir = input_dir

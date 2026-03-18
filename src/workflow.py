@@ -13,6 +13,23 @@ from src.render_profile import get_default_fps, get_subtitle_style, get_filter_p
 
 VIDEO_SUFFIXES = [".mp4", ".mov", ".mkv", ".m4v"]
 
+MOVE_TOKEN_OPTIONS = ["static", "pan", "slide", "pushin", "follow", "orbit", "reveal"]
+MOVE_TOKEN_VOCAB = set(
+    MOVE_TOKEN_OPTIONS
+    + [
+        "panl",
+        "panr",
+        "tiltu",
+        "tiltd",
+        "slidel",
+        "slider",
+        "pullout",
+        "pov",
+        "expand",
+        "zoom",
+    ]
+)
+
 
 def now_tag() -> str:
     return datetime.now().strftime("%Y%m%d_%H%M%S")

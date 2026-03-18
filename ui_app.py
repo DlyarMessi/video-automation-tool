@@ -1683,6 +1683,109 @@ elif rows:
                     else:
                         st.warning("No asset changes were saved.")
 
+                    st.markdown("---")
+                    st.caption("Factory file actions")
+
+                    current_asset_path = factory_dir / selected_filename
+                    current_content = str(selected_item.get("content", "line") or "line")
+                    current_coverage = str(selected_item.get("coverage", "medium") or "medium")
+                    current_move = str(selected_item.get("move", "static") or "static")
+
+                    content_options = ["building", "line"]
+                    coverage_options = ["hero", "medium", "detail"]
+                    move_options = MOVE_TOKEN_OPTIONS
+
+                    c_move_1, c_move_2, c_move_3 = st.columns(3)
+                    with c_move_1:
+                        reclass_content = st.selectbox(
+                            "Move to content",
+                            content_options,
+                            index=content_options.index(current_content) if current_content in content_options else 1,
+                            key=f"reclass_content_{safe_slug(selected_filename)}",
+                        )
+                    with c_move_2:
+                        reclass_coverage = st.selectbox(
+                            "Move to coverage",
+                            coverage_options,
+                            index=coverage_options.index(current_coverage) if current_coverage in coverage_options else 1,
+                            key=f"reclass_coverage_{safe_slug(selected_filename)}",
+                        )
+                    with c_move_3:
+                        reclass_move = st.selectbox(
+                            "Move token",
+                            move_options,
+                            index=move_options.index(current_move) if current_move in move_options else 0,
+                            key=f"reclass_move_{safe_slug(selected_filename)}",
+                        )
+
+                    action_c1, action_c2 = st.columns(2)
+
+                    with action_c1:
+                        if st.button("Reclassify / Rename Asset", key=f"reclassify_asset_{safe_slug(selected_filename)}"):
+                            if not current_asset_path.exists():
+                                st.error(f"Asset file not found: {selected_filename}")
+                            else:
+                                ext = current_asset_path.suffix.lower() or ".mp4"
+                                next_idx = next_index_for(factory_dir, "factory", reclass_content, reclass_coverage, reclass_move, ext)
+                                new_name = build_factory_filename("factory", reclass_content, reclass_coverage, reclass_move, next_idx, ext)
+                                dst = factory_dir / new_name
+                                if dst.exists():
+                                    dst = factory_dir / f"{Path(new_name).stem}_{now_tag()}{ext}"
+
+                                current_asset_path.rename(dst)
+
+                                index_path = factory_dir / "asset_index.json"
+                                records = load_asset_index(index_path)
+                                updated_records = []
+                                replaced = False
+                                for rec in records:
+                                    if str(rec.get("filename", "")) == selected_filename:
+                                        new_rec = dict(rec)
+                                        new_rec["filename"] = dst.name
+                                        new_rec["scene"] = "factory"
+                                        new_rec["content"] = reclass_content
+                                        new_rec["coverage"] = reclass_coverage
+                                        new_rec["move"] = reclass_move
+                                        updated_records.append(new_rec)
+                                        replaced = True
+                                    else:
+                                        updated_records.append(rec)
+
+                                if not replaced:
+                                    updated_records.append(
+                                        {
+                                            "filename": dst.name,
+                                            "scene": "factory",
+                                            "content": reclass_content,
+                                            "coverage": reclass_coverage,
+                                            "move": reclass_move,
+                                        }
+                                    )
+
+                                index_path.write_text(json.dumps(updated_records, ensure_ascii=False, indent=2), encoding="utf-8")
+                                upsert_asset_record(index_path, dst)
+
+                                st.success(f"Moved {selected_filename} → {dst.name}")
+                                st.rerun()
+
+                    with action_c2:
+                        if st.button("Delete Asset", type="secondary", key=f"delete_asset_{safe_slug(selected_filename)}"):
+                            if not current_asset_path.exists():
+                                st.error(f"Asset file not found: {selected_filename}")
+                            else:
+                                current_asset_path.unlink()
+
+                                index_path = factory_dir / "asset_index.json"
+                                records = load_asset_index(index_path)
+                                updated_records = [
+                                    rec for rec in records
+                                    if str(rec.get("filename", "")) != selected_filename
+                                ]
+                                index_path.write_text(json.dumps(updated_records, ensure_ascii=False, indent=2), encoding="utf-8")
+
+                                st.success(f"Deleted {selected_filename}")
+                                st.rerun()
+
     matched_by_key: dict[tuple[str, str], list[Path]] = {}
     for f in factory_files:
         clip_key = parse_factory_filename_key(f)
@@ -1767,7 +1870,7 @@ elif rows:
 
                 move_name = st.selectbox(
                     f"Move token for {cat}_{shot}",
-                    ["static", "slide", "pushin", "follow", "orbit", "reveal"],
+                    MOVE_TOKEN_OPTIONS,
                     index=0,
                     key=f"move_token_{beat_no}_{cat}_{shot}",
                 )
