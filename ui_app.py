@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import hashlib
 import os
 import shutil
 import subprocess
@@ -1413,7 +1414,7 @@ with manual_tab:
     else:
         creative_dir = CREATIVE_ROOT / company
         creative_dir.mkdir(parents=True, exist_ok=True)
-        files = sorted(creative_dir.glob("*.yaml"))
+        files = sorted(creative_dir.rglob("*.yaml"))
         if not files:
             st.warning("No script YAML files were found for this company.")
         else:
@@ -1469,21 +1470,24 @@ if generate_btn:
                 st.caption(f"• {item}")
             if lang_check.get("sample"):
                 st.caption(f"Sample text: {lang_check['sample']}")
-
             project = str((d.get("meta", {}) or {}).get("project", "") or name_seed)
-            run_id = f"{safe_slug(project)}_{now_tag()[:15]}"
-            run_dir = output_root_path / orientation / company / run_id
-            run_dir.mkdir(parents=True, exist_ok=True)
-            layout = ensure_run_layout(run_dir)
-            internal_dir = layout["internal_dir"]
-            st.session_state["run_dir"] = str(run_dir)
+            project_slug = safe_slug(project) or safe_slug(name_seed) or "script"
+            generated_dir = CREATIVE_ROOT / company / "generated"
+            generated_dir.mkdir(parents=True, exist_ok=True)
 
-            creative_path = internal_dir / f"{run_id}.creative.yaml"
-            creative_path.write_text(creative_text, encoding="utf-8")
+            content_hash = hashlib.sha1(creative_text.encode("utf-8")).hexdigest()[:10]
+            creative_path = generated_dir / f"{project_slug}_{content_hash}.creative.yaml"
+            if not creative_path.exists():
+                creative_path.write_text(creative_text, encoding="utf-8")
+
             st.session_state["active_creative_path"] = str(creative_path)
+            st.session_state["run_dir"] = ""
+            st.session_state["compiled_out_path"] = ""
 
-            compiled_out = internal_dir / f"{run_id}.compiled.yaml"
-            st.session_state["compiled_out_path"] = str(compiled_out)
+            task_rows_json = generated_dir / f"{creative_path.stem}.shooting_rows.json"
+            task_rows_html = generated_dir / f"{creative_path.stem}.task_rows.html"
+            st.session_state["task_rows_json_path"] = str(task_rows_json)
+            st.session_state["task_rows_html_path"] = str(task_rows_html)
 
             beats = beats_from_creative(d)
             rows: list[dict] = []
@@ -1515,18 +1519,21 @@ if generate_btn:
                     row_i += 1
 
             st.session_state["shooting_rows"] = rows
-            (internal_dir / "shooting_rows.json").write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
+            task_rows_json.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
 
             if export_html:
-                (run_dir / "task_rows.html").write_text(render_html_task_table(rows), encoding="utf-8")
+                task_rows_html.write_text(render_html_task_table(rows), encoding="utf-8")
+            elif task_rows_html.exists():
+                task_rows_html.unlink()
 
             st.success(f"Generated {len(rows)} task rows.")
-            st.caption(f"Run Folder: {run_dir}")
+            st.caption(f"Script File: {creative_path}")
+            st.caption(f"Task Rows File: {task_rows_json}")
 
 rows = st.session_state.get("shooting_rows") or []
-run_dir = Path(st.session_state["run_dir"]) if st.session_state.get("run_dir") else None
+task_rows_html_path = Path(st.session_state["task_rows_html_path"]) if st.session_state.get("task_rows_html_path") else None
 
-if rows and run_dir:
+if rows:
     if storage_ready and factory_dir:
         coverage = summarize_factory_coverage(rows, factory_dir)
         total_need = coverage["total_need"]
@@ -1549,16 +1556,14 @@ if rows and run_dir:
     )
     st.dataframe([{k: r.get(k, "") for k in show_cols} for r in rows], width="stretch", hide_index=True)
 
-    if export_html:
-        html_path = run_dir / "task_rows.html"
-        if html_path.exists():
-            st.download_button(
-                "Download Printable HTML",
-                data=html_path.read_text(encoding="utf-8"),
-                file_name=html_path.name,
-                mime="text/html",
-                use_container_width=True,
-            )
+    if task_rows_html_path and task_rows_html_path.exists():
+        st.download_button(
+            "Download Printable HTML",
+            data=task_rows_html_path.read_text(encoding="utf-8"),
+            file_name=task_rows_html_path.name,
+            mime="text/html",
+            use_container_width=True,
+        )
 
 # =========================================================
 # Project Mode · Step 2
@@ -1794,12 +1799,10 @@ st.markdown("## Step 3 · Create Video")
 st.caption("Creates the final video with lightweight run logs and default 60fps output.")
 
 active_creative_path = Path(st.session_state["active_creative_path"]) if st.session_state.get("active_creative_path") else None
-run_dir = Path(st.session_state["run_dir"]) if st.session_state.get("run_dir") else None
-compiled_out = Path(st.session_state["compiled_out_path"]) if st.session_state.get("compiled_out_path") else None
 
 if not storage_ready:
     st.info("Footage storage is unavailable. Step 3 is currently disabled.")
-elif not (active_creative_path and run_dir and compiled_out and active_creative_path.exists()):
+elif not (active_creative_path and active_creative_path.exists()):
     st.info("Generate Task Rows in Step 1 first.")
 else:
     if st.button("Create Video", use_container_width=True, key="create_video"):
@@ -1807,6 +1810,17 @@ else:
         status = st.empty()
 
         try:
+            creative_name = active_creative_path.stem.replace(".creative", "")
+            run_id = f"{creative_name}_{now_tag()[:15]}"
+            run_dir = output_root_path / orientation / company / run_id
+            run_dir.mkdir(parents=True, exist_ok=True)
+            layout = ensure_run_layout(run_dir)
+            internal_dir = layout["internal_dir"]
+            compiled_out = internal_dir / f"{creative_name}.compiled.yaml"
+
+            st.session_state["run_dir"] = str(run_dir)
+            st.session_state["compiled_out_path"] = str(compiled_out)
+
             status.markdown("**Preparing Workflow…**")
             progress.progress(10)
 
@@ -1842,7 +1856,20 @@ else:
 
             if rc2 != 0:
                 progress.progress(100)
-                st.error("Video rendering failed. See _internal/render.log in the Run Folder.")
+
+                preflight_summary = None
+                for line in render_logs.splitlines():
+                    if "Timing preflight failed:" in line:
+                        preflight_summary = line.split("Timing preflight failed:", 1)[1].strip()
+                        break
+
+                if preflight_summary:
+                    status.markdown("**Timing Preflight Blocked Video Creation.**")
+                    st.error(f"Timing preflight blocked video creation: {preflight_summary}")
+                    st.info("Shorten narration or increase visual timing, then try again.")
+                else:
+                    st.error("Video rendering failed. See _internal/render.log in the Run Folder.")
+
                 raise SystemExit(0)
 
             status.markdown("**Completed.**")
@@ -1855,4 +1882,3 @@ else:
             progress.progress(100)
             st.error(f"Unexpected Error: {e}")
 
-    st.link_button("Open Run Folder", f"file://{run_dir}", use_container_width=True)
