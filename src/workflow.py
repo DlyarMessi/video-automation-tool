@@ -307,7 +307,7 @@ def build_factory_filename(scene: str, content: str, coverage: str, move: str, i
     scene = safe_slug(scene).lower()
     content = safe_slug(content).lower()
     coverage = safe_slug(coverage).lower()
-    move = safe_slug(move).lower()
+    move = safe_slug(move).lower() if str(move or "").strip() else ""
 
     core = f"factory_{scene}_{content}"
     if coverage:
@@ -324,7 +324,7 @@ def next_index_for(factory_dir: Path, scene: str, content: str, coverage: str, m
     scene = safe_slug(scene).lower()
     content = safe_slug(content).lower()
     coverage = safe_slug(coverage).lower()
-    move = safe_slug(move).lower()
+    move = safe_slug(move).lower() if str(move or "").strip() else ""
     if not ext.startswith("."):
         ext = "." + ext
 
@@ -432,9 +432,8 @@ def _shot(
     tag: str,
     vo: Optional[str] = None,
 ) -> Dict[str, Any]:
+    _ = move  # short-term demo path intentionally omits move tokens from generated source tags.
     tags = [scene, content, coverage]
-    if move:
-        tags.append(move)
     out: Dict[str, Any] = {
         "source": "next:tags:" + ",".join(tags),
         "duration": float(duration),
@@ -502,35 +501,35 @@ def compile_creative_dict(creative: Dict[str, Any]) -> Dict[str, Any]:
         subtitle = str(beat.get("subtitle") or "").strip()
         vo_text = str(beat.get("vo") or "").strip()
         visual = str(beat.get("visual") or "").strip()
-        scene = beat.get("scene") or _infer_scene_token(visual) or "factory"
+        _ = beat.get("scene") or _infer_scene_token(visual) or "factory"
+        scene = "factory"
+        content = "line"
 
         if purpose == "establish_context":
             seq.extend(
                 [
-                    _shot(scene, "line", "wide", "static", 3.0, subtitle, tag="context_wide", vo=vo_text),
-                    _shot(scene, "line", "detail", "static", 2.0, subtitle, tag="context_detail"),
+                    _shot(scene, content, "hero", "", 3.0, subtitle, tag="context_wide", vo=vo_text),
+                    _shot(scene, content, "detail", "", 2.0, subtitle, tag="context_detail"),
                 ]
             )
         elif purpose == "show_capability":
             seq.extend(
                 [
-                    _shot(scene, "automation", "wide", "slide", 3.0, subtitle, tag="automation_wide", vo=vo_text),
-                    _shot(scene, "automation", "detail", "static", 1.8, subtitle, tag="automation_detail"),
-                    _shot(scene, "automation", "medium", "pushin", 2.7, subtitle, tag="automation_medium"),
+                    _shot(scene, content, "medium", "", 3.0, subtitle, tag="automation_wide", vo=vo_text),
+                    _shot(scene, content, "detail", "", 1.8, subtitle, tag="automation_detail"),
+                    _shot(scene, content, "medium", "", 2.7, subtitle, tag="automation_medium"),
                 ]
             )
         elif purpose == "build_trust":
             seq.extend(
                 [
-                    _shot(scene, "testing", "detail", "static", 2.2, subtitle, tag="testing_detail", vo=vo_text),
-                    _shot(scene, "testing", "medium", "static", 2.8, subtitle, tag="testing_medium"),
+                    _shot(scene, content, "detail", "", 2.2, subtitle, tag="testing_detail", vo=vo_text),
+                    _shot(scene, content, "medium", "", 2.8, subtitle, tag="testing_medium"),
                 ]
             )
         elif purpose == "brand_close":
             close_sub = subtitle if subtitle else "SIGLEN"
-            extra_moves = beat.get("move")
-            move = str(extra_moves).strip() if isinstance(extra_moves, str) and extra_moves.strip() else "orbit"
-            seq.append(_shot(scene, "building", "hero", move, 4.5, close_sub, tag="hero", vo=vo_text))
+            seq.append(_shot(scene, content, "hero", "", 4.5, close_sub, tag="hero", vo=vo_text))
         else:
             seq.append(_compile_fallback_shot(beat, default_scene=scene))
 
