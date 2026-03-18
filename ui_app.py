@@ -70,6 +70,7 @@ from src.workflow import (
     summarize_factory_coverage,
     allocate_coverage_across_beats,
     parse_factory_filename_key,
+    normalize_demo_content_token,
     ensure_company_storage,
     get_storage_dirs,
     classify_orientation,
@@ -1664,7 +1665,7 @@ elif rows:
         need: dict[tuple[str, str], int] = {}
         for rr in beats_map[beat_no]:
             key = (
-                safe_slug(str(rr.get("Category", "") or "")).lower(),
+                normalize_demo_content_token(str(rr.get("Category", "") or "")),
                 normalize_demo_coverage_token(str(rr.get("Shot", "") or "")),
             )
             need[key] = need.get(key, 0) + 1

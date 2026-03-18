@@ -352,6 +352,13 @@ def next_index_for(factory_dir: Path, scene: str, content: str, coverage: str, m
     return mx + 1
 
 
+def normalize_demo_content_token(token: str) -> str:
+    normalized = safe_slug(str(token or "")).lower()
+    if normalized in {"line", "factory_line", "automation", "building", "testing", "inspection", "panel"}:
+        return "line"
+    return normalized or "line"
+
+
 def normalize_demo_coverage_token(token: str) -> str:
     normalized = safe_slug(str(token or "")).lower()
     if normalized in {"hero", "wide"} or normalized.startswith("hero_") or normalized.startswith("wide_"):
@@ -376,7 +383,7 @@ def parse_factory_filename_key(path: Path) -> tuple[str, str] | None:
         content = parts[1]
         coverage = parts[2]
 
-    content_key = safe_slug(content).lower()
+    content_key = normalize_demo_content_token(content)
     coverage_key = normalize_demo_coverage_token(coverage)
     if not content_key or not coverage_key:
         return None
@@ -417,7 +424,7 @@ def summarize_factory_coverage(rows: list[dict], factory_dir: Path) -> dict[str,
     factory_files = list_video_files(factory_dir, VIDEO_SUFFIXES)
     need_by: dict[tuple[str, str], int] = {}
     for r in rows:
-        cat = safe_slug(str(r.get("Category", "") or "")).lower()
+        cat = normalize_demo_content_token(str(r.get("Category", "") or ""))
         shot = normalize_demo_coverage_token(str(r.get("Shot", "") or ""))
         need_by[(cat, shot)] = need_by.get((cat, shot), 0) + 1
 
