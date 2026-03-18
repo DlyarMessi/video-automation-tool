@@ -67,7 +67,6 @@ from src.workflow import (
     default_seconds_for_shot,
     build_factory_filename,
     next_index_for,
-    patch_compiled_yaml,
     summarize_factory_coverage,
     allocate_coverage_across_beats,
     parse_factory_filename_key,
@@ -1482,7 +1481,6 @@ if generate_btn:
 
             st.session_state["active_creative_path"] = str(creative_path)
             st.session_state["run_dir"] = ""
-            st.session_state["compiled_out_path"] = ""
 
             task_rows_json = generated_dir / f"{creative_path.stem}.shooting_rows.json"
             task_rows_html = generated_dir / f"{creative_path.stem}.task_rows.html"
@@ -1877,32 +1875,22 @@ else:
             run_dir.mkdir(parents=True, exist_ok=True)
             layout = ensure_run_layout(run_dir)
             internal_dir = layout["internal_dir"]
-            compiled_out = internal_dir / f"{creative_name}.compiled.yaml"
 
             st.session_state["run_dir"] = str(run_dir)
-            st.session_state["compiled_out_path"] = str(compiled_out)
 
             status.markdown("**Preparing Workflow…**")
             progress.progress(10)
 
-            status.markdown("**Preparing Timeline…**")
-            progress.progress(30)
+            run_env = dict(ENV)
+            run_env["VIDEO_AUTOMATION_RUN_DIR"] = str(run_dir)
+            run_env["VIDEO_AUTOMATION_ORIENTATION"] = str(orientation)
+            run_env["VIDEO_AUTOMATION_LANG"] = str(lang_code)
+            run_env["VIDEO_AUTOMATION_MODEL"] = str(model_id)
+            run_env["VIDEO_AUTOMATION_FILTER_PRESET"] = str(filter_preset_name)
+            run_env["VIDEO_AUTOMATION_ELEVEN_PROFILE_PATH"] = str(ELEVEN_PROFILE_PATH)
 
-            cmd_compile = [sys.executable, str(SRC_MAIN)]
-            if "verbose" in locals() and verbose:
-                cmd_compile.append("-v")
-            cmd_compile += ["compile", "--creative", str(active_creative_path), "--out", str(compiled_out)]
-
-            rc, compile_logs = run_cmd_silent(cmd_compile, ENV)
-            (run_dir / "_internal" / "compile.log").write_text(compile_logs, encoding="utf-8")
-            if rc != 0:
-                progress.progress(100)
-                st.error("Timeline preparation failed. See _internal/compile.log in the Run Folder.")
-                raise SystemExit(0)
-
-            status.markdown("**Applying Render Settings…**")
-            progress.progress(50)
-            patch_compiled_yaml(compiled_out, orientation, lang_code, model_id, ELEVEN_PROFILE_PATH, filter_preset_name=filter_preset_name)
+            status.markdown("**Preparing Render Plan…**")
+            progress.progress(35)
 
             status.markdown("**Rendering Final Video…**")
             progress.progress(70)
@@ -1910,10 +1898,10 @@ else:
             cmd_run = [sys.executable, str(SRC_MAIN)]
             if "verbose" in locals() and verbose:
                 cmd_run.append("-v")
-            cmd_run += ["run", "--company", company, "--script", str(compiled_out), "--input", str(input_root_path)]
+            cmd_run += ["run", "--company", company, "--script", str(active_creative_path), "--input", str(input_root_path)]
 
-            rc2, render_logs = run_cmd_silent(cmd_run, ENV)
-            (run_dir / "_internal" / "render.log").write_text(render_logs, encoding="utf-8")
+            rc2, render_logs = run_cmd_silent(cmd_run, run_env)
+            (internal_dir / "render.log").write_text(render_logs, encoding="utf-8")
 
             if rc2 != 0:
                 progress.progress(100)

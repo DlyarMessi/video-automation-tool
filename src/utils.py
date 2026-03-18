@@ -22,6 +22,7 @@ except Exception:
 
 import subprocess
 import json
+import os
 import logging
 import random
 import re
@@ -78,6 +79,7 @@ from config import (
 
 from script_loader import load_script
 from material_index import load_asset_index, find_asset_record
+from workflow import compile_creative_dict, apply_runtime_overrides_to_production_dict
 
 logger = logging.getLogger("video_automation")
 
@@ -766,6 +768,14 @@ def _normalize_shots_from_dsl(dsl: dict) -> list:
 # Main pipeline
 # =========================
 def process_company(company_name: str, script_path: str | None = None, input_dir: str | None = None):
+    runtime_run_dir = str(os.environ.get("VIDEO_AUTOMATION_RUN_DIR", "") or "").strip()
+    runtime_orientation = str(os.environ.get("VIDEO_AUTOMATION_ORIENTATION", "") or "").strip()
+    runtime_lang = str(os.environ.get("VIDEO_AUTOMATION_LANG", "") or "").strip()
+    runtime_model = str(os.environ.get("VIDEO_AUTOMATION_MODEL", "") or "").strip()
+    runtime_filter_preset = str(os.environ.get("VIDEO_AUTOMATION_FILTER_PRESET", "clean") or "clean").strip() or "clean"
+    runtime_profile_raw = str(os.environ.get("VIDEO_AUTOMATION_ELEVEN_PROFILE_PATH", "") or "").strip()
+    runtime_profile_path = Path(runtime_profile_raw).expanduser().resolve() if runtime_profile_raw else None
+
     if company_name not in COMPANY_CONFIG:
         logger.error("未知公司：%s", company_name)
         return
@@ -800,6 +810,26 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
         project = {"output": {"filename": f"{company_name}_Final_Promo.mp4"}}
     else:
         dsl = load_script(script_file)
+
+        is_creative_script = (
+            isinstance(dsl, dict)
+            and isinstance(dsl.get("beats"), list)
+            and not isinstance(dsl.get("timeline"), list)
+            and not isinstance(dsl.get("shots"), list)
+        )
+        if is_creative_script:
+            dsl = compile_creative_dict(dsl)
+
+        if isinstance(dsl, dict):
+            dsl = apply_runtime_overrides_to_production_dict(
+                dsl,
+                orientation=runtime_orientation or None,
+                lang=runtime_lang or None,
+                model=runtime_model or None,
+                eleven_profile_path=runtime_profile_path,
+                filter_preset_name=runtime_filter_preset,
+            )
+
         project = dsl.get("project", {}) if isinstance(dsl.get("project", {}), dict) else {}
         dsl_shots = _normalize_shots_from_dsl(dsl)
         if not dsl_shots:
@@ -838,7 +868,13 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
 
     # ✅ output root = output_videos/{portrait|landscape}
     out_root = _resolve_output_root(orientation)
-    if script_file.parent.name == "_internal":
+    if runtime_run_dir:
+        output_dir = Path(runtime_run_dir).expanduser().resolve()
+        output_dir.mkdir(parents=True, exist_ok=True)
+        internal_dir = output_dir / "_internal"
+        internal_dir.mkdir(parents=True, exist_ok=True)
+        run_name = output_dir.name
+    elif script_file.parent.name == "_internal":
         internal_dir = script_file.parent
         output_dir = internal_dir.parent
         run_name = output_dir.name
