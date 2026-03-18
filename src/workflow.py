@@ -601,28 +601,28 @@ def compile_creative_dict(creative: Dict[str, Any]) -> Dict[str, Any]:
         if purpose == "establish_context":
             seq.extend(
                 [
-                    _shot(scene, "building", "hero", "", 3.2, subtitle, tag="context_building_hero", vo=vo_text),
-                    _shot(scene, "line", "hero", "", 2.2, subtitle, tag="context_line_hero"),
+                    _shot(scene, "building", "hero", "", 3.6, subtitle, tag="context_building_hero", vo=vo_text),
+                    _shot(scene, "line", "hero", "", 2.4, subtitle, tag="context_line_hero"),
                 ]
             )
         elif purpose == "show_capability":
             seq.extend(
                 [
-                    _shot(scene, "line", "medium", "", 3.0, subtitle, tag="capability_medium", vo=vo_text),
-                    _shot(scene, "line", "detail", "", 1.8, subtitle, tag="capability_detail"),
-                    _shot(scene, "line", "medium", "", 2.6, subtitle, tag="capability_medium_2"),
+                    _shot(scene, "line", "medium", "", 3.4, subtitle, tag="capability_medium_open", vo=vo_text),
+                    _shot(scene, "line", "detail", "", 1.9, subtitle, tag="capability_detail_bridge"),
+                    _shot(scene, "line", "medium", "", 3.0, subtitle, tag="capability_medium_close"),
                 ]
             )
         elif purpose == "build_trust":
             seq.extend(
                 [
-                    _shot(scene, primary_content, "detail", "", 2.3, subtitle, tag="trust_detail", vo=vo_text),
-                    _shot(scene, primary_content, "medium", "", 2.7, subtitle, tag="trust_medium"),
+                    _shot(scene, primary_content, "medium", "", 3.1, subtitle, tag="trust_medium", vo=vo_text),
+                    _shot(scene, primary_content, "detail", "", 2.1, subtitle, tag="trust_detail"),
                 ]
             )
         elif purpose == "brand_close":
             close_sub = subtitle if subtitle else "SIGLEN"
-            seq.append(_shot(scene, "building", "hero", "", 4.4, close_sub, tag="brand_hero", vo=vo_text))
+            seq.append(_shot(scene, "building", "hero", "", 4.8, close_sub, tag="brand_hero", vo=vo_text))
         else:
             seq.append(_compile_fallback_shot(beat, default_scene=scene))
 

@@ -345,6 +345,9 @@ class MaterialPicker:
         self.used_in_run: set[str] = set()
         self.recently_used: set[str] = _recently_used_set()
         self.asset_index_path = _asset_index_for_input_dir(input_dir)
+        self.last_picked_path: str = ""
+        self.last_role: str = ""
+        self.last_continuity_group: str = ""
 
         video_exts = {".mp4", ".mov", ".mkv", ".m4v"}
         for p in input_dir.rglob("*"):
@@ -395,18 +398,85 @@ class MaterialPicker:
             return 9
         return 2
 
+    def _asset_meta(self, p: Path) -> Dict[str, Any]:
+        rec = find_asset_record(self.asset_index_path, p.name)
+        if not isinstance(rec, dict):
+            rec = {}
+        return {
+            "quality_status": str(rec.get("quality_status", "") or "").strip().lower(),
+            "hero_safe": bool(rec.get("hero_safe", False)),
+            "intro_safe": bool(rec.get("intro_safe", False)),
+            "outro_safe": bool(rec.get("outro_safe", False)),
+            "continuity_group": str(rec.get("continuity_group", "") or "").strip(),
+        }
+
+    def _selector_role(self, context: Optional[Dict[str, Any]]) -> str:
+        if not isinstance(context, dict):
+            return ""
+        tag = str(context.get("tag", "") or "").strip().lower()
+        if tag.startswith("context_") or "establish" in tag:
+            return "establish_context"
+        if tag.startswith("capability_") or "capability" in tag:
+            return "show_capability"
+        if tag.startswith("trust_") or "trust" in tag:
+            return "build_trust"
+        if tag.startswith("brand_") or "brand" in tag or "close" in tag:
+            return "brand_close"
+        return ""
+
+    def _transition_rank(self, p: Path, context: Optional[Dict[str, Any]] = None) -> int:
+        score = 0
+        meta = self._asset_meta(p)
+        role = self._selector_role(context)
+
+        # never prefer the exact same file twice in a row if alternatives exist
+        if self.last_picked_path and str(p) == self.last_picked_path:
+            score += 9
+
+        # role-aware soft preferences
+        if role == "establish_context":
+            if not meta["intro_safe"]:
+                score += 2
+            if not meta["hero_safe"]:
+                score += 1
+
+        elif role == "brand_close":
+            if not meta["outro_safe"]:
+                score += 3
+            if not meta["hero_safe"]:
+                score += 2
+
+        elif role == "build_trust":
+            if meta["quality_status"] and meta["quality_status"] != "approved":
+                score += 1
+
+        # continuity is a preference, not a law
+        continuity_group = meta["continuity_group"]
+        if (
+            role
+            and self.last_role
+            and role == self.last_role
+            and continuity_group
+            and self.last_continuity_group
+            and continuity_group == self.last_continuity_group
+        ):
+            score -= 1
+
+        return score
+
     def _cooldown_rank(self, p: Path) -> int:
         return 1 if str(p) in self.recently_used else 0
 
     def _run_used_rank(self, p: Path) -> int:
         return 1 if str(p) in self.used_in_run else 0
 
-    def _rank_candidates(self, candidates: List[Path]) -> List[Path]:
+    def _rank_candidates(self, candidates: List[Path], context: Optional[Dict[str, Any]] = None) -> List[Path]:
         ranked = sorted(
             candidates,
             key=lambda p: (
                 self._run_used_rank(p),
                 self._cooldown_rank(p),
+                self._transition_rank(p, context),
                 self._quality_rank(p),
                 str(p),
             ),
@@ -427,14 +497,19 @@ class MaterialPicker:
 
         return candidates
 
-    def _choose_candidate(self, candidates: List[Path], rotate: bool = False) -> Optional[Path]:
+    def _choose_candidate(
+        self,
+        candidates: List[Path],
+        rotate: bool = False,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Path]:
         if not candidates:
             return None
 
         preferred = self._prefer_fresh_candidates(candidates)
-        ranked = self._rank_candidates(preferred) if preferred else []
+        ranked = self._rank_candidates(preferred, context=context) if preferred else []
         if not ranked:
-            ranked = self._rank_candidates(candidates)
+            ranked = self._rank_candidates(candidates, context=context)
 
         if not ranked:
             return None
@@ -446,15 +521,21 @@ class MaterialPicker:
             chosen = ranked[0]
 
         self.used_in_run.add(str(chosen))
+
+        meta = self._asset_meta(chosen)
+        self.last_picked_path = str(chosen)
+        self.last_role = self._selector_role(context)
+        self.last_continuity_group = str(meta.get("continuity_group", "") or "").strip()
+
         return chosen
 
-    def pick(self, spec: str) -> Optional[Path]:
+    def pick(self, spec: str, context: Optional[Dict[str, Any]] = None) -> Optional[Path]:
         if not self.pool:
             return None
 
         s = (spec or "").strip()
         if not s:
-            return self._choose_candidate(self.pool, rotate=True)
+            return self._choose_candidate(self.pool, rotate=True, context=context)
 
         p = Path(s)
         if p.is_absolute() and p.exists():
@@ -512,12 +593,12 @@ class MaterialPicker:
             return None
 
         if mode == "random":
-            return self._choose_candidate(candidates, rotate=True)
+            return self._choose_candidate(candidates, rotate=True, context=context)
 
         if mode == "next":
-            return self._choose_candidate(candidates, rotate=True)
+            return self._choose_candidate(candidates, rotate=True, context=context)
 
-        return self._choose_candidate(candidates, rotate=False)
+        return self._choose_candidate(candidates, rotate=False, context=context)
 
 
 # =========================
@@ -974,7 +1055,7 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
             if not isinstance(s, dict):
                 continue
             source_spec = str(s.get("source") or s.get("material") or "")
-            src_path = picker.pick(source_spec)
+            src_path = picker.pick(source_spec, context=s)
             if not src_path:
                 logger.error("找不到素材：%r", source_spec)
                 return
@@ -1103,10 +1184,10 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
                     font_name = font_path.stem if font_path else "Arial"
 
                 is_landscape = str(fmt or "").startswith("landscape")
-                default_font_size = 60 if is_landscape else 48
-                default_outline = 3 if is_landscape else 2
+                default_font_size = 60 if is_landscape else 58
+                default_outline = 3 if is_landscape else 3
                 default_shadow = 0
-                default_margin_v = 82 if is_landscape else 140
+                default_margin_v = 82 if is_landscape else 168
 
                 font_size = int(project_subtitle_style.get("font_size", default_font_size) or default_font_size)
                 outline = int(project_subtitle_style.get("outline", default_outline) or default_outline)
