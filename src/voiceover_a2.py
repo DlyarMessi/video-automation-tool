@@ -18,6 +18,11 @@ DEFAULT_WARN_OVERRUN_SECONDS = 0.75
 DEFAULT_FAIL_OVERRUN_SECONDS = 3.0
 DEFAULT_FAIL_OVERRUN_RATIO = 0.50
 
+DEFAULT_PREFLIGHT_WARN_OVERRUN_SECONDS = 2.0
+DEFAULT_PREFLIGHT_FAIL_OVERRUN_SECONDS = 8.0
+DEFAULT_PREFLIGHT_WARN_OVERRUN_RATIO = 0.10
+DEFAULT_PREFLIGHT_FAIL_OVERRUN_RATIO = 0.35
+
 
 @dataclass
 class VOEvent:
@@ -44,6 +49,24 @@ class VOSchedulingWarning:
 
 def _tokenize_semantic_text(text: str) -> set[str]:
     return {tok for tok in re.findall(r"[a-z0-9']+", (text or "").lower()) if len(tok) >= 3}
+
+
+def _estimate_vo_text_duration(text: str, language: str = "") -> float:
+    """
+    Cheap preflight estimate to avoid wasting TTS/render on obviously impossible scripts.
+    English-ish text uses word rate; non-space-heavy text falls back to char rate.
+    """
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return 0.0
+
+    words = re.findall(r"[A-Za-z0-9']+", cleaned)
+    if words:
+        # ~144 wpm baseline, conservative enough for demo narration planning.
+        return max(len(words) / 2.4, 0.8)
+
+    # Fallback for non-space-heavy scripts.
+    return max(len(cleaned) / 7.5, 0.8)
 
 
 def validate_subtitle_policy(events: List[VOEvent]) -> List[VOSchedulingWarning]:
@@ -114,7 +137,7 @@ def extract_vo_events(
                         start=t,
                         requested_start=t,
                         requested_duration=max(dur, 0.0),
-                        duration=0.0,  # 稍后由音频长度决定
+                        duration=0.0,
                         vo_text=vo_clean,
                         subtitle_text=str(subtitle_text).strip(),
                         language=str(s.get("vo_language") or default_language),
@@ -192,6 +215,105 @@ def schedule_vo_events(
         prev_end = actual_start + actual_duration
 
     return warnings
+
+
+def preflight_vo_timing(
+    project: dict,
+    dsl_shots: List[Dict[str, Any]],
+    total_duration: float,
+) -> Dict[str, Any]:
+    """
+    Cheap timing preflight before spending TTS credits / render compute.
+    Returns green / yellow / red status.
+    """
+    audio_cfg = project.get("audio", {}) if isinstance(project.get("audio", {}), dict) else {}
+    vo_cfg = audio_cfg.get("voiceover", {}) if isinstance(audio_cfg.get("voiceover", {}), dict) else {}
+
+    default_language = str(vo_cfg.get("language", "en-US"))
+    default_voice = str(vo_cfg.get("voice", "") or "")
+    default_volume = float(vo_cfg.get("volume", 1.0))
+
+    events = extract_vo_events(
+        dsl_shots,
+        default_language,
+        default_voice,
+        default_volume,
+    )
+
+    if not events:
+        return {
+            "status": "green",
+            "planned_visual_duration": float(total_duration or 0.0),
+            "estimated_narration_duration": 0.0,
+            "overrun_seconds": 0.0,
+            "warnings": [],
+            "summary": "Timing preflight OK: no narration events found.",
+        }
+
+    for ev in events:
+        ev.duration = _estimate_vo_text_duration(ev.vo_text, ev.language)
+
+    warnings = schedule_vo_events(events)
+    estimated_timeline_duration = max((float(ev.start) + float(ev.duration) for ev in events), default=0.0)
+    planned_visual_duration = float(total_duration or 0.0)
+    overrun_seconds = max(0.0, estimated_timeline_duration - planned_visual_duration)
+    overrun_ratio = (overrun_seconds / planned_visual_duration) if planned_visual_duration > 0 else 0.0
+
+    status = "green"
+
+    if overrun_seconds > 0:
+        if (
+            overrun_seconds >= DEFAULT_PREFLIGHT_FAIL_OVERRUN_SECONDS
+            or overrun_ratio >= DEFAULT_PREFLIGHT_FAIL_OVERRUN_RATIO
+        ):
+            status = "red"
+            warnings.append(
+                VOSchedulingWarning(
+                    code="vo_preflight_red",
+                    message=(
+                        "Timing preflight failed: estimated narration exceeds planned visual pacing "
+                        f"by {overrun_seconds:.2f}s (visual={planned_visual_duration:.2f}s, "
+                        f"estimated narration={estimated_timeline_duration:.2f}s)."
+                    ),
+                    event_index=0,
+                    delta_seconds=round(overrun_seconds, 3),
+                )
+            )
+        elif (
+            overrun_seconds >= DEFAULT_PREFLIGHT_WARN_OVERRUN_SECONDS
+            or overrun_ratio >= DEFAULT_PREFLIGHT_WARN_OVERRUN_RATIO
+        ):
+            status = "yellow"
+            warnings.append(
+                VOSchedulingWarning(
+                    code="vo_preflight_yellow",
+                    message=(
+                        "Timing preflight warning: estimated narration exceeds planned visual pacing "
+                        f"by {overrun_seconds:.2f}s (visual={planned_visual_duration:.2f}s, "
+                        f"estimated narration={estimated_timeline_duration:.2f}s). "
+                        "Script density may need reduction or visuals may need extension."
+                    ),
+                    event_index=0,
+                    delta_seconds=round(overrun_seconds, 3),
+                )
+            )
+
+    if status == "green":
+        summary = (
+            "Timing preflight OK: planned visual pacing "
+            f"{planned_visual_duration:.2f}s, estimated narration {estimated_timeline_duration:.2f}s."
+        )
+    else:
+        summary = warnings[-1].message
+
+    return {
+        "status": status,
+        "planned_visual_duration": planned_visual_duration,
+        "estimated_narration_duration": round(estimated_timeline_duration, 3),
+        "overrun_seconds": round(overrun_seconds, 3),
+        "warnings": [asdict(w) for w in warnings],
+        "summary": summary,
+    }
 
 
 def build_voiceover_track(

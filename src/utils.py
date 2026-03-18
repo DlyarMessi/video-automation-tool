@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from voiceover_a2 import build_voiceover_track
+from voiceover_a2 import build_voiceover_track, preflight_vo_timing
 from subtitle_builder import build_subtitles_from_vo_events
 
 
@@ -876,6 +876,17 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
         for shot in dsl_shots
         if isinstance(shot, dict)
     )
+
+    preflight = preflight_vo_timing(
+        project,
+        dsl_shots,
+        total_duration=planned_visual_duration,
+    )
+    for warning in preflight.get("warnings", []):
+        logger.warning("%s", warning.get("message", warning))
+    if preflight.get("status") == "red":
+        raise ValueError(preflight.get("summary") or "Timing preflight failed.")
+
     vo_result = build_voiceover_track(
         project,
         dsl_shots,
