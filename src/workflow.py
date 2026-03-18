@@ -465,6 +465,36 @@ def _infer_scene_token(visual: str) -> str:
     return "factory"
 
 
+def _infer_demo_content_token(purpose: str, visual: str) -> str:
+    """
+    Short-term stable compile mapping for the current real factory pool.
+
+    We intentionally keep the content family constrained to the pool we can
+    reliably serve today: building / line.
+    """
+    v = (visual or "").strip().lower()
+    p = (purpose or "").strip().lower()
+
+    building_hints = {
+        "building", "facade", "exterior", "showroom", "villa",
+        "elevator", "lift", "product", "hero", "lobby",
+    }
+    line_hints = {
+        "factory", "line", "automation", "machine", "assembly",
+        "production", "inspection", "testing", "certificate", "award",
+        "workshop",
+    }
+
+    if any(tok in v for tok in building_hints):
+        return "building"
+    if any(tok in v for tok in line_hints):
+        return "line"
+
+    if p in {"establish_context", "brand_close"}:
+        return "building"
+    return "line"
+
+
 def _shot(
     scene: str,
     content: str,
@@ -475,7 +505,7 @@ def _shot(
     tag: str,
     vo: Optional[str] = None,
 ) -> Dict[str, Any]:
-    _ = move  # short-term demo path intentionally omits move tokens from generated source tags.
+    _ = move  # current stable path omits move tokens from generated source tags.
     tags = [scene, content, coverage]
     out: Dict[str, Any] = {
         "source": "next:tags:" + ",".join(tags),
@@ -521,9 +551,11 @@ def _compile_fallback_shot(beat: Dict[str, Any], default_scene: str) -> Dict[str
         return out2
 
     visual = str(beat.get("visual") or "").strip()
+    purpose = _normalize_purpose(str(beat.get("purpose") or "").strip())
+    content = _infer_demo_content_token(purpose, visual)
     dur3 = beat.get("duration_hint")
     return {
-        "source": f"next:tags:{default_scene},generic",
+        "source": f"next:tags:{default_scene},{content},hero",
         "notes": visual if visual else None,
         "duration": float(dur3) if isinstance(dur3, (int, float)) else 3.0,
         "subtitle": subtitle or None,
@@ -544,35 +576,36 @@ def compile_creative_dict(creative: Dict[str, Any]) -> Dict[str, Any]:
         subtitle = str(beat.get("subtitle") or "").strip()
         vo_text = str(beat.get("vo") or "").strip()
         visual = str(beat.get("visual") or "").strip()
+
         _ = beat.get("scene") or _infer_scene_token(visual) or "factory"
         scene = "factory"
-        content = "line"
+        primary_content = _infer_demo_content_token(purpose, visual)
 
         if purpose == "establish_context":
             seq.extend(
                 [
-                    _shot(scene, content, "hero", "", 3.0, subtitle, tag="context_wide", vo=vo_text),
-                    _shot(scene, content, "detail", "", 2.0, subtitle, tag="context_detail"),
+                    _shot(scene, "building", "hero", "", 3.2, subtitle, tag="context_building_hero", vo=vo_text),
+                    _shot(scene, "line", "hero", "", 2.2, subtitle, tag="context_line_hero"),
                 ]
             )
         elif purpose == "show_capability":
             seq.extend(
                 [
-                    _shot(scene, content, "medium", "", 3.0, subtitle, tag="automation_wide", vo=vo_text),
-                    _shot(scene, content, "detail", "", 1.8, subtitle, tag="automation_detail"),
-                    _shot(scene, content, "medium", "", 2.7, subtitle, tag="automation_medium"),
+                    _shot(scene, "line", "medium", "", 3.0, subtitle, tag="capability_medium", vo=vo_text),
+                    _shot(scene, "line", "detail", "", 1.8, subtitle, tag="capability_detail"),
+                    _shot(scene, "line", "medium", "", 2.6, subtitle, tag="capability_medium_2"),
                 ]
             )
         elif purpose == "build_trust":
             seq.extend(
                 [
-                    _shot(scene, content, "detail", "", 2.2, subtitle, tag="testing_detail", vo=vo_text),
-                    _shot(scene, content, "medium", "", 2.8, subtitle, tag="testing_medium"),
+                    _shot(scene, primary_content, "detail", "", 2.3, subtitle, tag="trust_detail", vo=vo_text),
+                    _shot(scene, primary_content, "medium", "", 2.7, subtitle, tag="trust_medium"),
                 ]
             )
         elif purpose == "brand_close":
             close_sub = subtitle if subtitle else "SIGLEN"
-            seq.append(_shot(scene, content, "hero", "", 4.5, close_sub, tag="hero", vo=vo_text))
+            seq.append(_shot(scene, "building", "hero", "", 4.4, close_sub, tag="brand_hero", vo=vo_text))
         else:
             seq.append(_compile_fallback_shot(beat, default_scene=scene))
 

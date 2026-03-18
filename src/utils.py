@@ -415,17 +415,48 @@ class MaterialPicker:
         )
         return ranked
 
+    def _prefer_fresh_candidates(self, candidates: List[Path]) -> List[Path]:
+        if not candidates:
+            return candidates
+
+        unused_in_run = [p for p in candidates if str(p) not in self.used_in_run]
+        if unused_in_run:
+            candidates = unused_in_run
+
+        not_recent = [p for p in candidates if str(p) not in self.recently_used]
+        if not_recent:
+            candidates = not_recent
+
+        return candidates
+
+    def _choose_candidate(self, candidates: List[Path], rotate: bool = False) -> Optional[Path]:
+        if not candidates:
+            return None
+
+        preferred = self._prefer_fresh_candidates(candidates)
+        ranked = self._rank_candidates(preferred) if preferred else []
+        if not ranked:
+            ranked = self._rank_candidates(candidates)
+
+        if not ranked:
+            return None
+
+        if rotate and len(ranked) > 1:
+            chosen = ranked[self._idx % len(ranked)]
+            self._idx += 1
+        else:
+            chosen = ranked[0]
+
+        self.used_in_run.add(str(chosen))
+        return chosen
+
     def pick(self, spec: str) -> Optional[Path]:
         if not self.pool:
             return None
 
         s = (spec or "").strip()
         if not s:
-            ranked = self._rank_candidates(self.pool)
-            chosen = ranked[0] if ranked else None
-            if chosen:
-                self.used_in_run.add(str(chosen))
-            return chosen
+            return self._choose_candidate(self.pool, rotate=True)
 
         p = Path(s)
         if p.is_absolute() and p.exists():
@@ -479,24 +510,16 @@ class MaterialPicker:
             if not candidates:
                 candidates = self.pool
 
-        candidates = self._rank_candidates(candidates)
         if not candidates:
             return None
 
         if mode == "random":
-            chosen = candidates[0]
-            self.used_in_run.add(str(chosen))
-            return chosen
+            return self._choose_candidate(candidates, rotate=True)
 
         if mode == "next":
-            chosen = candidates[self._idx % len(candidates)]
-            self._idx += 1
-            self.used_in_run.add(str(chosen))
-            return chosen
+            return self._choose_candidate(candidates, rotate=True)
 
-        chosen = candidates[0]
-        self.used_in_run.add(str(chosen))
-        return chosen
+        return self._choose_candidate(candidates, rotate=False)
 
 
 # =========================
@@ -589,18 +612,24 @@ def burn_subtitles_ffmpeg(
     shadow: int = 0,
     margin_v: int = 140,
 ):
-    PLAY_RES_X = 1080
-    PLAY_RES_Y = 1920
+    try:
+        PLAY_RES_X, PLAY_RES_Y = [int(part) for part in str(original_size).lower().split("x", 1)]
+    except Exception:
+        PLAY_RES_X, PLAY_RES_Y = 1080, 1920
 
     style = (
         f"FontName={font_name},"
         f"FontSize={font_size},"
         f"PrimaryColour=&H00FFFFFF,"
-        f"OutlineColour=&H00000000,"
+        f"OutlineColour=&H00101010,"
         f"BorderStyle=1,"
         f"Outline={outline},"
         f"Shadow={shadow},"
+        f"Bold=1,"
+        f"Spacing=0.2,"
         f"Alignment=2,"
+        f"MarginL=80,"
+        f"MarginR=80,"
         f"MarginV={margin_v},"
         f"PlayResX={PLAY_RES_X},"
         f"PlayResY={PLAY_RES_Y}"
@@ -804,12 +833,20 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
     orientation = _orientation_from_format(str(fmt) if fmt else None)
 
     # ✅ normalize run_name (prevents *.compiled folder)
+    # ✅ normalize run_name (prevents *.compiled folder)
     run_name = _normalize_run_name(script_file.stem)
 
     # ✅ output root = output_videos/{portrait|landscape}
     out_root = _resolve_output_root(orientation)
-    output_dir = out_root / company_name / run_name
-    output_dir.mkdir(parents=True, exist_ok=True)
+    if script_file.parent.name == "_internal":
+        internal_dir = script_file.parent
+        output_dir = internal_dir.parent
+        run_name = output_dir.name
+    else:
+        output_dir = out_root / company_name / run_name
+        output_dir.mkdir(parents=True, exist_ok=True)
+        internal_dir = output_dir / "_internal"
+        internal_dir.mkdir(parents=True, exist_ok=True)
 
     # final output name
     out_name = out_cfg.get("filename") if isinstance(out_cfg, dict) else None
@@ -817,7 +854,7 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
         out_name = "output.mp4"
     mp4_path = output_dir / out_name
 
-    timeline_base = output_dir / "timeline"
+    timeline_base = internal_dir / "timeline"
 
     # ---- canvas options ----
     canvas = None
@@ -870,7 +907,7 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
     # =========================
     # ✅ Phase 0: VO（只做一次）
     # =========================
-    vo_cache = output_dir / "cache_tts"
+    vo_cache = internal_dir / "cache_tts"
     planned_visual_duration = sum(
         float((shot or {}).get("duration", 0) or 0)
         for shot in dsl_shots
@@ -992,7 +1029,7 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
         if tracks:
             final_video = final_video.with_audio(CompositeAudioClip(tracks))
 
-        tmp_mp4 = output_dir / "_render_tmp.mp4"
+        tmp_mp4 = internal_dir / "_render_tmp.mp4"
         logger.info("导出临时 MP4（无字幕）：%s", tmp_mp4)
 
         final_video.write_videofile(
@@ -1002,7 +1039,7 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
             audio_codec=AUDIO_CODEC,
             preset=PRESET,
             threads=THREADS,
-            temp_audiofile=str(output_dir / f"_temp_{company_name}.m4a"),
+            temp_audiofile=str(internal_dir / f"_temp_{company_name}.m4a"),
             remove_temp=True,
         )
 
@@ -1033,10 +1070,16 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
                     font_path = Path(st.get("font", FONT_PATH))
                     font_name = font_path.stem if font_path else "Arial"
 
-                font_size = int(project_subtitle_style.get("font_size", 48) or 48)
-                outline = int(project_subtitle_style.get("outline", 2) or 2)
-                shadow = int(project_subtitle_style.get("shadow", 0) or 0)
-                margin_v = int(project_subtitle_style.get("bottom_margin", 140) or 140)
+                is_landscape = str(fmt or "").startswith("landscape")
+                default_font_size = 60 if is_landscape else 48
+                default_outline = 3 if is_landscape else 2
+                default_shadow = 0
+                default_margin_v = 82 if is_landscape else 140
+
+                font_size = int(project_subtitle_style.get("font_size", default_font_size) or default_font_size)
+                outline = int(project_subtitle_style.get("outline", default_outline) or default_outline)
+                shadow = int(project_subtitle_style.get("shadow", default_shadow) or default_shadow)
+                margin_v = int(project_subtitle_style.get("bottom_margin", default_margin_v) or default_margin_v)
 
                 burn_subtitles_ffmpeg(
                     video_in=tmp_mp4,

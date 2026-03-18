@@ -1549,12 +1549,39 @@ if rows:
     m2.metric("Ready", total_ready)
     m3.metric("Missing", total_missing)
 
+    with st.expander("How the current demo categories work", expanded=False):
+        st.markdown(
+            "- **Exterior / Product Hero** = opening / closing hero visuals\n"
+            "- **Factory Process** = production, automation, workflow coverage\n"
+            "- **Hero / Establishing** = strongest opening or closing visual\n"
+            "- **Medium Shot** = stable process support visual\n"
+            "- **Detail Close-up** = machine, hand, control, or inspection detail"
+        )
+
     show_cols = (
         ["Row", "Scene", "Shot", "Seconds", "Movement", "Notes"]
         if compact_view
         else ["Row", "Beat", "Category", "Scene", "Shot", "Seconds", "Movement", "Notes"]
     )
-    st.dataframe([{k: r.get(k, "") for k in show_cols} for r in rows], width="stretch", hide_index=True)
+
+    display_rows = []
+    for r in rows:
+        row_view = {k: r.get(k, "") for k in show_cols}
+        if "Category" in row_view:
+            row_view["Category"] = {
+                "building": "Exterior / Product Hero",
+                "line": "Factory Process",
+            }.get(str(r.get("Category", "")).strip().lower(), str(r.get("Category", "")).replace("_", " ").title())
+        if "Shot" in row_view:
+            row_view["Shot"] = {
+                "hero": "Hero / Establishing",
+                "medium": "Medium Shot",
+                "detail": "Detail Close-up",
+                "wide": "Wide / Establishing",
+            }.get(str(r.get("Shot", "")).strip().lower(), str(r.get("Shot", "")).replace("_", " ").title())
+        display_rows.append(row_view)
+
+    st.dataframe(display_rows, width="stretch", hide_index=True)
 
     if task_rows_html_path and task_rows_html_path.exists():
         st.download_button(
@@ -1687,6 +1714,15 @@ elif rows:
             need = beat_needs[beat_idx]
             beat_status = beat_ready_missing[beat_idx]
 
+            beat_hint = {
+                "establish_context": "This beat usually wants opening context and a strong establishing visual.",
+                "show_capability": "This beat usually wants process or automation visuals that show how the system works.",
+                "build_trust": "This beat usually wants proof, testing, inspection, certificate, or supporting detail visuals.",
+                "brand_close": "This beat usually wants a strong closing hero visual.",
+            }.get(str(beat_title or "").strip().lower(), "")
+            if beat_hint:
+                st.caption(beat_hint)
+
             for (cat, shot), n_need in need.items():
                 scene_name = "factory"
                 content_name = cat
@@ -1696,7 +1732,32 @@ elif rows:
                 matched = matched_by_key.get((cat, shot), [])
                 ready, missing = beat_status.get((cat, shot), (0, int(n_need)))
 
-                st.markdown(f"**{cat.upper()} · {shot.upper()}** — required {n_need}, ready {ready}, missing {missing}")
+                friendly_content = {
+                    "building": "Exterior / Product Hero",
+                    "line": "Factory Process",
+                }.get(str(cat or "").strip().lower(), str(cat or "").replace("_", " ").title())
+
+                friendly_shot = {
+                    "hero": "Hero / Establishing",
+                    "medium": "Medium Shot",
+                    "detail": "Detail Close-up",
+                    "wide": "Wide / Establishing",
+                }.get(str(shot or "").strip().lower(), str(shot or "").replace("_", " ").title())
+
+                friendly_label = f"{friendly_content} · {friendly_shot}"
+                st.markdown(f"**{friendly_label}** — required {n_need}, ready {ready}, missing {missing}")
+
+                hint = {
+                    ("building", "hero"): "Used for opening or closing hero visuals. Best fit: exterior, showroom, villa, or product hero shot.",
+                    ("line", "hero"): "Used for stronger factory overview or line establishing visuals.",
+                    ("line", "medium"): "Used for process / automation support shots. Best fit: stable machine or workflow medium shot.",
+                    ("line", "detail"): "Used for close process detail. Best fit: machine action, hands, controls, or inspection detail.",
+                }.get(
+                    (str(cat or "").strip().lower(), str(shot or "").strip().lower()),
+                    "Used as a supporting visual slot for this beat."
+                )
+                st.caption(hint)
+                st.caption(f"Saved into pool as: factory_{scene_name}_{content_name}_{coverage_name}_XX")
 
                 if show_matches and matched:
                     st.code("\n".join([p.name for p in matched[:20]]), language="text")
