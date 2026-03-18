@@ -1,41 +1,34 @@
-# src/subtitle_builder.py
-from typing import List, Dict
+from typing import Dict, List
 
-def build_subtitles_from_vo_events(vo_events) -> List[Dict]:
+
+def build_subtitles_from_vo_events(vo_events, min_gap: float = 0.0) -> List[Dict]:
     """
-    ✅ 唯一权威字幕生成器（定版）
-    - MIN_GAP 真实生效，避免最后两句太赶/视觉重叠
-    - 保证 start < end
+    Build subtitle segments directly from the corrected VO schedule.
     """
-    MIN_GAP = 0.25
     segments: List[Dict] = []
-    prev_end = None
+    prev_end = 0.0
+    min_visible = max(float(min_gap or 0.0), 0.2)
 
     for i, ev in enumerate(vo_events, 1):
-        start = float(ev.start)
-        end = float(ev.start + ev.duration)
+        start = max(float(getattr(ev, "start", 0.0) or 0.0), prev_end)
+        duration = max(float(getattr(ev, "duration", 0.0) or 0.0), min_visible)
+        end = start + duration
 
-        # ✅ 呼吸间隔
-        if prev_end is not None and start < prev_end + MIN_GAP:
-            start = prev_end + MIN_GAP
-            end = start + float(ev.duration)
-
-        # ✅ 防御：至少 0.2s
-        if end <= start:
-            end = start + 0.2
-
-        text = (ev.subtitle_text or "").strip() or (ev.vo_text or "").strip()
+        text = (getattr(ev, "subtitle_text", "") or "").strip() or (getattr(ev, "vo_text", "") or "").strip()
         if text:
-            segments.append({
-                "index": i,
-                "id": f"vo_{i}",
-                "source": "",
-                "start": round(start, 3),
-                "end": round(end, 3),
-                "duration": round(end - start, 3),
-                "text": text,
-                "style": "default",
-            })
+            segments.append(
+                {
+                    "index": i,
+                    "id": f"vo_{i}",
+                    "source": "",
+                    "start": round(start, 3),
+                    "end": round(end, 3),
+                    "duration": round(end - start, 3),
+                    "text": text,
+                    "style": "default",
+                    "note": getattr(ev, "schedule_note", "") or "",
+                }
+            )
 
         prev_end = end
 
