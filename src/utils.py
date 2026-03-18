@@ -925,24 +925,7 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
             clip = add_watermark(clip, company_name)
 
             # ✅ 强制竖屏满屏 Crop to Fill（保留你的逻辑）
-            TARGET_W, TARGET_H = 1080, 1920
-            src_ratio = clip.w / clip.h
-            target_ratio = TARGET_W / TARGET_H
-            if abs(src_ratio - target_ratio) > 0.01:
-                if src_ratio > target_ratio:
-                    new_w = int(clip.h * target_ratio)
-                    x1 = (clip.w - new_w) // 2
-                    clip = clip.crop(x1=x1, y1=0, width=new_w, height=clip.h)
-                else:
-                    new_h = int(clip.w / target_ratio)
-                    y1 = (clip.h - new_h) // 2
-                    clip = clip.crop(x1=0, y1=y1, width=clip.w, height=new_h)
-
-            if hasattr(clip, "resized"):
-                clip = clip.resized((TARGET_W, TARGET_H))
-            else:
-                clip = clip.with_effects([vfx.Resize((TARGET_W, TARGET_H))])
-
+            # sizing is already handled by fit_to_canvas(clip, canvas, fit_mode)
             final_clips.append(clip)
             current_t += float(clip.duration)
 
