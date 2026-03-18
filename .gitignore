@@ -52,3 +52,5 @@ fix_*.sh
 __pycache__/
 */__pycache__/
 */*/__pycache__/
+_debug_local/
+creative_scripts/*/generated/
