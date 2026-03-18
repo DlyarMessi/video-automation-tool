@@ -16,6 +16,7 @@ from typing import Optional
 from config import DATA_DIR, INPUT_DIR, OUTPUT_DIR, SCRIPTS_DIR, COMPANY_CONFIG
 from utils import process_company
 from src.workflow import (
+    compile_creative_file_to_production,
     generate_shooting_rows,
     render_html_task_table,
     load_yaml_text,
@@ -65,6 +66,13 @@ def check_environment(company: Optional[str], script: Optional[str], input_dir: 
     return ok
 
 
+def _default_output_dir(company: str, run_name: str) -> Path:
+    base = _base_output_root()
+    d = base / "portrait" / company / run_name
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     if not check_environment(args.company, args.script, args.input):
         print("\n👉 Fix the missing directories / assets / script and run again.")
@@ -79,7 +87,12 @@ def cmd_run(args: argparse.Namespace) -> int:
         if not creative_path.exists():
             print(f"❌ Creative script not found: {creative_path}")
             return 1
-        process_company(args.company, script_path=str(creative_path), input_dir=args.input)
+        run_name = creative_path.stem
+        out_dir = _default_output_dir(args.company, run_name)
+        compiled_path = out_dir / f"{run_name}.compiled.yaml"
+        compile_creative_file_to_production(creative_path, compiled_path)
+        logging.info("✅ Internal production script created: %s", compiled_path)
+        process_company(args.company, script_path=str(compiled_path), input_dir=args.input)
         print("\n✨ Done")
         return 0
 
@@ -92,6 +105,17 @@ def cmd_list(args: argparse.Namespace) -> int:
     print("Available companies:")
     for name in COMPANY_CONFIG.keys():
         print(f" - {name}")
+    return 0
+
+
+def cmd_compile(args: argparse.Namespace) -> int:
+    creative_path = Path(args.creative).expanduser().resolve()
+    if not creative_path.exists():
+        print(f"❌ Creative script not found: {creative_path}")
+        return 1
+    out_path = Path(args.out).expanduser().resolve()
+    compile_creative_file_to_production(creative_path, out_path)
+    print(f"✅ Production script created: {out_path}")
     return 0
 
 
@@ -132,6 +156,10 @@ def build_parser() -> argparse.ArgumentParser:
     lst = sub.add_parser("list", help="list companies")
     lst.set_defaults(func=cmd_list)
 
+    cp = sub.add_parser("compile", help="compile creative script to internal production YAML")
+    cp.add_argument("--creative", required=True, help="creative script path")
+    cp.add_argument("--out", required=True, help="production YAML output path")
+    cp.set_defaults(func=cmd_compile)
 
     gd = sub.add_parser("guide", help="generate task rows from creative script")
     gd.add_argument("--creative", required=True, help="creative script path")

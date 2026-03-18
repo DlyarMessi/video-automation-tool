@@ -643,15 +643,20 @@ def compile_creative_file_to_production(creative_path: Path, out_path: Path) -> 
     return out_path
 
 
-def apply_runtime_overrides_to_production_dict(
-    production: Dict[str, Any],
-    orientation: Optional[str] = None,
-    lang: Optional[str] = None,
-    model: Optional[str] = None,
+def patch_compiled_yaml(
+    compiled_path: Path,
+    orientation: str,
+    lang: str,
+    model: str,
     eleven_profile_path: Optional[Path] = None,
     filter_preset_name: str = "clean",
-) -> Dict[str, Any]:
-    d = json.loads(json.dumps(production or {}))
+) -> None:
+    try:
+        import yaml  # type: ignore
+    except Exception:
+        raise RuntimeError("PyYAML not installed. Run: python -m pip install pyyaml")
+
+    d = yaml.safe_load(compiled_path.read_text(encoding="utf-8")) or {}
     if not isinstance(d, dict):
         d = {}
 
@@ -664,11 +669,7 @@ def apply_runtime_overrides_to_production_dict(
     if not isinstance(out, dict):
         out = {}
     project["output"] = out
-
-    resolved_orientation = str(orientation or "").strip().lower()
-    if resolved_orientation in {"portrait", "landscape"}:
-        out["format"] = "portrait_1080x1920" if resolved_orientation == "portrait" else "landscape_1920x1080"
-    out.setdefault("format", "portrait_1080x1920")
+    out["format"] = "portrait_1080x1920" if orientation == "portrait" else "landscape_1920x1080"
     out["fps"] = get_default_fps()
 
     audio = project.get("audio", {})
@@ -689,43 +690,14 @@ def apply_runtime_overrides_to_production_dict(
         except Exception:
             defaults = {}
 
-    if lang:
-        voiceover["provider"] = "elevenlabs"
-        voiceover["language"] = lang
-        voiceover["output_format"] = str(defaults.get("output_format", "mp3_44100_128"))
-        voiceover.setdefault("volume", 1.0)
-    if model:
-        voiceover["model"] = model
+    voiceover["provider"] = "elevenlabs"
+    voiceover["language"] = lang
+    voiceover["model"] = model
+    voiceover["output_format"] = str(defaults.get("output_format", "mp3_44100_128"))
+    voiceover.setdefault("volume", 1.0)
 
-    subtitle_lang = str(lang or voiceover.get("language") or "en-US")
-    project["subtitle_style"] = get_subtitle_style(subtitle_lang)
+    project["subtitle_style"] = get_subtitle_style(lang)
     project["filter_preset"] = get_filter_preset(filter_preset_name)
-
-    return d
-
-
-def patch_compiled_yaml(
-    compiled_path: Path,
-    orientation: str,
-    lang: str,
-    model: str,
-    eleven_profile_path: Optional[Path] = None,
-    filter_preset_name: str = "clean",
-) -> None:
-    try:
-        import yaml  # type: ignore
-    except Exception:
-        raise RuntimeError("PyYAML not installed. Run: python -m pip install pyyaml")
-
-    d = yaml.safe_load(compiled_path.read_text(encoding="utf-8")) or {}
-    d = apply_runtime_overrides_to_production_dict(
-        d,
-        orientation=orientation,
-        lang=lang,
-        model=model,
-        eleven_profile_path=eleven_profile_path,
-        filter_preset_name=filter_preset_name,
-    )
 
     compiled_path.write_text(
         yaml.safe_dump(d, allow_unicode=True, sort_keys=False),
