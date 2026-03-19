@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
 
 import streamlit as st
 import yaml
@@ -75,6 +76,7 @@ from src.workflow import (
     get_storage_dirs,
     classify_orientation,
     normalize_demo_coverage_token,
+    build_project_slots_from_creative,
 )
 
 # =========================================================
@@ -185,18 +187,13 @@ def priority_score(priority: str) -> int:
 
 
 def build_pool_slot_rows(slots, factory_files):
-    """Build normalized Pool Fill row dictionaries.
-
-This function is the current render-facing integration point between:
-- pool plan slots
-- factory footage counting
-- semantic enrichment
-- registry hydration
-- Pool Fill UI card rendering
-"""
+    """Build normalized slot rows for both Pool Fill and Project Mode."""
     rows = []
 
     for slot in slots:
+        if not isinstance(slot, dict):
+            continue
+
         scene_name = str(slot.get("scene", "")).strip()
         content_name = str(slot.get("content", "")).strip()
         coverage_name = str(slot.get("coverage", "")).strip()
@@ -208,7 +205,8 @@ This function is the current render-facing integration point between:
         existing = count_pool_matches(factory_files, scene_name, content_name, coverage_name, move_name)
         missing = max(0, target - existing)
 
-        rows.append(
+        row = dict(slot)
+        row.update(
             {
                 "scene": scene_name,
                 "content": content_name,
@@ -220,12 +218,14 @@ This function is the current render-facing integration point between:
                 "existing": existing,
                 "missing": missing,
                 "defaults": defaults,
-                "slot_label": slot_display_name(scene_name, content_name, coverage_name, move_name),
-                "duration_label": recommended_duration_for_slot(coverage_name, move_name),
-                "move_label": movement_guidance(move_name),
-                "framing_label": composition_guidance(scene_name, content_name, coverage_name),
             }
         )
+        row.setdefault("slot_label", slot_display_name(scene_name, content_name, coverage_name, move_name))
+        row["duration_label"] = recommended_duration_for_slot(coverage_name, move_name)
+        row["move_label"] = movement_guidance(move_name)
+        row["framing_label"] = composition_guidance(scene_name, content_name, coverage_name)
+
+        rows.append(row)
 
     return rows
 
@@ -390,24 +390,27 @@ def merge_pool_semantic_fields(slot_rows: list[dict], slots: list[dict]) -> list
         registry_story = registry_entry.get("story", {}) if isinstance(registry_entry.get("story"), dict) else {}
 
         canonical_label = str(merged.get("slot_label", "") or "").strip()
+        existing_human_label = str(merged.get("human_label", "") or "").strip()
         registry_human_label = str(registry_public.get("human_label", "") or "").strip()
         slot_human_label = str(slot_semantic.get("human_label", "") or "").strip()
-        preferred_human_label = registry_human_label or slot_human_label
+        preferred_human_label = existing_human_label or registry_human_label or slot_human_label
 
         if preferred_human_label:
             merged["canonical_slot_label"] = canonical_label
             merged["slot_label"] = preferred_human_label
             merged["human_label"] = preferred_human_label
 
+        existing_shoot_brief = str(merged.get("shoot_brief", "") or "").strip()
         registry_shoot_brief = str(registry_public.get("shoot_brief", "") or "").strip()
         slot_shoot_brief = str(slot_semantic.get("shoot_brief", "") or "").strip()
-        preferred_shoot_brief = registry_shoot_brief or slot_shoot_brief
+        preferred_shoot_brief = existing_shoot_brief or registry_shoot_brief or slot_shoot_brief
         if preferred_shoot_brief:
             merged["shoot_brief"] = preferred_shoot_brief
 
+        existing_purpose = str(merged.get("purpose", "") or "").strip()
         registry_purpose = str(registry_story.get("purpose_text", "") or "").strip()
         slot_purpose = str(slot_semantic.get("purpose", "") or "").strip()
-        preferred_purpose = registry_purpose or slot_purpose
+        preferred_purpose = existing_purpose or registry_purpose or slot_purpose
         if preferred_purpose:
             merged["purpose"] = preferred_purpose
 
@@ -477,7 +480,7 @@ def render_pool_active_slot_card(
 
         progress_col, status_col = st.columns([3, 2])
         with progress_col:
-            ratio = (existing / target) if target else 0
+            ratio = 0.0 if target <= 0 else max(0.0, min(existing / target, 1.0))
             st.progress(ratio)
         with status_col:
             st.markdown(
@@ -619,11 +622,21 @@ def render_pool_active_slot_card(
                 elif not rejected_msgs:
                     st.info("No clips were saved.")
 
-def render_pool_completed_slot_card(row, pool_topic: str, i: int, factory_dir: Path, ext_choice_pool: str):
+def render_pool_completed_slot_card(
+    row,
+    pool_topic: str,
+    i: int,
+    factory_dir: Path,
+    ext_choice_pool: str,
+    inbox_dir: Optional[Path] = None,
+    orientation: Optional[str] = None,
+):
     scene_name = str(row.get("scene", "")).strip()
     content_name = str(row.get("content", "")).strip()
     coverage_name = str(row.get("coverage", "")).strip()
     move_name = str(row.get("move", "")).strip()
+    target = int(row.get("target", 0) or 0)
+    priority = str(row.get("priority", "medium") or "medium")
     existing = int(row.get("existing", 0) or 0)
     defaults = row.get("defaults", {}) if isinstance(row.get("defaults"), dict) else {}
 
@@ -640,16 +653,35 @@ def render_pool_completed_slot_card(row, pool_topic: str, i: int, factory_dir: P
     registry_key_text = str(row.get("registry_key_text", "") or "").strip()
     shoot_brief_text = str(row.get("shoot_brief_text", "") or "").strip()
 
-    with st.expander(f"✅ {display_label} · ready {existing}", expanded=False):
+    inbox_files = list_video_files(inbox_dir, VIDEO_SUFFIXES) if inbox_dir and inbox_dir.exists() else []
+
+    with st.container(border=True):
+        st.markdown(f"**{display_label}** {priority_badge(priority)}")
         if slot_label_text and display_label != slot_label_text:
             st.caption(f"`{slot_label_text}`")
         if canonical_tuple_text:
             st.caption(canonical_tuple_text)
         if registry_key_text:
             st.caption(f"registry_key: `{registry_key_text}`")
+        st.markdown(f"🎬 `{move_name}` · ⏱️ `{row['duration_label']}` · ✅ **ready {existing}/{target}**")
         if shoot_brief_text:
             st.caption(shoot_brief_text)
-        st.caption(f"Current clips: {existing} · upload here only if you want replacements or alternates.")
+        st.caption(f"💡 {row['framing_label']} · {row['move_label']}")
+
+        progress_col, status_col = st.columns([3, 2])
+        with progress_col:
+            ratio = 0.0 if target <= 0 else max(0.0, min(existing / target, 1.0))
+            st.progress(ratio)
+        with status_col:
+            st.markdown(
+                f"<div style='font-size:0.92rem; text-align:right;'>"
+                f"{existing}/{target} · "
+                f"<span style='color:#16a34a; font-weight:600;'>ready</span>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+
+        st.caption("Current clips already meet target. Upload here only if you want replacements or alternates.")
 
         uploads = st.file_uploader(
             "Upload clips for this slot",
@@ -659,62 +691,128 @@ def render_pool_completed_slot_card(row, pool_topic: str, i: int, factory_dir: P
             label_visibility="collapsed",
         )
 
-        meta1, meta2 = st.columns([1, 1])
-        with meta1:
-            energy_default = st.selectbox(
-                "energy",
-                ["low", "medium", "high"],
-                index=["low", "medium", "high"].index(default_energy) if default_energy in ["low", "medium", "high"] else 1,
-                key=f"pool_fill_v3_done_energy_{pool_topic}_{i}",
-            )
-            quality_default = st.selectbox(
-                "quality_status",
-                ["approved", "review", "reject"],
-                index=["approved", "review", "reject"].index(default_quality) if default_quality in ["approved", "review", "reject"] else 0,
-                key=f"pool_fill_v3_done_quality_{pool_topic}_{i}",
-            )
-        with meta2:
-            continuity_group_default = st.text_input(
-                "continuity_group",
-                value=default_group,
-                key=f"pool_fill_v3_done_group_{pool_topic}_{i}",
-            )
-            notes_default = st.text_input(
-                "notes",
-                value="",
-                key=f"pool_fill_v3_done_notes_{pool_topic}_{i}",
+        pick_inbox = []
+        if inbox_files:
+            pick_inbox = st.multiselect(
+                f"Move from Inbox ({len(inbox_files)})",
+                options=inbox_files,
+                format_func=lambda p: f"{p.name}  [{classify_orientation(p)}]",
+                key=f"pool_fill_v3_done_inbox_{pool_topic}_{i}",
             )
 
-        t1, t2, t3 = st.columns(3)
-        with t1:
-            intro_safe_default = st.checkbox("intro_safe", value=default_intro, key=f"pool_fill_v3_done_intro_{pool_topic}_{i}")
-        with t2:
-            hero_safe_default = st.checkbox("hero_safe", value=default_hero, key=f"pool_fill_v3_done_hero_{pool_topic}_{i}")
-        with t3:
-            outro_safe_default = st.checkbox("outro_safe", value=default_outro, key=f"pool_fill_v3_done_outro_{pool_topic}_{i}")
+        with st.expander("Clip tags", expanded=False):
+            meta1, meta2 = st.columns([1, 1])
+            with meta1:
+                energy_default = st.selectbox(
+                    "energy",
+                    ["low", "medium", "high"],
+                    index=["low", "medium", "high"].index(default_energy) if default_energy in ["low", "medium", "high"] else 1,
+                    key=f"pool_fill_v3_done_energy_{pool_topic}_{i}",
+                )
+                quality_default = st.selectbox(
+                    "quality_status",
+                    ["approved", "review", "reject"],
+                    index=["approved", "review", "reject"].index(default_quality) if default_quality in ["approved", "review", "reject"] else 0,
+                    key=f"pool_fill_v3_done_quality_{pool_topic}_{i}",
+                )
+            with meta2:
+                continuity_group_default = st.text_input(
+                    "continuity_group",
+                    value=default_group,
+                    key=f"pool_fill_v3_done_group_{pool_topic}_{i}",
+                )
+                notes_default = st.text_input(
+                    "notes",
+                    value="",
+                    key=f"pool_fill_v3_done_notes_{pool_topic}_{i}",
+                )
+
+            t1, t2, t3 = st.columns(3)
+            with t1:
+                intro_safe_default = st.checkbox("intro_safe", value=default_intro, key=f"pool_fill_v3_done_intro_{pool_topic}_{i}")
+            with t2:
+                hero_safe_default = st.checkbox("hero_safe", value=default_hero, key=f"pool_fill_v3_done_hero_{pool_topic}_{i}")
+            with t3:
+                outro_safe_default = st.checkbox("outro_safe", value=default_outro, key=f"pool_fill_v3_done_outro_{pool_topic}_{i}")
 
         if st.button("Save Alternate to Pool", key=f"pool_fill_v3_done_save_{pool_topic}_{i}", use_container_width=True):
-            if not uploads:
-                st.warning("Please upload at least one clip.")
+            if not uploads and not pick_inbox:
+                st.warning("Please upload at least one clip or move one from Inbox.")
             else:
-                save_pool_uploads(
-                    uploads=uploads,
-                    factory_dir=factory_dir,
-                    ext_choice_pool=ext_choice_pool,
-                    scene_name=scene_name,
-                    content_name=content_name,
-                    coverage_name=coverage_name,
-                    move_name=move_name,
-                    hero_safe_default=hero_safe_default,
-                    intro_safe_default=intro_safe_default,
-                    outro_safe_default=outro_safe_default,
-                    continuity_group_default=continuity_group_default,
-                    energy_default=energy_default,
-                    quality_default=quality_default,
-                    notes_default=notes_default,
-                )
-                st.success("Saved to pool.")
-                st.rerun()
+                rejected_msgs = []
+                saved_count = 0
+                cur = next_index_for(factory_dir, scene_name, content_name, coverage_name, move_name, ext_choice_pool)
+
+                def _apply_defaults(saved_name: str):
+                    update_asset_record_fields(
+                        factory_dir / "asset_index.json",
+                        saved_name,
+                        {
+                            "hero_safe": hero_safe_default,
+                            "intro_safe": intro_safe_default,
+                            "outro_safe": outro_safe_default,
+                            "continuity_group": continuity_group_default.strip(),
+                            "energy": energy_default,
+                            "quality_status": quality_default,
+                            "notes": notes_default.strip(),
+                        },
+                    )
+
+                if uploads:
+                    for uf in uploads:
+                        ext = Path(uf.name).suffix.lower() or ext_choice_pool
+                        tmp_path = factory_dir / f"__tmp_check_{now_tag()}_{safe_slug(Path(uf.name).stem)}{ext}"
+                        try:
+                            tmp_path.write_bytes(uf.getbuffer().tobytes())
+                            if orientation:
+                                actual = classify_orientation(tmp_path)
+                                if actual != orientation:
+                                    rejected_msgs.append(f"{uf.name}: {actual} does not match current layout ({orientation}).")
+                                    continue
+
+                            fname = build_factory_filename(scene_name, content_name, coverage_name, move_name, cur, ext)
+                            saved_path = safe_write_file(factory_dir / fname, uf.getbuffer().tobytes())
+                            upsert_asset_record(factory_dir / "asset_index.json", saved_path)
+                            _apply_defaults(saved_path.name)
+                            saved_count += 1
+                            cur += 1
+                        finally:
+                            if tmp_path.exists():
+                                tmp_path.unlink(missing_ok=True)
+
+                if pick_inbox:
+                    for src in pick_inbox:
+                        if orientation:
+                            actual = classify_orientation(src)
+                            if actual != orientation:
+                                rejected_msgs.append(f"{src.name}: {actual} does not match current layout ({orientation}).")
+                                continue
+
+                        ext = src.suffix.lower() or ext_choice_pool
+                        fname = build_factory_filename(scene_name, content_name, coverage_name, move_name, cur, ext)
+                        dst = factory_dir / fname
+                        if dst.exists():
+                            dst = factory_dir / f"{Path(fname).stem}_{now_tag()}{ext}"
+
+                        try:
+                            src.rename(dst)
+                            upsert_asset_record(factory_dir / "asset_index.json", dst)
+                            _apply_defaults(dst.name)
+                            saved_count += 1
+                            cur += 1
+                        except Exception as e:
+                            st.error(f"Move Failed: {src.name} → {dst.name} ({e})")
+
+                if rejected_msgs:
+                    st.warning("Some clips were rejected due to orientation mismatch:")
+                    for msg in rejected_msgs:
+                        st.write(f"- {msg}")
+
+                if saved_count > 0:
+                    st.success("Saved to pool.")
+                    st.rerun()
+                elif not rejected_msgs:
+                    st.info("No clips were saved.")
 
 def render_pool_fill_downloads():
     guide_html = DOCS_DIR / "pool_fill_shooting_guide.html"
@@ -1694,7 +1792,7 @@ st.caption("Project-driven intake. Missing task slots can be filled by upload or
 
 if not storage_ready or not inbox_dir or not factory_dir:
     st.info("Footage storage is unavailable. Step 2 is currently disabled.")
-elif rows:
+elif project_slots:
     auto_use_factory = st.checkbox("Auto-match Existing Factory Footage", value=True, key="auto_use_factory")
     show_matches = st.checkbox("Show Matched Filenames", value=False, key="show_matches")
     ext_choice = st.selectbox("Default Upload Extension", [".mp4", ".mov", ".m4v", ".mkv"], index=0, key="ext_choice")
@@ -1881,172 +1979,79 @@ elif rows:
                                 st.success(f"Deleted {selected_filename}")
                                 st.rerun()
 
-    matched_by_key: dict[tuple[str, str], list[Path]] = {}
-    for f in factory_files:
-        clip_key = parse_factory_filename_key(f)
-        if clip_key is not None:
-            matched_by_key.setdefault(clip_key, []).append(f)
+    slot_rows = build_pool_slot_rows(project_slots, factory_files)
+    slot_rows = merge_pool_semantic_fields(slot_rows, project_slots)
 
-    ordered_beat_nos = sorted(beats_map.keys())
-    beat_needs: list[dict[tuple[str, str], int]] = []
+    for row in slot_rows:
+        display_label = str(row.get("human_label", "") or row.get("slot_label", "") or "Slot").strip()
+        slot_label_text = str(row.get("canonical_slot_label", "") or row.get("slot_label", "") or "").strip()
+        scene_text = str(row.get("scene", "") or "").strip()
+        content_text = str(row.get("content", "") or "").strip()
+        coverage_text = str(row.get("coverage", "") or "").strip()
+        move_text = str(row.get("move", "") or "static").strip() or "static"
+
+        row["display_label"] = display_label
+        row["slot_label_text"] = slot_label_text
+        row["canonical_tuple_text"] = f"`{scene_text} · {content_text} · {coverage_text} · {move_text}`"
+        row["registry_key_text"] = str(row.get("registry_key", "") or "").strip()
+        row["shoot_brief_text"] = str(row.get("shoot_brief", "") or "").strip()
+
+    beat_groups: dict[int, list[dict]] = {}
+    for row in slot_rows:
+        beat_no = int(row.get("beat_no", 0) or 0)
+        if beat_no > 0:
+            beat_groups.setdefault(beat_no, []).append(row)
+
+    ordered_beat_nos = sorted(beat_groups.keys())
+
     for beat_no in ordered_beat_nos:
-        need: dict[tuple[str, str], int] = {}
-        for rr in beats_map[beat_no]:
-            key = (
-                normalize_demo_content_token(str(rr.get("Category", "") or "")),
-                normalize_demo_coverage_token(str(rr.get("Shot", "") or "")),
-            )
-            need[key] = need.get(key, 0) + 1
-        beat_needs.append(need)
+        beat_slot_rows = sort_pool_slot_rows(beat_groups[beat_no])
+        beat_purpose = str(beat_slot_rows[0].get("beat_purpose", "") or "").strip().lower()
+        request_family = str(beat_slot_rows[0].get("request_family", "") or "").strip().lower()
 
-    availability = {k: len(v) for k, v in matched_by_key.items()} if auto_use_factory else {}
-    beat_ready_missing = allocate_coverage_across_beats(beat_needs, availability)
+        beat_label = {
+            "establish_context": "Opening Context",
+            "show_capability": "Capability",
+            "build_trust": "Trust / Proof",
+            "brand_close": "Brand Close",
+        }.get(beat_purpose, beat_purpose.replace("_", " ").title() or f"Beat {beat_no}")
 
-    for beat_idx, beat_no in enumerate(ordered_beat_nos):
-        beat_rows = beats_map[beat_no]
-        beat_title = beat_rows[0].get("BeatPurpose") or f"Beat {beat_no}"
+        beat_hint = {
+            "opening": "Upload opening context: exterior, entrance, showroom, headquarters, or a clean overall establishing visual. Avoid fragmented close details.",
+            "capability": "Upload process visuals: machine action, workflow medium shots, and clear operating details. Avoid empty exterior-only shots.",
+            "trust": "Upload proof visuals: inspection, testing, certificates, achievements, or stable support detail. Avoid flashy or overly busy motion.",
+            "close": "Upload the strongest final hero visual: clean, stable, complete, and suitable for closing. Avoid fragmented detail shots.",
+        }.get(request_family, "Upload visuals that clearly support this beat.")
 
-        with st.expander(f"Beat {beat_no} · {beat_title}", expanded=False):
-            need = beat_needs[beat_idx]
-            beat_status = beat_ready_missing[beat_idx]
-
-            beat_hint = {
-                "establish_context": "This beat usually wants opening context and a strong establishing visual.",
-                "show_capability": "This beat usually wants process or automation visuals that show how the system works.",
-                "build_trust": "This beat usually wants proof, testing, inspection, certificate, or supporting detail visuals.",
-                "brand_close": "This beat usually wants a strong closing hero visual.",
-            }.get(str(beat_title or "").strip().lower(), "")
+        with st.expander(f"Beat {beat_no} · {beat_label}", expanded=False):
             if beat_hint:
                 st.caption(beat_hint)
 
-            for (cat, shot), n_need in need.items():
-                scene_name = "factory"
-                content_name = cat
-                coverage_name = shot
-                move_name = "static"
+            active_slot_rows = [r for r in beat_slot_rows if int(r.get("missing", 0)) > 0]
+            completed_slot_rows = [r for r in beat_slot_rows if int(r.get("missing", 0)) <= 0]
 
-                matched = matched_by_key.get((cat, shot), [])
-                ready, missing = beat_status.get((cat, shot), (0, int(n_need)))
-
-                friendly_content = {
-                    "building": "Exterior / Product Hero",
-                    "line": "Factory Process",
-                }.get(str(cat or "").strip().lower(), str(cat or "").replace("_", " ").title())
-
-                friendly_shot = {
-                    "hero": "Hero / Establishing",
-                    "medium": "Medium Shot",
-                    "detail": "Detail Close-up",
-                    "wide": "Wide / Establishing",
-                }.get(str(shot or "").strip().lower(), str(shot or "").replace("_", " ").title())
-
-                friendly_label = f"{friendly_content} · {friendly_shot}"
-                st.markdown(f"**{friendly_label}** — required {n_need}, ready {ready}, missing {missing}")
-
-                hint = {
-                    ("building", "hero"): "Used for opening or closing hero visuals. Best fit: exterior, showroom, villa, or product hero shot.",
-                    ("line", "hero"): "Used for stronger factory overview or line establishing visuals.",
-                    ("line", "medium"): "Used for process / automation support shots. Best fit: stable machine or workflow medium shot.",
-                    ("line", "detail"): "Used for close process detail. Best fit: machine action, hands, controls, or inspection detail.",
-                }.get(
-                    (str(cat or "").strip().lower(), str(shot or "").strip().lower()),
-                    "Used as a supporting visual slot for this beat."
+            for i, row in enumerate(active_slot_rows):
+                render_pool_active_slot_card(
+                    row=row,
+                    pool_topic=f"project_beat_{beat_no}",
+                    i=i,
+                    factory_dir=factory_dir,
+                    ext_choice_pool=ext_choice,
+                    inbox_dir=inbox_dir,
+                    orientation=orientation,
                 )
-                st.caption(hint)
-                st.caption(f"Saved into pool as: factory_{scene_name}_{content_name}_{coverage_name}_XX")
+                st.write("")
 
-                if show_matches and matched:
-                    st.code("\n".join([p.name for p in matched[:20]]), language="text")
-
-                if missing <= 0:
-                    st.markdown("<span class='tiny'>No action needed.</span>", unsafe_allow_html=True)
-                    st.markdown("---")
-                    continue
-
-                move_name = st.selectbox(
-                    f"Move token for {cat}_{shot}",
-                    MOVE_TOKEN_OPTIONS,
-                    index=0,
-                    key=f"move_token_{beat_no}_{cat}_{shot}",
-                )
-
-                uploads = st.file_uploader(
-                    f"Upload missing clips for {cat}_{shot}",
-                    type=VIDEO_EXTS,
-                    accept_multiple_files=True,
-                    key=f"up_{beat_no}_{cat}_{shot}",
-                )
-
-                pick_inbox = st.multiselect(
-                    f"Move from Inbox ({len(inbox_files)})",
-                    options=inbox_files,
-                    format_func=lambda p: f"{p.name}  [{classify_orientation(p)}]",
-                    key=f"inbox_{beat_no}_{cat}_{shot}",
-                )
-
-                if st.button("Save to Factory Pool", key=f"save_{beat_no}_{cat}_{shot}"):
-                    cur = next_index_for(factory_dir, scene_name, content_name, coverage_name, move_name, ext_choice)
-                    rejected_msgs: list[str] = []
-                    saved_count = 0
-
-                    if uploads:
-                        for uf in uploads:
-                            tmp_ext = Path(uf.name).suffix.lower() or ext_choice
-                            tmp_path = inbox_dir / f"__tmp_check_{now_tag()}_{safe_slug(Path(uf.name).stem)}{tmp_ext}"
-                            try:
-                                tmp_path.write_bytes(uf.getbuffer().tobytes())
-                                actual = classify_orientation(tmp_path)
-                                if actual != orientation:
-                                    rejected_msgs.append(f"{uf.name}: {actual} does not match current layout ({orientation}).")
-                                    tmp_path.unlink(missing_ok=True)
-                                    continue
-
-                                fname = build_factory_filename(scene_name, content_name, coverage_name, move_name, cur, tmp_ext)
-                                saved_path = safe_write_file(factory_dir / fname, uf.getbuffer().tobytes())
-                                upsert_asset_record(factory_dir / "asset_index.json", saved_path)
-                                saved_count += 1
-                                cur += 1
-                            finally:
-                                if tmp_path.exists():
-                                    tmp_path.unlink(missing_ok=True)
-
-                    if pick_inbox:
-                        for src in pick_inbox:
-                            actual = classify_orientation(src)
-                            if actual != orientation:
-                                rejected_msgs.append(f"{src.name}: {actual} does not match current layout ({orientation}).")
-                                continue
-
-                            ext = src.suffix.lower() or ext_choice
-                            fname = build_factory_filename(scene_name, content_name, coverage_name, move_name, cur, ext)
-                            dst = factory_dir / fname
-                            if dst.exists():
-                                dst = factory_dir / f"{Path(fname).stem}_{now_tag()}{ext}"
-                            try:
-                                src.rename(dst)
-                                upsert_asset_record(factory_dir / "asset_index.json", dst)
-                                saved_count += 1
-                                cur += 1
-                            except Exception as e:
-                                st.error(f"Move Failed: {src.name} → {dst.name} ({e})")
-
-                    if rejected_msgs:
-                        st.warning("Some clips were rejected due to orientation mismatch:")
-                        for msg in rejected_msgs:
-                            st.write(f"- {msg}")
-
-                    if saved_count > 0:
-                        st.success(
-                            f"✅ Saved {saved_count} clip(s) to the Factory Pool. "
-                            "Coverage and Step 2 status have been refreshed."
-                        )
-                        st.rerun()
-                    elif not rejected_msgs:
-                        st.info("No clips were saved.")
-
-                st.markdown("---")
-else:
-    st.info("Generate Task Rows in Step 1 first.")
+            if completed_slot_rows:
+                st.caption("Ready slots")
+                for j, row in enumerate(completed_slot_rows):
+                    render_pool_completed_slot_card(
+                        row=row,
+                        pool_topic=f"project_beat_{beat_no}_done",
+                        i=j,
+                        factory_dir=factory_dir,
+                        ext_choice_pool=ext_choice,
+                    )
 
 # =========================================================
 # Project Mode · Step 3
