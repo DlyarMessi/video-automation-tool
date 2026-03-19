@@ -50,7 +50,7 @@ from src.ui_local_prefs import load_ui_local_prefs, remember_last_company, clear
 
 from src.render_profile import get_default_fps, get_filter_preset
 from src.language_checks import build_language_check
-from src.material_index import load_asset_index, upsert_asset_record, update_asset_record_fields
+from src.material_index import load_asset_index, upsert_asset_record, update_asset_record_fields, parse_filename_core
 from src.workflow import (
     now_tag,
     safe_slug,
@@ -428,7 +428,15 @@ def merge_pool_semantic_fields(slot_rows: list[dict], slots: list[dict]) -> list
 
 
 
-def render_pool_active_slot_card(row, pool_topic: str, i: int, factory_dir: Path, ext_choice_pool: str):
+def render_pool_active_slot_card(
+    row,
+    pool_topic: str,
+    i: int,
+    factory_dir: Path,
+    ext_choice_pool: str,
+    inbox_dir: Optional[Path] = None,
+    orientation: Optional[str] = None,
+):
     scene_name = str(row.get("scene", "")).strip()
     content_name = str(row.get("content", "")).strip()
     coverage_name = str(row.get("coverage", "")).strip()
@@ -451,6 +459,8 @@ def render_pool_active_slot_card(row, pool_topic: str, i: int, factory_dir: Path
     canonical_tuple_text = str(row.get("canonical_tuple_text", "") or "").strip()
     registry_key_text = str(row.get("registry_key_text", "") or "").strip()
     shoot_brief_text = str(row.get("shoot_brief_text", "") or "").strip()
+
+    inbox_files = list_video_files(inbox_dir, VIDEO_SUFFIXES) if inbox_dir and inbox_dir.exists() else []
 
     with st.container(border=True):
         st.markdown(f"**{display_label}** {priority_badge(priority)}")
@@ -485,6 +495,15 @@ def render_pool_active_slot_card(row, pool_topic: str, i: int, factory_dir: Path
             key=f"pool_fill_v3_upload_{pool_topic}_{i}",
             label_visibility="collapsed",
         )
+
+        pick_inbox = []
+        if inbox_files:
+            pick_inbox = st.multiselect(
+                f"Move from Inbox ({len(inbox_files)})",
+                options=inbox_files,
+                format_func=lambda p: f"{p.name}  [{classify_orientation(p)}]",
+                key=f"pool_fill_v3_inbox_{pool_topic}_{i}",
+            )
 
         with st.expander("Clip tags", expanded=False):
             meta1, meta2 = st.columns([1, 1])
@@ -522,28 +541,83 @@ def render_pool_active_slot_card(row, pool_topic: str, i: int, factory_dir: Path
                 outro_safe_default = st.checkbox("outro_safe", value=default_outro, key=f"pool_fill_v3_outro_{pool_topic}_{i}")
 
         if st.button("Save to Pool", key=f"pool_fill_v3_save_{pool_topic}_{i}", use_container_width=True):
-            if not uploads:
-                st.warning("Please upload at least one clip.")
+            if not uploads and not pick_inbox:
+                st.warning("Please upload at least one clip or move one from Inbox.")
             else:
-                save_pool_uploads(
-                    uploads=uploads,
-                    factory_dir=factory_dir,
-                    ext_choice_pool=ext_choice_pool,
-                    scene_name=scene_name,
-                    content_name=content_name,
-                    coverage_name=coverage_name,
-                    move_name=move_name,
-                    hero_safe_default=hero_safe_default,
-                    intro_safe_default=intro_safe_default,
-                    outro_safe_default=outro_safe_default,
-                    continuity_group_default=continuity_group_default,
-                    energy_default=energy_default,
-                    quality_default=quality_default,
-                    notes_default=notes_default,
-                )
-                st.success("Saved to pool.")
-                st.rerun()
+                rejected_msgs = []
+                saved_count = 0
+                cur = next_index_for(factory_dir, scene_name, content_name, coverage_name, move_name, ext_choice_pool)
 
+                def _apply_defaults(saved_name: str):
+                    update_asset_record_fields(
+                        factory_dir / "asset_index.json",
+                        saved_name,
+                        {
+                            "hero_safe": hero_safe_default,
+                            "intro_safe": intro_safe_default,
+                            "outro_safe": outro_safe_default,
+                            "continuity_group": continuity_group_default.strip(),
+                            "energy": energy_default,
+                            "quality_status": quality_default,
+                            "notes": notes_default.strip(),
+                        },
+                    )
+
+                if uploads:
+                    for uf in uploads:
+                        ext = Path(uf.name).suffix.lower() or ext_choice_pool
+                        tmp_path = factory_dir / f"__tmp_check_{now_tag()}_{safe_slug(Path(uf.name).stem)}{ext}"
+                        try:
+                            tmp_path.write_bytes(uf.getbuffer().tobytes())
+                            if orientation:
+                                actual = classify_orientation(tmp_path)
+                                if actual != orientation:
+                                    rejected_msgs.append(f"{uf.name}: {actual} does not match current layout ({orientation}).")
+                                    continue
+
+                            fname = build_factory_filename(scene_name, content_name, coverage_name, move_name, cur, ext)
+                            saved_path = safe_write_file(factory_dir / fname, uf.getbuffer().tobytes())
+                            upsert_asset_record(factory_dir / "asset_index.json", saved_path)
+                            _apply_defaults(saved_path.name)
+                            saved_count += 1
+                            cur += 1
+                        finally:
+                            if tmp_path.exists():
+                                tmp_path.unlink(missing_ok=True)
+
+                if pick_inbox:
+                    for src in pick_inbox:
+                        if orientation:
+                            actual = classify_orientation(src)
+                            if actual != orientation:
+                                rejected_msgs.append(f"{src.name}: {actual} does not match current layout ({orientation}).")
+                                continue
+
+                        ext = src.suffix.lower() or ext_choice_pool
+                        fname = build_factory_filename(scene_name, content_name, coverage_name, move_name, cur, ext)
+                        dst = factory_dir / fname
+                        if dst.exists():
+                            dst = factory_dir / f"{Path(fname).stem}_{now_tag()}{ext}"
+
+                        try:
+                            src.rename(dst)
+                            upsert_asset_record(factory_dir / "asset_index.json", dst)
+                            _apply_defaults(dst.name)
+                            saved_count += 1
+                            cur += 1
+                        except Exception as e:
+                            st.error(f"Move Failed: {src.name} → {dst.name} ({e})")
+
+                if rejected_msgs:
+                    st.warning("Some clips were rejected due to orientation mismatch:")
+                    for msg in rejected_msgs:
+                        st.write(f"- {msg}")
+
+                if saved_count > 0:
+                    st.success("Saved to pool.")
+                    st.rerun()
+                elif not rejected_msgs:
+                    st.info("No clips were saved.")
 
 def render_pool_completed_slot_card(row, pool_topic: str, i: int, factory_dir: Path, ext_choice_pool: str):
     scene_name = str(row.get("scene", "")).strip()
@@ -884,15 +958,30 @@ def count_pool_matches(factory_files: list[Path], scene: str, content: str, cove
     content = safe_slug(content).lower()
     coverage = safe_slug(coverage).lower()
     move = safe_slug(move).lower()
-    prefix = f"{scene}_{content}_{coverage}_{move}_"
-    return len(
-        [
-            p for p in factory_files
-            if p.is_file()
-            and p.suffix.lower() in VIDEO_SUFFIXES
-            and p.name.lower().startswith(prefix.lower())
-        ]
-    )
+
+    count = 0
+    for p in factory_files:
+        if not p.is_file() or p.suffix.lower() not in VIDEO_SUFFIXES:
+            continue
+
+        core = parse_filename_core(p.name)
+        core_scene = safe_slug(str(core.get("scene", "") or "")).lower()
+        core_content = safe_slug(str(core.get("content", "") or "")).lower()
+        core_coverage = safe_slug(str(core.get("coverage", "") or "")).lower()
+        core_move = safe_slug(str(core.get("move", "") or "")).lower()
+
+        if core_scene != scene:
+            continue
+        if core_content != content:
+            continue
+        if core_coverage != coverage:
+            continue
+        if move and core_move != move:
+            continue
+
+        count += 1
+
+    return count
 
 def list_companies() -> list[str]:
     """Company selector source of truth: managed brand workspaces only."""
@@ -1484,8 +1573,10 @@ if generate_btn:
 
             task_rows_json = generated_dir / f"{creative_path.stem}.shooting_rows.json"
             task_rows_html = generated_dir / f"{creative_path.stem}.task_rows.html"
+            project_slots_json = generated_dir / f"{creative_path.stem}.project_slots.json"
             st.session_state["task_rows_json_path"] = str(task_rows_json)
             st.session_state["task_rows_html_path"] = str(task_rows_html)
+            st.session_state["project_slots_json_path"] = str(project_slots_json)
 
             beats = beats_from_creative(d)
             rows: list[dict] = []
@@ -1516,8 +1607,11 @@ if generate_btn:
                     )
                     row_i += 1
 
+            project_slots = build_project_slots_from_creative(d)
             st.session_state["shooting_rows"] = rows
+            st.session_state["project_slots"] = project_slots
             task_rows_json.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
+            project_slots_json.write_text(json.dumps(project_slots, ensure_ascii=False, indent=2), encoding="utf-8")
 
             if export_html:
                 task_rows_html.write_text(render_html_task_table(rows), encoding="utf-8")
@@ -1529,6 +1623,7 @@ if generate_btn:
             st.caption(f"Task Rows File: {task_rows_json}")
 
 rows = st.session_state.get("shooting_rows") or []
+project_slots = st.session_state.get("project_slots") or []
 task_rows_html_path = Path(st.session_state["task_rows_html_path"]) if st.session_state.get("task_rows_html_path") else None
 
 if rows:
