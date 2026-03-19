@@ -64,14 +64,6 @@ def check_environment(company: Optional[str], script: Optional[str], input_dir: 
             ok = False
     return ok
 
-
-def _default_output_dir(company: str, run_name: str) -> Path:
-    base = _base_output_root()
-    d = base / "portrait" / company / run_name
-    d.mkdir(parents=True, exist_ok=True)
-    return d
-
-
 def cmd_run(args: argparse.Namespace) -> int:
     if not check_environment(args.company, args.script, args.input):
         print("\n👉 Fix the missing directories / assets / script and run again.")
@@ -86,12 +78,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         if not creative_path.exists():
             print(f"❌ Creative script not found: {creative_path}")
             return 1
-        run_name = creative_path.stem
-        out_dir = _default_output_dir(args.company, run_name)
-        compiled_path = out_dir / f"{run_name}.compiled.yaml"
-        compile_creative_file_to_production(creative_path, compiled_path)
-        logging.info("✅ Internal production script created: %s", compiled_path)
-        process_company(args.company, script_path=str(compiled_path), input_dir=args.input)
+        process_company(args.company, script_path=str(creative_path), input_dir=args.input)
         print("\n✨ Done")
         return 0
 

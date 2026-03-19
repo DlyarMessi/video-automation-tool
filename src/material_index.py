@@ -26,6 +26,18 @@ def save_asset_index(index_path: Path, items: List[Dict[str, Any]]) -> None:
 def parse_filename_core(filename: str) -> Dict[str, str]:
     stem = Path(filename).stem
     parts = stem.split("_")
+
+    # canonical factory filename:
+    # factory_<scene>_<content>_<coverage>_<move>_<idx>
+    if len(parts) >= 6 and parts[0].lower() == "factory":
+        return {
+            "scene": parts[1],
+            "content": parts[2],
+            "coverage": parts[3],
+            "move": parts[4],
+        }
+
+    # fallback for shorter / legacy names
     return {
         "scene": parts[0] if len(parts) >= 1 else "",
         "content": parts[1] if len(parts) >= 2 else "",
