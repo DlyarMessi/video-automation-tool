@@ -286,6 +286,172 @@ def generate_shooting_rows(creative: dict) -> list[dict]:
     return rows
 
 
+
+def _project_slot(
+    beat_no: int,
+    beat_purpose: str,
+    request_family: str,
+    scene: str,
+    content: str,
+    coverage: str,
+    move: str,
+    target: int,
+    priority: str,
+    human_label: str,
+    shoot_brief: str,
+    defaults: Optional[dict] = None,
+) -> dict:
+    return {
+        "beat_no": int(beat_no),
+        "beat_purpose": str(beat_purpose or "").strip(),
+        "request_family": str(request_family or "").strip(),
+        "scene": str(scene or "").strip(),
+        "content": str(content or "").strip(),
+        "coverage": str(coverage or "").strip(),
+        "move": str(move or "").strip(),
+        "target": int(target or 0),
+        "priority": str(priority or "medium").strip(),
+        "defaults": dict(defaults or {}),
+        "human_label": str(human_label or "").strip(),
+        "shoot_brief": str(shoot_brief or "").strip(),
+    }
+
+
+def build_project_slots_from_creative(creative: dict) -> list[dict]:
+    beats = beats_from_creative(creative)
+    out: list[dict] = []
+
+    for i, beat in enumerate(beats, start=1):
+        purpose = str(beat.get("purpose") or "").strip().lower()
+        visual = str(beat.get("visual") or beat.get("visual_description") or "").strip()
+        subtitle = str(beat.get("subtitle") or "").strip()
+        brief_seed = subtitle or visual
+        scene = "factory"
+
+        if purpose == "establish_context":
+            out.append(
+                _project_slot(
+                    beat_no=i,
+                    beat_purpose=purpose,
+                    request_family="opening",
+                    scene=scene,
+                    content="building",
+                    coverage="hero",
+                    move="static",
+                    target=1,
+                    priority="high",
+                    human_label="Opening / Context · Hero Establishing",
+                    shoot_brief=brief_seed or "Upload a clean exterior, entrance, showroom, or overall establishing visual. Avoid fragmented close details.",
+                    defaults={"intro_safe": True, "hero_safe": True, "quality_status": "approved"},
+                )
+            )
+        elif purpose == "show_capability":
+            out.extend(
+                [
+                    _project_slot(
+                        beat_no=i,
+                        beat_purpose=purpose,
+                        request_family="capability",
+                        scene=scene,
+                        content="line",
+                        coverage="medium",
+                        move="static",
+                        target=2,
+                        priority="high",
+                        human_label="Capability / Process · Stable Medium",
+                        shoot_brief=brief_seed or "Upload process coverage that clearly shows machines, workflow, or operation in a stable medium shot.",
+                        defaults={"quality_status": "approved"},
+                    ),
+                    _project_slot(
+                        beat_no=i,
+                        beat_purpose=purpose,
+                        request_family="capability",
+                        scene=scene,
+                        content="line",
+                        coverage="detail",
+                        move="static",
+                        target=1,
+                        priority="medium",
+                        human_label="Capability / Process · Detail Action",
+                        shoot_brief="Upload clear operating detail: hands, controls, machine action, or mechanism detail.",
+                        defaults={"quality_status": "approved"},
+                    ),
+                ]
+            )
+        elif purpose == "build_trust":
+            out.extend(
+                [
+                    _project_slot(
+                        beat_no=i,
+                        beat_purpose=purpose,
+                        request_family="trust",
+                        scene=scene,
+                        content="line",
+                        coverage="medium",
+                        move="static",
+                        target=1,
+                        priority="high",
+                        human_label="Trust / Proof · Stable Support Medium",
+                        shoot_brief=brief_seed or "Upload inspection, testing, certificate wall, achievement wall, or a stable support visual that makes the claim feel credible.",
+                        defaults={"quality_status": "approved"},
+                    ),
+                    _project_slot(
+                        beat_no=i,
+                        beat_purpose=purpose,
+                        request_family="trust",
+                        scene=scene,
+                        content="line",
+                        coverage="detail",
+                        move="static",
+                        target=1,
+                        priority="high",
+                        human_label="Trust / Proof · Inspection Detail",
+                        shoot_brief="Upload proof-support close detail: inspection action, certified detail, control check, or evidence-style support shot.",
+                        defaults={"quality_status": "approved"},
+                    ),
+                ]
+            )
+        elif purpose == "brand_close":
+            out.append(
+                _project_slot(
+                    beat_no=i,
+                    beat_purpose=purpose,
+                    request_family="close",
+                    scene=scene,
+                    content="building",
+                    coverage="hero",
+                    move="static",
+                    target=1,
+                    priority="high",
+                    human_label="Closing / Brand Hero",
+                    shoot_brief=brief_seed or "Upload the strongest clean final hero visual. Avoid fragmented details or weak support footage.",
+                    defaults={"outro_safe": True, "hero_safe": True, "quality_status": "approved"},
+                )
+            )
+        else:
+            content = infer_category_from_beat(beat)
+            for shot in infer_shots_from_beat(beat):
+                shot_norm = "detail" if shot in ["close"] else shot
+                out.append(
+                    _project_slot(
+                        beat_no=i,
+                        beat_purpose=purpose or "beat",
+                        request_family="support",
+                        scene=scene,
+                        content=content,
+                        coverage=shot_norm,
+                        move="static",
+                        target=1,
+                        priority="medium",
+                        human_label=f"{str(purpose or 'Support').replace('_', ' ').title()} · {shot_norm.title()}",
+                        shoot_brief=brief_seed or "Upload a clean supporting visual that matches this beat.",
+                        defaults={"quality_status": "approved"},
+                    )
+                )
+
+    return out
+
+
 def render_html_task_table(rows: list[dict]) -> str:
     css = """
     <style>
