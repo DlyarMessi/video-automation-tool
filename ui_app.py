@@ -508,7 +508,7 @@ def render_pool_active_slot_card(
                 key=f"pool_fill_v3_inbox_{pool_topic}_{i}",
             )
 
-        with st.expander("Clip tags", expanded=False):
+        with st.expander(tr("Clip tags"), expanded=False):
             meta1, meta2 = st.columns([1, 1])
             with meta1:
                 energy_default = st.selectbox(
@@ -543,7 +543,7 @@ def render_pool_active_slot_card(
             with t3:
                 outro_safe_default = st.checkbox("outro_safe", value=default_outro, key=f"pool_fill_v3_outro_{pool_topic}_{i}")
 
-        if st.button("Save to Pool", key=f"pool_fill_v3_save_{pool_topic}_{i}", use_container_width=True):
+        if st.button(tr("Save to Pool"), key=f"pool_fill_v3_save_{pool_topic}_{i}", use_container_width=True):
             if not uploads and not pick_inbox:
                 st.warning("Please upload at least one clip or move one from Inbox.")
             else:
@@ -700,7 +700,7 @@ def render_pool_completed_slot_card(
                 key=f"pool_fill_v3_done_inbox_{pool_topic}_{i}",
             )
 
-        with st.expander("Clip tags", expanded=False):
+        with st.expander(tr("Clip tags"), expanded=False):
             meta1, meta2 = st.columns([1, 1])
             with meta1:
                 energy_default = st.selectbox(
@@ -735,7 +735,7 @@ def render_pool_completed_slot_card(
             with t3:
                 outro_safe_default = st.checkbox("outro_safe", value=default_outro, key=f"pool_fill_v3_done_outro_{pool_topic}_{i}")
 
-        if st.button("Save Alternate to Pool", key=f"pool_fill_v3_done_save_{pool_topic}_{i}", use_container_width=True):
+        if st.button(tr("Save Alternate to Pool"), key=f"pool_fill_v3_done_save_{pool_topic}_{i}", use_container_width=True):
             if not uploads and not pick_inbox:
                 st.warning("Please upload at least one clip or move one from Inbox.")
             else:
@@ -823,7 +823,7 @@ def render_pool_fill_downloads():
         with c1:
             if guide_html.exists():
                 st.download_button(
-                    "Get Guide",
+                    tr("Get Guide"),
                     data=guide_html.read_text(encoding="utf-8"),
                     file_name=guide_html.name,
                     mime="text/html",
@@ -1089,7 +1089,6 @@ def list_companies() -> list[str]:
 def render_brand_validation_checklist(company: str) -> None:
     """Render lightweight brand setup status for the active company."""
     status = hardening_get_brand_validation_status(ROOT, company, safe_slug)
-    st.caption(build_brand_status_summary(status))
 
     logo_ready = bool(status.get("logo_exists"))
     default_plan_ready = bool(status.get("default_plan_exists"))
@@ -1097,11 +1096,198 @@ def render_brand_validation_checklist(company: str) -> None:
     if not isinstance(available_plans, list):
         available_plans = []
 
+    if str(st.session_state.get("display_lang", "en") or "en") == "zh":
+        parts = [
+            f"{tr('logo ready') if logo_ready else tr('logo missing')}",
+            f"{tr('default plan ready') if default_plan_ready else tr('default plan missing')}",
+            f"{len(available_plans)} 个计划" if available_plans else f"{tr('Available plans')} 0",
+        ]
+        st.caption(f"{tr('Status:')} " + " · ".join(parts))
+    else:
+        st.caption(build_brand_status_summary(status))
+
     all_ready = logo_ready and default_plan_ready
-    with st.expander("Brand Validation Checklist", expanded=not all_ready):
-        st.markdown(f"- {'✅' if logo_ready else '⚪'} Brand logo ({status.get('logo_path')})")
-        st.markdown(f"- {'✅' if default_plan_ready else '⚪'} Default pool plan ({status.get('default_plan_path')})")
-        st.markdown(f"- ℹ️ Available plans: **{', '.join(available_plans) if available_plans else 'none'}**")
+    with st.expander(tr("Brand Validation Checklist"), expanded=not all_ready):
+        if str(st.session_state.get("display_lang", "en") or "en") == "zh":
+            st.markdown(f"- {'✅' if logo_ready else '⚪'} {tr('Brand logo')} ({status.get('logo_path')})")
+            st.markdown(f"- {'✅' if default_plan_ready else '⚪'} {tr('Default pool plan')} ({status.get('default_plan_path')})")
+            st.markdown(f"- ℹ️ {tr('Available plans')}：**{', '.join(available_plans) if available_plans else tr('none')}**")
+        else:
+            st.markdown(f"- {'✅' if logo_ready else '⚪'} Brand logo ({status.get('logo_path')})")
+            st.markdown(f"- {'✅' if default_plan_ready else '⚪'} Default pool plan ({status.get('default_plan_path')})")
+            st.markdown(f"- ℹ️ Available plans: **{', '.join(available_plans) if available_plans else 'none'}**")
+
+
+
+UI_TEXT_ZH = {
+    "Video Automation Tool": "视频自动化工具",
+    "Workflow: Project Mode (planning & script generation) → Pool Fill Mode (asset coverage and gap closure)": "工作流：项目模式（规划与剧本生成）→ 素材池补充模式（素材覆盖与缺口补齐）",
+
+    "Workspace": "工作区",
+    "Global company context for planning, coverage, and export workflows.": "用于规划、补素材与导出流程的全局公司上下文。",
+    "Current Company": "当前公司",
+    "Create Company Workspace": "创建公司工作区",
+    "Display Language": "界面语言",
+    "Workflow": "工作流",
+    "Current Stage": "当前阶段",
+    "Script Planning / Project Mode": "脚本规划 / 项目模式",
+    "Shoot Tasks / Coverage / Pool Fill": "拍摄任务 / 覆盖补齐 / 素材池补充",
+    "Render / Export becomes available after planning and coverage completion.": "完成规划与素材覆盖后即可进行渲染 / 导出。",
+
+    "System Settings": "系统设置",
+    "Default Format": "默认画幅",
+    "Language": "语言",
+    "Global Default Language": "全局默认语言",
+    "ElevenLabs": "ElevenLabs",
+    "API Key": "API 密钥",
+    "TTS Model": "TTS 模型",
+    "Save TTS": "保存 TTS",
+    "Voice Map": "语音映射",
+    "Output Defaults": "输出默认设置",
+    "Visual Filter": "视觉滤镜",
+    "Advanced": "高级",
+    "Footage Root": "素材根目录",
+    "Verbose Logs (Dev)": "详细日志（开发）",
+
+    "AI Provider Settings": "AI 提供方设置",
+    "Script Provider": "剧本提供方",
+    "DeepSeek API Key": "DeepSeek API 密钥",
+    "DeepSeek Model": "DeepSeek 模型",
+    "DeepSeek Base URL (optional)": "DeepSeek Base URL（可选）",
+    "Save AI Provider": "保存 AI 提供方",
+
+    "Brand Validation Checklist": "品牌校验清单",
+    "Brand logo": "品牌 Logo",
+    "Default pool plan": "默认素材池计划",
+    "Available plans": "可用计划",
+    "Status:": "状态：",
+    "logo ready": "Logo 已就绪",
+    "logo missing": "Logo 缺失",
+    "default plan ready": "默认计划已就绪",
+    "default plan missing": "默认计划缺失",
+    "none": "无",
+
+    "Project Planning": "步骤 1 · 项目规划",
+    "Pick a planning path: AI Script Planning is the default workflow, and Import Existing Script stays available for manual control.": "选择规划方式：AI 剧本规划为默认流程，也可导入现有剧本进行手动控制。",
+    "✨ AI Script Planning": "✨ AI 剧本规划",
+    "📝 Import Existing Script": "📝 导入现有剧本",
+    "Manual YAML fallback (optional)": "手动 YAML 备用入口（可选）",
+    "Use this only when you intentionally want to import or paste an existing script.": "仅当你明确想导入或粘贴现有剧本时使用。",
+    "Script YAML": "剧本 YAML",
+    "Manual Script Source": "手动剧本来源",
+    "Paste Script YAML": "粘贴剧本 YAML",
+    "Use Existing Script YAML": "使用已有剧本 YAML",
+    "Select Script YAML": "选择剧本 YAML",
+    "The selected script will be used as-is.": "将按原样使用所选剧本。",
+    "Generate Task Rows": "生成任务行",
+    "Compact View": "紧凑视图",
+    "Export Printable HTML": "导出打印版 HTML",
+    "Download Printable HTML": "下载打印版 HTML",
+    "Paste script YAML to generate task rows.": "粘贴剧本 YAML 以生成任务行。",
+    "Select an existing script YAML to generate task rows.": "选择已有剧本 YAML 以生成任务行。",
+    "How the current demo categories work": "当前演示分类说明",
+
+    "Create with AI": "AI 生成剧本",
+    "Quick Brief": "简要需求",
+    "Describe your video goal in natural language. Example:": "请用自然语言描述你的视频目标。示例：",
+    "Audience: retail buyers and channel partners": "受众：零售买家与渠道合作伙伴",
+    "Objective: explain why this product solves a key pain point": "目标：说明该产品如何解决关键痛点",
+    "Must include: product demo, customer scenario, proof point": "必须包含：产品演示、客户场景、证明点",
+    "This draft only · Output Language": "仅本次草稿 · 输出语言",
+    "This draft only · Format": "仅本次草稿 · 画幅",
+    "Approx. Duration": "大致时长",
+    "Emphasis": "强调重点",
+    "Existing Footage": "是否已有素材",
+    "Check what the system understood": "查看系统理解结果",
+    "Refresh extracted brief": "刷新提取结果",
+    "Rebuild from brief": "根据需求重建",
+    "Reset extracted brief": "重置提取结果",
+    "Generate Draft": "生成草稿",
+    "Secondary actions": "次级操作",
+    "Manual YAML fallback (optional)": "手动 YAML 备用入口（可选）",
+
+    "Total Shots": "总镜头数",
+    "Ready": "已就绪",
+    "Missing": "缺失",
+    "Row": "序号",
+    "Beat": "段落",
+    "Category": "类别",
+    "Scene": "场景",
+    "Shot": "景别",
+    "Seconds": "时长",
+    "Movement": "运镜",
+    "Notes": "说明",
+
+    "Step 2 · Footage Board": "步骤 2 · 素材看板",
+    "Project-driven intake. Missing task slots can be filled by upload or inbox transfer.": "按项目驱动补素材。缺失槽位可通过上传或从收件箱转入来补齐。",
+    "Auto-match Existing Factory Footage": "自动匹配现有素材池",
+    "Show Matched Filenames": "显示已匹配文件名",
+    "Default Upload Extension": "默认上传格式",
+    "Factory Asset Index Preview": "素材索引预览",
+    "Edit Asset Soft Tags": "编辑素材软标签",
+    "Asset": "素材",
+    "Save Asset Tags": "保存素材标签",
+    "Factory file actions": "素材文件操作",
+    "Move to content": "改到内容类别",
+    "Move to coverage": "改到景别类别",
+    "Move token": "运镜标签",
+    "Reclassify / Rename Asset": "重分类 / 重命名素材",
+    "Delete Asset": "删除素材",
+
+    "Opening Context": "开场建立",
+    "Capability": "能力展示",
+    "Trust / Proof": "信任 / 证明",
+    "Brand Close": "品牌收束",
+    "Ready slots": "已满足槽位",
+    "Clip tags": "素材标签",
+    "Save to Pool": "保存到素材池",
+    "Save Alternate to Pool": "保存备选到素材池",
+
+    "Upload opening context: exterior, entrance, showroom, headquarters, or a clean overall establishing visual. Avoid fragmented close details.": "请上传开场建立素材：外立面、入口、展厅、总部，或干净完整的整体建立镜头。避免碎片化近景。",
+    "Upload process visuals: machine action, workflow medium shots, and clear operating details. Avoid empty exterior-only shots.": "请上传流程展示素材：机器动作、流程中景、清晰操作细节。避免只有外景没有过程的镜头。",
+    "Upload proof visuals: inspection, testing, certificates, achievements, or stable support detail. Avoid flashy or overly busy motion.": "请上传证明类素材：检验、测试、证书、成果墙，或稳定的支撑性细节。避免花哨或过于繁忙的运动。",
+    "Upload the strongest final hero visual: clean, stable, complete, and suitable for closing. Avoid fragmented detail shots.": "请上传最强的收尾 Hero 画面：干净、稳定、完整，适合作为结尾。避免碎片化细节镜头。",
+
+    "Shoot Tasks · Coverage & Missing Assets": "拍摄任务 · 覆盖与缺口补齐",
+    "Footage gap-closure stage after planning: use pool plans to close missing coverage and complete required assets.": "规划完成后，进入素材缺口补齐阶段：使用素材池计划补齐缺失覆盖并完成所需素材。",
+    "Manage Pool Plans": "管理素材池计划",
+    "Upload the first plan for a new brand, or add / replace plans for the current brand.": "可为新品牌上传第一份计划，或为当前品牌新增 / 替换计划。",
+    "Upload Plan YAML": "上传计划 YAML",
+    "Save as": "另存为",
+    "Save Pool Plan": "保存素材池计划",
+    "No pool plans found for this brand yet. Upload one in Manage Pool Plans to continue.": "当前品牌还没有素材池计划。请先在“管理素材池计划”中上传后再继续。",
+    "Pool Plan": "素材池计划",
+    "Default Ext": "默认格式",
+    "Pool Topic": "素材池主题",
+    "Workflow continuity: planning defines needs → Pool Fill closes missing coverage with matching clips.": "流程连续性：规划定义需求 → 素材池补充负责用匹配素材补齐缺口。",
+    "Download Selected Plan": "下载当前计划",
+    "Today’s Intake Brief": "今日采集简报",
+    "Best scene to fill:": "当前最该补的场景：",
+    "Most urgent slot:": "当前最紧急槽位：",
+    "Get Guide": "获取指引",
+    "Field reference for crew phone use. Download once and keep it with the shooting board.": "给拍摄人员手机端使用的现场参考。下载一次后可与拍摄任务单配合使用。",
+    "Task Board": "任务看板",
+    "Open missing slots first. Completed slots are folded to the bottom.": "优先展开缺失槽位。已满足的槽位会折叠到下方。",
+    "Filled Slots": "已补齐槽位",
+    "These slots already meet target count. Expand only if you want replacements or alternates.": "这些槽位已达到目标数量。只有在需要替换或补充备选时再展开。",
+
+    "Step 3 · Create Video": "步骤 3 · 生成视频",
+    "Creates the final video with lightweight run logs and default 60fps output.": "生成最终视频，并保留轻量运行日志；默认输出 60fps。",
+    "Create Video": "生成视频",
+    "Completed.": "已完成。",
+    "Final video created successfully.": "最终视频已成功生成。",
+    "Render Failed.": "渲染失败。",
+    "Render finished without a final video file. See _internal/render.log for the real failure.": "渲染结束但未生成最终视频文件。真实失败原因请查看 _internal/render.log。",
+    "Generate Task Rows in Step 1 first.": "请先在步骤 1 生成任务行。",
+}
+
+def tr(text: str) -> str:
+    code = str(st.session_state.get("display_lang", "en") or "en")
+    if code == "zh":
+        return UI_TEXT_ZH.get(text, text)
+    return text
+
+
 
 
 # =========================================================
@@ -1109,12 +1295,39 @@ def render_brand_validation_checklist(company: str) -> None:
 # =========================================================
 ensure_ui_session_defaults(st.session_state)
 
+# UI_POLISH_CSS_V1
+st.markdown("""
+<style>
+html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebar"] {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+               "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+}
+h1, h2, h3, h4 {
+  letter-spacing: -0.01em;
+}
+div[data-testid="stMarkdownContainer"] p {
+  line-height: 1.52;
+}
+div[data-testid="stExpander"] details summary p {
+  font-weight: 600;
+}
+div[data-testid="stButton"] button,
+div[data-testid="stDownloadButton"] button {
+  border-radius: 10px;
+  font-weight: 500;
+}
+section[data-testid="stSidebar"] div[data-testid="stMarkdownContainer"] p {
+  line-height: 1.48;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # =========================================================
 # Header
 # =========================================================
-st.markdown("## 🎬 Video Automation Tool")
+st.markdown(f"## 🎬 {tr('Video Automation Tool')}")
 st.markdown(
-    "<span class='muted'>Workflow: Project Mode (planning & script generation) → Pool Fill Mode (asset coverage and gap closure)</span>",
+    "<span class='muted'>" + tr("Workflow: Project Mode (planning & script generation) → Pool Fill Mode (asset coverage and gap closure)") + "</span>",
     unsafe_allow_html=True,
 )
 
@@ -1139,20 +1352,20 @@ else:
     default_idx = 0 if companies else None
 
 with st.sidebar:
-    st.markdown("## Workspace")
-    st.caption("Global company context for planning, coverage, and export workflows.")
+    st.markdown(f"## {tr('Workspace')}")
+    st.caption(tr("Global company context for planning, coverage, and export workflows."))
 
     if companies:
         if preferred_company and preferred_company in companies:
             st.session_state["company_select_top"] = preferred_company
-        company = st.selectbox("Current Company", companies, index=default_idx, key="company_select_top")
+        company = st.selectbox(tr("Current Company"), companies, index=default_idx, key="company_select_top")
         remember_last_company(ROOT, company)
     else:
         company = ""
         st.info("Create your first company workspace to get started.")
 
     new_brand_name = st.text_input(
-        "Create Company Workspace",
+        tr("Create Company Workspace"),
         value="",
         placeholder="e.g. Northwind, Blue Harbor, Acme",
         key="create_brand_name_v1_main",
@@ -1169,7 +1382,7 @@ with st.sidebar:
         st.caption("Creates managed company folders and starter brand config")
 
     if st.button(
-        "Create Company Workspace",
+        tr("Create Company Workspace"),
         use_container_width=True,
         key="create_brand_skeleton_v1_main",
         disabled=create_disabled,
@@ -1190,18 +1403,32 @@ with st.sidebar:
         else:
             st.warning(msg)
 
-    st.markdown("### Workflow")
+    st.markdown(f"### {tr('Display Language')}")
+    display_lang_label = st.selectbox(
+        tr("Display Language"),
+        ["English", "中文"],
+        index=0 if str(st.session_state.get("display_lang", "en") or "en") == "en" else 1,
+        key="display_lang_label_top_v1",
+        label_visibility="collapsed",
+    )
+    st.session_state["display_lang"] = "zh" if display_lang_label == "中文" else "en"
+
+    if "work_mode" not in st.session_state:
+        st.session_state["work_mode"] = "Script Planning / Project Mode"
+
+    st.markdown(f"### {tr('Workflow')}")
     work_mode = st.radio(
-        "Current Stage",
+        tr("Current Stage"),
         ["Script Planning / Project Mode", "Shoot Tasks / Coverage / Pool Fill"],
+        format_func=tr,
         key="work_mode",
     )
-    st.caption("Render / Export becomes available after planning and coverage completion.")
+    st.caption(tr("Render / Export becomes available after planning and coverage completion."))
 
-    with st.expander("System Settings", expanded=False):
-        orientation = st.radio("Default Format", ["portrait", "landscape"], horizontal=True)
+    with st.expander(tr("System Settings"), expanded=False):
+        orientation = st.radio(tr("Default Format"), ["portrait", "landscape"], horizontal=True)
 
-        st.markdown("### Language")
+        st.markdown(f"### {tr('Language')}")
         lang_options = [
             ("English", "en-US"),
             ("French", "fr-FR"),
@@ -1215,7 +1442,7 @@ with st.sidebar:
             ("Other…", "other"),
         ]
         lang_labels = [f"{n} ({c})" if c != "other" else n for n, c in lang_options]
-        sel = st.selectbox("Global Default Language", lang_labels, index=0)
+        sel = st.selectbox(tr("Global Default Language"), lang_labels, index=0)
         sel_code = dict(zip(lang_labels, [c for _, c in lang_options]))[sel]
         if sel_code == "other":
             lang_code = st.text_input("Custom Language (BCP-47)", value="", placeholder="e.g. zh-CN / en-GB").strip()
@@ -1224,13 +1451,13 @@ with st.sidebar:
         if not lang_code:
             lang_code = "en-US"
 
-        st.markdown("### ElevenLabs")
+        st.markdown(f"### {tr('ElevenLabs')}")
         profile = ensure_default_eleven_profile()
         saved_key = load_eleven_api_key()
-        eleven_key = st.text_input("API Key", value=saved_key, type="password")
+        eleven_key = st.text_input(tr("API Key"), value=saved_key, type="password")
 
         model_id = st.selectbox(
-            "TTS Model",
+            tr("TTS Model"),
             ["eleven_multilingual_v2", "eleven_turbo_v2_5", "eleven_flash_v2_5", "eleven_v3"],
             index=0,
         )
@@ -1245,7 +1472,7 @@ with st.sidebar:
 
         save_a, save_b = st.columns([1, 1])
         with save_a:
-            if st.button("Save TTS", use_container_width=True):
+            if st.button(tr("Save TTS"), use_container_width=True):
                 if eleven_key.strip():
                     save_eleven_api_key(eleven_key.strip())
 
@@ -1266,22 +1493,22 @@ with st.sidebar:
                 st.success("Saved")
 
         with save_b:
-            with st.popover("Voice Map"):
+            with st.popover(tr("Voice Map")):
                 langs = profile.get("languages", {}) if isinstance(profile.get("languages", {}), dict) else {}
                 rows_map = [{"lang": k, "voice_id": (v or {}).get("voice_id", "")} for k, v in sorted(langs.items())]
                 st.dataframe(rows_map, width="stretch", hide_index=True)
 
         ai_provider_settings = render_ai_provider_settings(root=ROOT)
 
-        st.markdown("### Output Defaults")
+        st.markdown(f"### {tr('Output Defaults')}")
         target_fps = get_default_fps()
-        filter_preset_name = st.selectbox("Visual Filter", ["clean", "industrial", "warm_brand"], index=1)
+        filter_preset_name = st.selectbox(tr("Visual Filter"), ["clean", "industrial", "warm_brand"], index=1)
         _ = get_filter_preset(filter_preset_name)
         st.caption(f"FPS: {target_fps}  |  Filter: {filter_preset_name}")
 
-        with st.expander("Advanced", expanded=False):
-            input_root = st.text_input("Footage Root", value=str(INPUT_ROOT_DEFAULT))
-            verbose = st.checkbox("Verbose Logs (Dev)", value=False)
+        with st.expander(tr("Advanced"), expanded=False):
+            input_root = st.text_input(tr("Footage Root"), value=str(INPUT_ROOT_DEFAULT))
+            verbose = st.checkbox(tr("Verbose Logs (Dev)"), value=False)
 
         if company:
             with st.expander("Danger Zone", expanded=False):
@@ -1387,8 +1614,8 @@ if not storage_ready:
 # =========================================================
 if normalized_work_mode == "Pool Fill Mode":
     st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
-    st.markdown("## Shoot Tasks · Coverage & Missing Assets")
-    st.caption("Footage gap-closure stage after planning: use pool plans to close missing coverage and complete required assets.")
+    st.markdown(f"## 📦 {tr('Shoot Tasks · Coverage & Missing Assets')}")
+    st.caption(tr("Footage gap-closure stage after planning: use pool plans to close missing coverage and complete required assets."))
 
     if not storage_ready or not factory_dir:
         st.info("Footage storage is unavailable. Pool Fill Mode is currently disabled.")
@@ -1399,27 +1626,27 @@ if normalized_work_mode == "Pool Fill Mode":
     if pool_plan_flash:
         st.success(pool_plan_flash)
 
-    with st.expander("Manage Pool Plans", expanded=False):
-        st.caption("Upload the first plan for a new brand, or add / replace plans for the current brand.")
+    with st.expander(tr("Manage Pool Plans"), expanded=False):
+        st.caption(tr("Upload the first plan for a new brand, or add / replace plans for the current brand."))
 
         manage_a, manage_b = st.columns([2, 1])
         with manage_a:
             uploaded_plan_file = st.file_uploader(
-                "Upload Plan YAML",
+                tr("Upload Plan YAML"),
                 type=["yaml", "yml"],
                 key=f"pool_plan_manager_upload_{safe_slug(company).lower()}",
                 help="Upload a YAML pool plan for the current brand.",
             )
         with manage_b:
             plan_name_input = st.text_input(
-                "Save as",
+                tr("Save as"),
                 value="",
                 placeholder="default / campaign-a / showroom-v2",
                 key=f"pool_plan_manager_name_{safe_slug(company).lower()}",
             )
 
         if st.button(
-            "Save Pool Plan",
+            tr("Save Pool Plan"),
             use_container_width=True,
             key=f"pool_plan_manager_save_{safe_slug(company).lower()}",
         ):
@@ -1432,7 +1659,7 @@ if normalized_work_mode == "Pool Fill Mode":
                 st.warning(msg)
 
     if not available_pool_plans:
-        st.info("No pool plans found for this brand yet. Upload one in Manage Pool Plans to continue.")
+        st.info(tr("No pool plans found for this brand yet. Upload one in Manage Pool Plans to continue."))
         st.stop()
 
     pool_plan_labels, pool_plan_map = build_pool_plan_label_map(available_pool_plans, POOL_PLAN_DIR)
@@ -1441,9 +1668,9 @@ if normalized_work_mode == "Pool Fill Mode":
 
     toolbar_a, toolbar_b, toolbar_c, toolbar_d = st.columns([1.2, 1.2, 1, 2])
     with toolbar_a:
-        selected_plan_label = st.selectbox("Pool Plan", pool_plan_labels, key="pool_plan_select_v4")
+        selected_plan_label = st.selectbox(tr("Pool Plan"), pool_plan_labels, key="pool_plan_select_v4")
     with toolbar_b:
-        ext_choice_pool = st.selectbox("Default Ext", [".mp4", ".mov", ".m4v", ".mkv"], index=0, key="ext_choice_pool_v4")
+        ext_choice_pool = st.selectbox(tr("Default Ext"), [".mp4", ".mov", ".m4v", ".mkv"], index=0, key="ext_choice_pool_v4")
     with toolbar_c:
         selected_plan_data = get_selected_pool_plan_data(
             selected_plan_label=selected_plan_label,
@@ -1458,15 +1685,15 @@ if normalized_work_mode == "Pool Fill Mode":
             st.error("Selected pool plan has no valid topics.")
             st.stop()
         ui_ensure_valid_choice(st.session_state, "pool_topic_v4", topic_names)
-        pool_topic = st.selectbox("Pool Topic", topic_names, key="pool_topic_v4")
+        pool_topic = st.selectbox(tr("Pool Topic"), topic_names, key="pool_topic_v4")
     with toolbar_d:
         st.markdown('<div class="top-help"></div>', unsafe_allow_html=True)
-        st.caption("Workflow continuity: planning defines needs → Pool Fill closes missing coverage with matching clips.")
+        st.caption(tr("Workflow continuity: planning defines needs → Pool Fill closes missing coverage with matching clips."))
 
         try:
             current_plan_path = pool_plan_map[selected_plan_label]
             st.download_button(
-                "Download Selected Plan",
+                tr("Download Selected Plan"),
                 data=current_plan_path.read_text(encoding="utf-8"),
                 file_name=current_plan_path.name,
                 mime="text/yaml",
@@ -1499,9 +1726,9 @@ if normalized_work_mode == "Pool Fill Mode":
     completed_rows = pool_fill_runtime["completed_rows"]
 
     with st.container(border=True):
-        st.markdown("#### 📋 Today’s Intake Brief")
-        st.markdown(f"📍 **Best scene to fill:** {summary['focus_scene']}")
-        st.markdown(f"🔥 **Most urgent slot:** {summary['urgent_label']}")
+        st.markdown(f"#### 📋 {tr('Today’s Intake Brief')}")
+        st.markdown(f"📍 **{tr('Best scene to fill:')}** {summary['focus_scene']}")
+        st.markdown(f"🔥 **{tr('Most urgent slot:')}** {summary['urgent_label']}")
         st.caption(
             f"Need {summary['total_missing']} more clips · "
             f"Existing {summary['total_existing']} / Target {summary['total_target']}"
@@ -1512,7 +1739,7 @@ if normalized_work_mode == "Pool Fill Mode":
         with guide_a:
             if guide_html.exists():
                 st.download_button(
-                    "Get Guide",
+                    tr("Get Guide"),
                     data=guide_html.read_text(encoding="utf-8"),
                     file_name=guide_html.name,
                     mime="text/html",
@@ -1520,10 +1747,10 @@ if normalized_work_mode == "Pool Fill Mode":
                     key="download_pool_guide_html_inline",
                 )
         with guide_b:
-            st.caption("Field reference for crew phone use. Download once and keep it with the shooting board.")
+            st.caption(tr("Field reference for crew phone use. Download once and keep it with the shooting board."))
 
-    st.markdown("### Task Board")
-    st.caption("Open missing slots first. Completed slots are folded to the bottom.")
+    st.markdown(f"### {tr('Task Board')}")
+    st.caption(tr("Open missing slots first. Completed slots are folded to the bottom."))
 
     for i, row in enumerate(active_rows):
         render_pool_active_slot_card(
@@ -1536,8 +1763,8 @@ if normalized_work_mode == "Pool Fill Mode":
         st.write("")
 
     if completed_rows:
-        st.markdown("### Filled Slots")
-        st.caption("These slots already meet target count. Expand only if you want replacements or alternates.")
+        st.markdown(f"### {tr('Filled Slots')}")
+        st.caption(tr("These slots already meet target count. Expand only if you want replacements or alternates."))
         for j, row in enumerate(completed_rows):
             render_pool_completed_slot_card(
                 row=row,
@@ -1553,10 +1780,10 @@ if normalized_work_mode == "Pool Fill Mode":
 # Project Mode · Step 1
 # =========================================================
 st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
-st.markdown("## Project Planning")
-st.caption("Pick a planning path: AI Script Planning is the default workflow, and Import Existing Script stays available for manual control.")
+st.markdown(f"## 📝 {tr('Project Planning')}")
+st.caption(tr("Pick a planning path: AI Script Planning is the default workflow, and Import Existing Script stays available for manual control."))
 
-ai_tab, manual_tab = st.tabs(["✨ AI Script Planning", "📝 Import Existing Script"])
+ai_tab, manual_tab = st.tabs([tr("✨ AI Script Planning"), tr("📝 Import Existing Script")])
 
 src_mode = "Paste Script YAML"
 selected_path: Path | None = None
@@ -1572,10 +1799,10 @@ with ai_tab:
         global_language=lang_code,
         provider_settings=ai_provider_settings,
     )
-    with st.expander("Manual YAML fallback (optional)", expanded=False):
-        st.caption("Use this only when you intentionally want to import or paste an existing script.")
+    with st.expander(tr("Manual YAML fallback (optional)"), expanded=False):
+        st.caption(tr("Use this only when you intentionally want to import or paste an existing script."))
         st.session_state["creative_draft"] = st.text_area(
-            "Script YAML",
+            tr("Script YAML"),
             value=st.session_state.get("creative_draft", ""),
             height=180,
             placeholder="Paste your Creative Script YAML here…",
@@ -1587,10 +1814,10 @@ with ai_tab:
     generate_help = "Paste manual YAML in the optional fallback panel to generate task rows."
 
 with manual_tab:
-    src_mode = st.selectbox("Manual Script Source", ["Paste Script YAML", "Use Existing Script YAML"], key="src_mode")
+    src_mode = st.selectbox(tr("Manual Script Source"), ["Paste Script YAML", "Use Existing Script YAML"], key="src_mode", format_func=tr)
     if src_mode == "Paste Script YAML":
         st.session_state["creative_draft"] = st.text_area(
-            "Script YAML",
+            tr("Script YAML"),
             value=st.session_state.get("creative_draft", ""),
             height=180,
             placeholder="Paste your Creative Script YAML here…",
@@ -1604,29 +1831,29 @@ with manual_tab:
         if not files:
             st.warning("No script YAML files were found for this company.")
         else:
-            selected_path = st.selectbox("Select Script YAML", files, format_func=lambda p: p.name, key="select_yaml")
-            st.caption("The selected script will be used as-is.")
+            selected_path = st.selectbox(tr("Select Script YAML"), files, format_func=lambda p: p.name, key="select_yaml")
+            st.caption(tr("The selected script will be used as-is."))
 
     draft_text = str(st.session_state.get("creative_draft", "") or "").strip()
     if src_mode == "Use Existing Script YAML":
         generate_ready = selected_path is not None
-        generate_help = "Select an existing script YAML to generate task rows."
+        generate_help = tr("Select an existing script YAML to generate task rows.")
     else:
         generate_ready = bool(draft_text)
-        generate_help = "Paste script YAML to generate task rows."
+        generate_help = tr("Paste script YAML to generate task rows.")
 
 action_a, action_b = st.columns([1, 1])
 with action_a:
     generate_btn = st.button(
-        "Generate Task Rows",
+        tr("Generate Task Rows"),
         use_container_width=True,
         key="generate_tasks",
         disabled=not generate_ready,
         help=generate_help,
     )
 with action_b:
-    compact_view = st.checkbox("Compact View", value=True, key="compact_view")
-export_html = st.checkbox("Export Printable HTML", value=True, key="export_html")
+    compact_view = st.checkbox(tr("Compact View"), value=True, key="compact_view")
+export_html = st.checkbox(tr("Export Printable HTML"), value=True, key="export_html")
 
 if not generate_ready:
     st.caption(generate_help)
@@ -1736,11 +1963,11 @@ if rows:
         total_missing = total_need
 
     m1, m2, m3 = st.columns([1, 1, 1])
-    m1.metric("Total Shots", total_need)
-    m2.metric("Ready", total_ready)
-    m3.metric("Missing", total_missing)
+    m1.metric(tr("Total Shots"), total_need)
+    m2.metric(tr("Ready"), total_ready)
+    m3.metric(tr("Missing"), total_missing)
 
-    with st.expander("How the current demo categories work", expanded=False):
+    with st.expander(tr("How the current demo categories work"), expanded=False):
         st.markdown(
             "- **Exterior / Product Hero** = opening / closing hero visuals\n"
             "- **Factory Process** = production, automation, workflow coverage\n"
@@ -1760,23 +1987,34 @@ if rows:
         row_view = {k: r.get(k, "") for k in show_cols}
         if "Category" in row_view:
             row_view["Category"] = {
-                "building": "Exterior / Product Hero",
-                "line": "Factory Process",
+                "building": "Exterior / Product Hero" if str(st.session_state.get("display_lang", "en") or "en") != "zh" else "外景 / 产品 Hero",
+                "line": "Factory Process" if str(st.session_state.get("display_lang", "en") or "en") != "zh" else "工厂流程",
             }.get(str(r.get("Category", "")).strip().lower(), str(r.get("Category", "")).replace("_", " ").title())
         if "Shot" in row_view:
             row_view["Shot"] = {
-                "hero": "Hero / Establishing",
-                "medium": "Medium Shot",
-                "detail": "Detail Close-up",
-                "wide": "Wide / Establishing",
+                "hero": "Hero / Establishing" if str(st.session_state.get("display_lang", "en") or "en") != "zh" else "Hero / 建立镜头",
+                "medium": "Medium Shot" if str(st.session_state.get("display_lang", "en") or "en") != "zh" else "中景",
+                "detail": "Detail Close-up" if str(st.session_state.get("display_lang", "en") or "en") != "zh" else "细节近景",
+                "wide": "Wide / Establishing" if str(st.session_state.get("display_lang", "en") or "en") != "zh" else "大全景 / 建立镜头",
             }.get(str(r.get("Shot", "")).strip().lower(), str(r.get("Shot", "")).replace("_", " ").title())
+        label_map = {
+            "Row": tr("Row"),
+            "Beat": tr("Beat"),
+            "Category": tr("Category"),
+            "Scene": tr("Scene"),
+            "Shot": tr("Shot"),
+            "Seconds": tr("Seconds"),
+            "Movement": tr("Movement"),
+            "Notes": tr("Notes"),
+        }
+        row_view = {label_map.get(k, k): v for k, v in row_view.items()}
         display_rows.append(row_view)
 
     st.dataframe(display_rows, width="stretch", hide_index=True)
 
     if task_rows_html_path and task_rows_html_path.exists():
         st.download_button(
-            "Download Printable HTML",
+            tr("Download Printable HTML"),
             data=task_rows_html_path.read_text(encoding="utf-8"),
             file_name=task_rows_html_path.name,
             mime="text/html",
@@ -1787,15 +2025,15 @@ if rows:
 # Project Mode · Step 2
 # =========================================================
 st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
-st.markdown("## Step 2 · Footage Board")
-st.caption("Project-driven intake. Missing task slots can be filled by upload or inbox transfer.")
+st.markdown(f"## 🎞️ {tr('Step 2 · Footage Board')}")
+st.caption(tr("Project-driven intake. Missing task slots can be filled by upload or inbox transfer."))
 
 if not storage_ready or not inbox_dir or not factory_dir:
     st.info("Footage storage is unavailable. Step 2 is currently disabled.")
 elif project_slots:
-    auto_use_factory = st.checkbox("Auto-match Existing Factory Footage", value=True, key="auto_use_factory")
-    show_matches = st.checkbox("Show Matched Filenames", value=False, key="show_matches")
-    ext_choice = st.selectbox("Default Upload Extension", [".mp4", ".mov", ".m4v", ".mkv"], index=0, key="ext_choice")
+    auto_use_factory = st.checkbox(tr("Auto-match Existing Factory Footage"), value=True, key="auto_use_factory")
+    show_matches = st.checkbox(tr("Show Matched Filenames"), value=False, key="show_matches")
+    ext_choice = st.selectbox(tr("Default Upload Extension"), [".mp4", ".mov", ".m4v", ".mkv"], index=0, key="ext_choice")
 
     factory_files = list_video_files(factory_dir, VIDEO_SUFFIXES)
     inbox_files = list_video_files(inbox_dir, VIDEO_SUFFIXES)
@@ -1804,7 +2042,7 @@ elif project_slots:
     for r in rows:
         beats_map.setdefault(int(r["Beat"]), []).append(r)
 
-    with st.expander("Factory Asset Index Preview", expanded=False):
+    with st.expander(tr("Factory Asset Index Preview"), expanded=False):
         preview_items = load_asset_index(factory_dir / "asset_index.json")
         if preview_items:
             preview_rows = []
@@ -1825,13 +2063,13 @@ elif project_slots:
         else:
             st.info("No indexed factory assets yet.")
 
-    with st.expander("Edit Asset Soft Tags", expanded=False):
+    with st.expander(tr("Edit Asset Soft Tags"), expanded=False):
         editable_items = load_asset_index(factory_dir / "asset_index.json")
         if not editable_items:
             st.info("No indexed factory assets yet.")
         else:
             selected_filename = st.selectbox(
-                "Asset",
+                tr("Asset"),
                 [str(item.get("filename", "")) for item in editable_items],
                 key="asset_editor_filename",
             )
@@ -1856,7 +2094,7 @@ elif project_slots:
 
                 notes = st.text_area("notes", value=str(selected_item.get("notes", "") or ""), height=80, key="edit_notes")
 
-                if st.button("Save Asset Tags", key="save_asset_tags"):
+                if st.button(tr("Save Asset Tags"), key="save_asset_tags"):
                     ok = update_asset_record_fields(
                         factory_dir / "asset_index.json",
                         selected_filename,
@@ -1877,7 +2115,7 @@ elif project_slots:
                         st.warning("No asset changes were saved.")
 
                     st.markdown("---")
-                    st.caption("Factory file actions")
+                    st.caption(tr("Factory file actions"))
 
                     current_asset_path = factory_dir / selected_filename
                     current_content = str(selected_item.get("content", "line") or "line")
@@ -1891,21 +2129,21 @@ elif project_slots:
                     c_move_1, c_move_2, c_move_3 = st.columns(3)
                     with c_move_1:
                         reclass_content = st.selectbox(
-                            "Move to content",
+                            tr("Move to content"),
                             content_options,
                             index=content_options.index(current_content) if current_content in content_options else 1,
                             key=f"reclass_content_{safe_slug(selected_filename)}",
                         )
                     with c_move_2:
                         reclass_coverage = st.selectbox(
-                            "Move to coverage",
+                            tr("Move to coverage"),
                             coverage_options,
                             index=coverage_options.index(current_coverage) if current_coverage in coverage_options else 1,
                             key=f"reclass_coverage_{safe_slug(selected_filename)}",
                         )
                     with c_move_3:
                         reclass_move = st.selectbox(
-                            "Move token",
+                            tr("Move token"),
                             move_options,
                             index=move_options.index(current_move) if current_move in move_options else 0,
                             key=f"reclass_move_{safe_slug(selected_filename)}",
@@ -1914,7 +2152,7 @@ elif project_slots:
                     action_c1, action_c2 = st.columns(2)
 
                     with action_c1:
-                        if st.button("Reclassify / Rename Asset", key=f"reclassify_asset_{safe_slug(selected_filename)}"):
+                        if st.button(tr("Reclassify / Rename Asset"), key=f"reclassify_asset_{safe_slug(selected_filename)}"):
                             if not current_asset_path.exists():
                                 st.error(f"Asset file not found: {selected_filename}")
                             else:
@@ -1962,7 +2200,7 @@ elif project_slots:
                                 st.rerun()
 
                     with action_c2:
-                        if st.button("Delete Asset", type="secondary", key=f"delete_asset_{safe_slug(selected_filename)}"):
+                        if st.button(tr("Delete Asset"), type="secondary", key=f"delete_asset_{safe_slug(selected_filename)}"):
                             if not current_asset_path.exists():
                                 st.error(f"Asset file not found: {selected_filename}")
                             else:
@@ -2009,12 +2247,12 @@ elif project_slots:
         beat_purpose = str(beat_slot_rows[0].get("beat_purpose", "") or "").strip().lower()
         request_family = str(beat_slot_rows[0].get("request_family", "") or "").strip().lower()
 
-        beat_label = {
+        beat_label = tr({
             "establish_context": "Opening Context",
             "show_capability": "Capability",
             "build_trust": "Trust / Proof",
             "brand_close": "Brand Close",
-        }.get(beat_purpose, beat_purpose.replace("_", " ").title() or f"Beat {beat_no}")
+        }.get(beat_purpose, beat_purpose.replace("_", " ").title() or f"Beat {beat_no}"))
 
         beat_hint = {
             "opening": "Upload opening context: exterior, entrance, showroom, headquarters, or a clean overall establishing visual. Avoid fragmented close details.",
@@ -2025,7 +2263,7 @@ elif project_slots:
 
         with st.expander(f"Beat {beat_no} · {beat_label}", expanded=False):
             if beat_hint:
-                st.caption(beat_hint)
+                st.caption(tr(beat_hint))
 
             active_slot_rows = [r for r in beat_slot_rows if int(r.get("missing", 0)) > 0]
             completed_slot_rows = [r for r in beat_slot_rows if int(r.get("missing", 0)) <= 0]
@@ -2043,7 +2281,7 @@ elif project_slots:
                 st.write("")
 
             if completed_slot_rows:
-                st.caption("Ready slots")
+                st.caption(tr("Ready slots"))
                 for j, row in enumerate(completed_slot_rows):
                     render_pool_completed_slot_card(
                         row=row,
@@ -2057,17 +2295,17 @@ elif project_slots:
 # Project Mode · Step 3
 # =========================================================
 st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
-st.markdown("## Step 3 · Create Video")
-st.caption("Creates the final video with lightweight run logs and default 60fps output.")
+st.markdown(f"## 🚀 {tr('Step 3 · Create Video')}")
+st.caption(tr("Creates the final video with lightweight run logs and default 60fps output."))
 
 active_creative_path = Path(st.session_state["active_creative_path"]) if st.session_state.get("active_creative_path") else None
 
 if not storage_ready:
     st.info("Footage storage is unavailable. Step 3 is currently disabled.")
 elif not (active_creative_path and active_creative_path.exists()):
-    st.info("Generate Task Rows in Step 1 first.")
+    st.info(tr("Generate Task Rows in Step 1 first."))
 else:
-    if st.button("Create Video", use_container_width=True, key="create_video"):
+    if st.button(tr("Create Video"), use_container_width=True, key="create_video"):
         progress = st.progress(0)
         status = st.empty()
 
@@ -2127,13 +2365,13 @@ else:
             rendered_mp4s = sorted([pp for pp in run_dir.iterdir() if pp.is_file() and pp.suffix.lower() == ".mp4"])
             if not rendered_mp4s:
                 progress.progress(100)
-                status.markdown("**Render Failed.**")
-                st.error("Render finished without a final video file. See _internal/render.log for the real failure.")
+                status.markdown(f"**{tr('Render Failed.')}**")
+                st.error(tr("Render finished without a final video file. See _internal/render.log for the real failure."))
                 raise SystemExit(0)
 
-            status.markdown("**Completed.**")
+            status.markdown(f"**{tr('Completed.')}**")
             progress.progress(100)
-            st.success("Final video created successfully.")
+            st.success(tr("Final video created successfully."))
 
         except SystemExit:
             pass
