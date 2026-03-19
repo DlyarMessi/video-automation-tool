@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -83,6 +84,15 @@ def cmd_run(args: argparse.Namespace) -> int:
         return 0
 
     process_company(args.company, script_path=args.script, input_dir=args.input)
+
+    runtime_run_dir = str(os.environ.get("VIDEO_AUTOMATION_RUN_DIR", "") or "").strip()
+    if runtime_run_dir:
+        out_dir = Path(runtime_run_dir).expanduser().resolve()
+        mp4s = [pp for pp in out_dir.iterdir() if pp.is_file() and pp.suffix.lower() == ".mp4"] if out_dir.exists() else []
+        if not mp4s:
+            print("❌ Render finished without a final video file. Check _internal/render.log.")
+            return 1
+
     print("\n✨ Done")
     return 0
 

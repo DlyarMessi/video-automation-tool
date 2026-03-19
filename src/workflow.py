@@ -300,6 +300,9 @@ def _project_slot(
     human_label: str,
     shoot_brief: str,
     defaults: Optional[dict] = None,
+    subtitle: str = "",
+    vo: str = "",
+    tag: str = "",
 ) -> dict:
     return {
         "beat_no": int(beat_no),
@@ -314,6 +317,9 @@ def _project_slot(
         "defaults": dict(defaults or {}),
         "human_label": str(human_label or "").strip(),
         "shoot_brief": str(shoot_brief or "").strip(),
+        "subtitle": str(subtitle or "").strip(),
+        "vo": str(vo or "").strip(),
+        "tag": str(tag or "").strip(),
     }
 
 
@@ -325,6 +331,7 @@ def build_project_slots_from_creative(creative: dict) -> list[dict]:
         purpose = str(beat.get("purpose") or "").strip().lower()
         visual = str(beat.get("visual") or beat.get("visual_description") or "").strip()
         subtitle = str(beat.get("subtitle") or "").strip()
+        vo_text = str(beat.get("vo") or "").strip()
         brief_seed = subtitle or visual
         scene = "factory"
 
@@ -341,10 +348,14 @@ def build_project_slots_from_creative(creative: dict) -> list[dict]:
                     target=1,
                     priority="high",
                     human_label="Opening / Context · Hero Establishing",
-                    shoot_brief=brief_seed or "Upload a clean exterior, entrance, showroom, or overall establishing visual. Avoid fragmented close details.",
+                    shoot_brief=brief_seed or "Upload a clean exterior, entrance, showroom, headquarters, or overall establishing visual.",
                     defaults={"intro_safe": True, "hero_safe": True, "quality_status": "approved"},
+                    subtitle=subtitle,
+                    vo=vo_text,
+                    tag="opening_hero",
                 )
             )
+
         elif purpose == "show_capability":
             out.extend(
                 [
@@ -361,6 +372,9 @@ def build_project_slots_from_creative(creative: dict) -> list[dict]:
                         human_label="Capability / Process · Stable Medium",
                         shoot_brief=brief_seed or "Upload process coverage that clearly shows machines, workflow, or operation in a stable medium shot.",
                         defaults={"quality_status": "approved"},
+                        subtitle=subtitle,
+                        vo=vo_text,
+                        tag="capability_medium",
                     ),
                     _project_slot(
                         beat_no=i,
@@ -375,9 +389,12 @@ def build_project_slots_from_creative(creative: dict) -> list[dict]:
                         human_label="Capability / Process · Detail Action",
                         shoot_brief="Upload clear operating detail: hands, controls, machine action, or mechanism detail.",
                         defaults={"quality_status": "approved"},
+                        subtitle=subtitle,
+                        tag="capability_detail",
                     ),
                 ]
             )
+
         elif purpose == "build_trust":
             out.extend(
                 [
@@ -392,8 +409,11 @@ def build_project_slots_from_creative(creative: dict) -> list[dict]:
                         target=1,
                         priority="high",
                         human_label="Trust / Proof · Stable Support Medium",
-                        shoot_brief=brief_seed or "Upload inspection, testing, certificate wall, achievement wall, or a stable support visual that makes the claim feel credible.",
+                        shoot_brief=brief_seed or "Upload inspection, testing, certificates, achievements, or a stable support visual that makes the claim credible.",
                         defaults={"quality_status": "approved"},
+                        subtitle=subtitle,
+                        vo=vo_text,
+                        tag="trust_medium",
                     ),
                     _project_slot(
                         beat_no=i,
@@ -408,9 +428,12 @@ def build_project_slots_from_creative(creative: dict) -> list[dict]:
                         human_label="Trust / Proof · Inspection Detail",
                         shoot_brief="Upload proof-support close detail: inspection action, certified detail, control check, or evidence-style support shot.",
                         defaults={"quality_status": "approved"},
+                        subtitle=subtitle,
+                        tag="trust_detail",
                     ),
                 ]
             )
+
         elif purpose == "brand_close":
             out.append(
                 _project_slot(
@@ -424,12 +447,17 @@ def build_project_slots_from_creative(creative: dict) -> list[dict]:
                     target=1,
                     priority="high",
                     human_label="Closing / Brand Hero",
-                    shoot_brief=brief_seed or "Upload the strongest clean final hero visual. Avoid fragmented details or weak support footage.",
+                    shoot_brief=brief_seed or "Upload the strongest clean final hero visual suitable for closing.",
                     defaults={"outro_safe": True, "hero_safe": True, "quality_status": "approved"},
+                    subtitle=subtitle,
+                    vo=vo_text,
+                    tag="brand_close",
                 )
             )
+
         else:
             content = infer_category_from_beat(beat)
+            first = True
             for shot in infer_shots_from_beat(beat):
                 shot_norm = "detail" if shot in ["close"] else shot
                 out.append(
@@ -446,10 +474,40 @@ def build_project_slots_from_creative(creative: dict) -> list[dict]:
                         human_label=f"{str(purpose or 'Support').replace('_', ' ').title()} · {shot_norm.title()}",
                         shoot_brief=brief_seed or "Upload a clean supporting visual that matches this beat.",
                         defaults={"quality_status": "approved"},
+                        subtitle=subtitle,
+                        vo=vo_text if first else "",
+                        tag=str(purpose or "support"),
                     )
                 )
+                first = False
 
     return out
+
+
+def _duration_for_project_slot(slot: Dict[str, Any]) -> float:
+    family = str(slot.get("request_family", "") or "").strip().lower()
+    coverage = str(slot.get("coverage", "") or "").strip().lower()
+
+    if family == "opening":
+        return 4.2
+    if family == "close":
+        return 4.6
+    if family == "capability" and coverage == "medium":
+        return 3.1
+    if family == "capability" and coverage == "detail":
+        return 1.8
+    if family == "trust" and coverage == "medium":
+        return 2.8
+    if family == "trust" and coverage == "detail":
+        return 1.9
+
+    if coverage == "hero":
+        return 4.0
+    if coverage == "medium":
+        return 3.0
+    if coverage == "detail":
+        return 2.0
+    return 3.0
 
 
 def render_html_task_table(rows: list[dict]) -> str:
@@ -750,47 +808,31 @@ def _compile_fallback_shot(beat: Dict[str, Any], default_scene: str) -> Dict[str
 def compile_creative_dict(creative: Dict[str, Any]) -> Dict[str, Any]:
     meta = creative.get("meta", {}) if isinstance(creative.get("meta"), dict) else {}
     target_len = float(meta.get("target_length", 20) or 20)
-    beats = beats_from_creative(creative)
 
+    project_slots = build_project_slots_from_creative(creative)
     seq: List[Dict[str, Any]] = []
-    for beat in beats:
-        purpose_raw = str(beat.get("purpose") or "").strip()
-        purpose = _normalize_purpose(purpose_raw)
-        subtitle = str(beat.get("subtitle") or "").strip()
-        vo_text = str(beat.get("vo") or "").strip()
-        visual = str(beat.get("visual") or "").strip()
 
-        _ = beat.get("scene") or _infer_scene_token(visual) or "factory"
-        scene = "factory"
-        primary_content = _infer_demo_content_token(purpose, visual)
+    for slot in project_slots:
+        scene = str(slot.get("scene", "") or "factory").strip()
+        content = str(slot.get("content", "") or "line").strip()
+        coverage = str(slot.get("coverage", "") or "medium").strip()
+        source = f"next:tags:{scene},{content},{coverage}"
 
-        if purpose == "establish_context":
-            seq.extend(
-                [
-                    _shot(scene, "building", "hero", "", 3.6, subtitle, tag="context_building_hero", vo=vo_text),
-                    _shot(scene, "line", "hero", "", 2.4, subtitle, tag="context_line_hero"),
-                ]
-            )
-        elif purpose == "show_capability":
-            seq.extend(
-                [
-                    _shot(scene, "line", "medium", "", 3.4, subtitle, tag="capability_medium_open", vo=vo_text),
-                    _shot(scene, "line", "detail", "", 1.9, subtitle, tag="capability_detail_bridge"),
-                    _shot(scene, "line", "medium", "", 3.0, subtitle, tag="capability_medium_close"),
-                ]
-            )
-        elif purpose == "build_trust":
-            seq.extend(
-                [
-                    _shot(scene, primary_content, "medium", "", 3.1, subtitle, tag="trust_medium", vo=vo_text),
-                    _shot(scene, primary_content, "detail", "", 2.1, subtitle, tag="trust_detail"),
-                ]
-            )
-        elif purpose == "brand_close":
-            close_sub = subtitle if subtitle else "SIGLEN"
-            seq.append(_shot(scene, "building", "hero", "", 4.8, close_sub, tag="brand_hero", vo=vo_text))
-        else:
-            seq.append(_compile_fallback_shot(beat, default_scene=scene))
+        subtitle = str(slot.get("subtitle", "") or "").strip()
+        vo_text = str(slot.get("vo", "") or "").strip()
+        tag = str(slot.get("tag", "") or slot.get("beat_purpose", "") or slot.get("request_family", "") or "slot").strip()
+        repeat = max(1, int(slot.get("target", 1) or 1))
+        duration = float(_duration_for_project_slot(slot))
+
+        for idx in range(repeat):
+            shot: Dict[str, Any] = {
+                "source": source,
+                "duration": duration,
+                "subtitle": subtitle or None,
+                "vo": vo_text if idx == 0 and vo_text else None,
+                "tag": tag,
+            }
+            seq.append({k: v for k, v in shot.items() if v is not None})
 
     total = sum(float(s.get("duration") or 0.0) for s in seq)
     if total > 0:

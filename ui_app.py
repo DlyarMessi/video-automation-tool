@@ -2124,6 +2124,13 @@ else:
 
                 raise SystemExit(0)
 
+            rendered_mp4s = sorted([pp for pp in run_dir.iterdir() if pp.is_file() and pp.suffix.lower() == ".mp4"])
+            if not rendered_mp4s:
+                progress.progress(100)
+                status.markdown("**Render Failed.**")
+                st.error("Render finished without a final video file. See _internal/render.log for the real failure.")
+                raise SystemExit(0)
+
             status.markdown("**Completed.**")
             progress.progress(100)
             st.success("Final video created successfully.")
