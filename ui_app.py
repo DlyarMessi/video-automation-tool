@@ -1290,6 +1290,76 @@ def tr(text: str) -> str:
 
 
 
+
+def _load_json_list_for_restore(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def _restore_project_session_from_generated(company: str) -> bool:
+    company = str(company or "").strip()
+    if not company:
+        return False
+
+    generated_dir = CREATIVE_ROOT / company / "generated"
+    if not generated_dir.exists():
+        return False
+
+    candidates: list[Path] = []
+    active_raw = str(st.session_state.get("active_creative_path", "") or "").strip()
+    if active_raw:
+        active_path = Path(active_raw).expanduser()
+        if generated_dir in active_path.parents or active_path.parent == generated_dir:
+            candidates.append(active_path)
+
+    candidates.extend(
+        sorted(
+            generated_dir.glob("*.creative.yaml"),
+            key=lambda pp: pp.stat().st_mtime,
+            reverse=True,
+        )
+    )
+
+    seen: set[str] = set()
+    for creative_path in candidates:
+        key = str(creative_path.resolve()) if creative_path.exists() else str(creative_path)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        if not creative_path.exists():
+            continue
+
+        task_rows_json = creative_path.with_name(f"{creative_path.stem}.shooting_rows.json")
+        project_slots_json = creative_path.with_name(f"{creative_path.stem}.project_slots.json")
+        task_rows_html = creative_path.with_name(f"{creative_path.stem}.task_rows.html")
+
+        rows = _load_json_list_for_restore(task_rows_json)
+        project_slots = _load_json_list_for_restore(project_slots_json)
+
+        if not rows and not project_slots:
+            continue
+
+        st.session_state["active_creative_path"] = str(creative_path)
+        st.session_state["task_rows_json_path"] = str(task_rows_json)
+        st.session_state["project_slots_json_path"] = str(project_slots_json)
+        st.session_state["task_rows_html_path"] = str(task_rows_html)
+
+        if rows:
+            st.session_state["shooting_rows"] = rows
+        if project_slots:
+            st.session_state["project_slots"] = project_slots
+
+        return True
+
+    return False
+
+
 # =========================================================
 # Session
 # =========================================================
@@ -1570,6 +1640,19 @@ if brand_creation_flash:
 
 normalized_work_mode = "Project Mode" if work_mode == "Script Planning / Project Mode" else "Pool Fill Mode"
 
+active_creative_restore_path = Path(st.session_state["active_creative_path"]) if st.session_state.get("active_creative_path") else None
+restore_needed = (
+    bool(company)
+    and (
+        active_creative_restore_path is None
+        or not active_creative_restore_path.exists()
+        or not st.session_state.get("shooting_rows")
+        or not st.session_state.get("project_slots")
+    )
+)
+if restore_needed:
+    _restore_project_session_from_generated(company)
+
 if company:
     render_brand_validation_checklist(company)
 else:
@@ -1783,15 +1866,34 @@ st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
 st.markdown(f"## 📝 {tr('Project Planning')}")
 st.caption(tr("Pick a planning path: AI Script Planning is the default workflow, and Import Existing Script stays available for manual control."))
 
-ai_tab, manual_tab = st.tabs([tr("✨ AI Script Planning"), tr("📝 Import Existing Script")])
+
+if "planning_entry_mode_key" not in st.session_state:
+    st.session_state["planning_entry_mode_key"] = "existing" if st.session_state.get("active_creative_path") else "ai"
+
+planning_entry_mode_key = st.radio(
+    "planning_entry_mode",
+    ["ai", "existing"],
+    horizontal=True,
+    key="planning_entry_mode_key",
+    label_visibility="collapsed",
+    format_func=lambda v: tr("✨ AI Script Planning") if v == "ai" else tr("📝 Import Existing Script"),
+)
 
 src_mode = "Paste Script YAML"
 selected_path: Path | None = None
 
+active_creative_for_ui = Path(st.session_state["active_creative_path"]) if st.session_state.get("active_creative_path") else None
+if "src_mode" not in st.session_state:
+    st.session_state["src_mode"] = (
+        "Use Existing Script YAML"
+        if active_creative_for_ui and active_creative_for_ui.exists()
+        else "Paste Script YAML"
+    )
+
 generate_ready = False
 generate_help = ""
 
-with ai_tab:
+if planning_entry_mode_key == "ai":
     render_ai_script_entry_panel(
         root=ROOT,
         company=company,
@@ -1811,10 +1913,14 @@ with ai_tab:
         )
     draft_text = str(st.session_state.get("creative_draft", "") or "").strip()
     generate_ready = bool(draft_text)
-    generate_help = "Paste manual YAML in the optional fallback panel to generate task rows."
-
-with manual_tab:
-    src_mode = st.selectbox(tr("Manual Script Source"), ["Paste Script YAML", "Use Existing Script YAML"], key="src_mode", format_func=tr)
+    generate_help = tr("Paste script YAML to generate task rows.")
+else:
+    src_mode = st.selectbox(
+        tr("Manual Script Source"),
+        ["Paste Script YAML", "Use Existing Script YAML"],
+        key="src_mode",
+        format_func=tr,
+    )
     if src_mode == "Paste Script YAML":
         st.session_state["creative_draft"] = st.text_area(
             tr("Script YAML"),
@@ -1831,7 +1937,20 @@ with manual_tab:
         if not files:
             st.warning("No script YAML files were found for this company.")
         else:
-            selected_path = st.selectbox(tr("Select Script YAML"), files, format_func=lambda p: p.name, key="select_yaml")
+            if (
+                active_creative_for_ui
+                and active_creative_for_ui.exists()
+                and active_creative_for_ui in files
+                and "select_yaml" not in st.session_state
+            ):
+                st.session_state["select_yaml"] = active_creative_for_ui
+
+            selected_path = st.selectbox(
+                tr("Select Script YAML"),
+                files,
+                format_func=lambda pp: pp.name,
+                key="select_yaml",
+            )
             st.caption(tr("The selected script will be used as-is."))
 
     draft_text = str(st.session_state.get("creative_draft", "") or "").strip()
@@ -1842,7 +1961,7 @@ with manual_tab:
         generate_ready = bool(draft_text)
         generate_help = tr("Paste script YAML to generate task rows.")
 
-action_a, action_b = st.columns([1, 1])
+action_a, action_b, action_c = st.columns([1, 1, 1])
 with action_a:
     generate_btn = st.button(
         tr("Generate Task Rows"),
@@ -1853,7 +1972,22 @@ with action_a:
     )
 with action_b:
     compact_view = st.checkbox(tr("Compact View"), value=True, key="compact_view")
+with action_c:
+    reload_project_btn = st.button(
+        "重新载入当前项目" if str(st.session_state.get("display_lang", "en") or "en") == "zh" else "Reload Current Project",
+        use_container_width=True,
+        key="reload_current_project_v1",
+        disabled=not bool(company),
+    )
 export_html = st.checkbox(tr("Export Printable HTML"), value=True, key="export_html")
+
+if reload_project_btn:
+    restored = _restore_project_session_from_generated(company)
+    if restored:
+        st.success("已重新载入当前项目。" if str(st.session_state.get("display_lang", "en") or "en") == "zh" else "Current project reloaded.")
+        st.rerun()
+    else:
+        st.warning("未找到可恢复的项目产物。" if str(st.session_state.get("display_lang", "en") or "en") == "zh" else "No restorable project artifacts were found.")
 
 if not generate_ready:
     st.caption(generate_help)
@@ -2242,6 +2376,33 @@ elif project_slots:
 
     ordered_beat_nos = sorted(beat_groups.keys())
 
+    first_missing_beat = None
+    for _beat_no in ordered_beat_nos:
+        _rows = beat_groups.get(_beat_no, [])
+        if any(int(rr.get("missing", 0) or 0) > 0 for rr in _rows):
+            first_missing_beat = _beat_no
+            break
+
+    if "project_step2_focus_beat" not in st.session_state:
+        st.session_state["project_step2_focus_beat"] = str(first_missing_beat or (ordered_beat_nos[0] if ordered_beat_nos else "all"))
+
+    valid_focus_values = {"all"} | {str(x) for x in ordered_beat_nos}
+    if str(st.session_state.get("project_step2_focus_beat", "all")) not in valid_focus_values:
+        st.session_state["project_step2_focus_beat"] = str(first_missing_beat or (ordered_beat_nos[0] if ordered_beat_nos else "all"))
+
+    focus_label = "当前编辑 Beat" if str(st.session_state.get("display_lang", "en") or "en") == "zh" else "Current Editing Beat"
+    focus_options = ["all"] + [str(x) for x in ordered_beat_nos]
+    selected_focus = st.selectbox(
+        focus_label,
+        focus_options,
+        key="project_step2_focus_beat",
+        format_func=lambda v: (
+            ("全部 Beat" if str(st.session_state.get("display_lang", "en") or "en") == "zh" else "All Beats")
+            if v == "all"
+            else f"Beat {v}"
+        ),
+    )
+
     for beat_no in ordered_beat_nos:
         beat_slot_rows = sort_pool_slot_rows(beat_groups[beat_no])
         beat_purpose = str(beat_slot_rows[0].get("beat_purpose", "") or "").strip().lower()
@@ -2261,7 +2422,10 @@ elif project_slots:
             "close": "Upload the strongest final hero visual: clean, stable, complete, and suitable for closing. Avoid fragmented detail shots.",
         }.get(request_family, "Upload visuals that clearly support this beat.")
 
-        with st.expander(f"Beat {beat_no} · {beat_label}", expanded=False):
+        with st.expander(
+            f"Beat {beat_no} · {beat_label}",
+            expanded=(selected_focus == "all" and beat_no == (first_missing_beat or (ordered_beat_nos[0] if ordered_beat_nos else beat_no))) or (selected_focus == str(beat_no)),
+        ):
             if beat_hint:
                 st.caption(tr(beat_hint))
 

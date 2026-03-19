@@ -176,3 +176,16 @@ The project now includes a starter clone helper:
 `python3 scripts/clone_brand_starter.py "My Brand"`
 
 This creates a new brand-local skeleton from `data/brands/_starter/`.
+
+---
+
+## Current reliability notes
+
+Recent stabilization now includes:
+
+- Project Mode coverage and render contract aligned through project-slot planning
+- final render success now requires an actual output video file
+- generated project artifacts can be restored after refresh / reload
+- operator-facing UI now supports a Chinese-friendly display layer without changing internal schema
+- Project Mode and Pool Fill Mode are both intended to remain operator-first surfaces over stable internal models
+

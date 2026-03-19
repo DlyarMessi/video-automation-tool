@@ -704,11 +704,11 @@ def burn_subtitles_ffmpeg(
         f"BorderStyle=1,"
         f"Outline={outline},"
         f"Shadow={shadow},"
-        f"Bold=1,"
-        f"Spacing=0.2,"
+        f"Bold=0,"
+        f"Spacing=0,"
         f"Alignment=2,"
-        f"MarginL=80,"
-        f"MarginR=80,"
+        f"MarginL=72,"
+        f"MarginR=72,"
         f"MarginV={margin_v},"
         f"PlayResX={PLAY_RES_X},"
         f"PlayResY={PLAY_RES_Y}"
@@ -1184,10 +1184,10 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
                     font_name = font_path.stem if font_path else "Arial"
 
                 is_landscape = str(fmt or "").startswith("landscape")
-                default_font_size = 60 if is_landscape else 58
+                default_font_size = 56 if is_landscape else 54
                 default_outline = 3 if is_landscape else 3
                 default_shadow = 0
-                default_margin_v = 82 if is_landscape else 168
+                default_margin_v = 72 if is_landscape else 154
 
                 font_size = int(project_subtitle_style.get("font_size", default_font_size) or default_font_size)
                 outline = int(project_subtitle_style.get("outline", default_outline) or default_outline)
