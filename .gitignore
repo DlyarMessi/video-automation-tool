@@ -54,3 +54,14 @@ __pycache__/
 */*/__pycache__/
 _debug_local/
 creative_scripts/*/generated/
+
+# =========================================================
+# Brand-specific assets (logos, BGM, etc.)
+# =========================================================
+data/brands/*/logo.*
+data/brands/*/bgm/
+
+# =========================================================
+# TTS profiles (user-specific voice config)
+# =========================================================
+data/tts_profiles/elevenlabs.json
