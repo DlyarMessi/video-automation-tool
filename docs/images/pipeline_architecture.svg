@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 680" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif">
+  <defs>
+    <filter id="s" x="-2%" y="-2%" width="104%" height="108%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.06"/>
+    </filter>
+    <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M2 1.5L8 5L2 8.5" fill="none" stroke="#888" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fafaf8"/>
+      <stop offset="100%" stop-color="#f3f2ee"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="720" height="680" rx="16" fill="url(#bg)"/>
+
+  <!-- Title -->
+  <text x="360" y="38" text-anchor="middle" font-size="18" font-weight="600" fill="#2c2c2a">Video Automation Tool — Pipeline</text>
+  <text x="360" y="56" text-anchor="middle" font-size="11" fill="#888780">Script-first video production with director engine</text>
+
+  <!-- Step 1: Creative Script -->
+  <g filter="url(#s)">
+    <rect x="210" y="76" width="300" height="52" rx="10" fill="#fdf5e6" stroke="#e8c97a" stroke-width="1"/>
+  </g>
+  <text x="248" y="99" font-size="20">📝</text>
+  <text x="278" y="100" font-size="13" font-weight="600" fill="#7a5f1a">Creative script</text>
+  <text x="278" y="116" font-size="10.5" fill="#a08530">YAML beats → visual + vo + duration</text>
+
+  <line x1="360" y1="128" x2="360" y2="152" stroke="#888" stroke-width="1.2" marker-end="url(#a)"/>
+
+  <!-- Step 2: Slot Generation -->
+  <g filter="url(#s)">
+    <rect x="185" y="156" width="350" height="52" rx="10" fill="#e6f5ee" stroke="#7ac9a0" stroke-width="1"/>
+  </g>
+  <text x="218" y="179" font-size="20">🏷️</text>
+  <text x="248" y="180" font-size="13" font-weight="600" fill="#1a6b45">Slot generation</text>
+  <text x="248" y="196" font-size="10.5" fill="#2d8a5e">Visual-driven taxonomy → scene / content / coverage / move</text>
+
+  <line x1="360" y1="208" x2="360" y2="232" stroke="#888" stroke-width="1.2" marker-end="url(#a)"/>
+
+  <!-- Step 3: Material Picker -->
+  <g filter="url(#s)">
+    <rect x="195" y="236" width="330" height="52" rx="10" fill="#e6f0fb" stroke="#7aabe8" stroke-width="1"/>
+  </g>
+  <text x="228" y="259" font-size="20">🎞️</text>
+  <text x="258" y="260" font-size="13" font-weight="600" fill="#1a4f7a">Material picker</text>
+  <text x="258" y="276" font-size="10.5" fill="#3072a8">Tag matching + role-aware scoring + anti-repeat</text>
+
+  <line x1="360" y1="288" x2="360" y2="312" stroke="#888" stroke-width="1.2" marker-end="url(#a)"/>
+
+  <!-- Step 4: Director Engine (large container) -->
+  <g filter="url(#s)">
+    <rect x="70" y="316" width="580" height="174" rx="14" fill="#fdf0ec" stroke="#e8a08a" stroke-width="1"/>
+  </g>
+  <text x="108" y="342" font-size="20">🎬</text>
+  <text x="138" y="344" font-size="14" font-weight="600" fill="#8a3a1e">Director engine</text>
+  <text x="310" y="344" font-size="10.5" fill="#b06040">Post-pick · asset-aware · beat-boundary protected</text>
+
+  <!-- 6 rule boxes -->
+  <g>
+    <rect x="96" y="362" width="150" height="40" rx="7" fill="#fff9f6" stroke="#ddb8a5" stroke-width="0.7"/>
+    <text x="124" y="380" font-size="14">📐</text>
+    <text x="144" y="386" font-size="11" font-weight="500" fill="#7a4030">Structure</text>
+  </g>
+  <g>
+    <rect x="270" y="362" width="150" height="40" rx="7" fill="#fff9f6" stroke="#ddb8a5" stroke-width="0.7"/>
+    <text x="298" y="380" font-size="14">🔗</text>
+    <text x="318" y="386" font-size="11" font-weight="500" fill="#7a4030">Continuity</text>
+  </g>
+  <g>
+    <rect x="444" y="362" width="150" height="40" rx="7" fill="#fff9f6" stroke="#ddb8a5" stroke-width="0.7"/>
+    <text x="472" y="380" font-size="14">🔄</text>
+    <text x="492" y="386" font-size="11" font-weight="500" fill="#7a4030">Repetition</text>
+  </g>
+  <g>
+    <rect x="96" y="416" width="150" height="40" rx="7" fill="#fff9f6" stroke="#ddb8a5" stroke-width="0.7"/>
+    <text x="124" y="434" font-size="14">✂️</text>
+    <text x="144" y="440" font-size="11" font-weight="500" fill="#7a4030">Transitions</text>
+  </g>
+  <g>
+    <rect x="270" y="416" width="150" height="40" rx="7" fill="#fff9f6" stroke="#ddb8a5" stroke-width="0.7"/>
+    <text x="298" y="434" font-size="14">⏱️</text>
+    <text x="318" y="440" font-size="11" font-weight="500" fill="#7a4030">Pacing</text>
+  </g>
+  <g>
+    <rect x="444" y="416" width="150" height="40" rx="7" fill="#fff9f6" stroke="#ddb8a5" stroke-width="0.7"/>
+    <text x="472" y="434" font-size="14">🏁</text>
+    <text x="492" y="440" font-size="11" font-weight="500" fill="#7a4030">Ending</text>
+  </g>
+
+  <!-- Profile badge -->
+  <rect x="180" y="468" width="360" height="14" rx="3" fill="#f5e0d6" opacity="0.7"/>
+  <text x="360" y="479" text-anchor="middle" font-size="9.5" fill="#8a5540">Profile-driven · pluggable rules · configurable weights</text>
+
+  <line x1="360" y1="490" x2="360" y2="514" stroke="#888" stroke-width="1.2" marker-end="url(#a)"/>
+
+  <!-- Step 5: VO -->
+  <g filter="url(#s)">
+    <rect x="200" y="518" width="320" height="52" rx="10" fill="#eaf5e0" stroke="#8cc462" stroke-width="1"/>
+  </g>
+  <text x="233" y="541" font-size="20">🗣️</text>
+  <text x="263" y="542" font-size="13" font-weight="600" fill="#3a6b1a">Voiceover + subtitles</text>
+  <text x="263" y="558" font-size="10.5" fill="#508a2d">ElevenLabs TTS · multi-language · timing-aware</text>
+
+  <line x1="360" y1="570" x2="360" y2="594" stroke="#888" stroke-width="1.2" marker-end="url(#a)"/>
+
+  <!-- Step 6: Render -->
+  <g filter="url(#s)">
+    <rect x="220" y="598" width="280" height="52" rx="10" fill="#eeecfa" stroke="#9b8fd4" stroke-width="1"/>
+  </g>
+  <text x="258" y="621" font-size="20">🎥</text>
+  <text x="288" y="622" font-size="13" font-weight="600" fill="#4a3a7a">Render → output.mp4</text>
+  <text x="288" y="638" font-size="10.5" fill="#6b5aaa">MoviePy + FFmpeg · watermark · burn subtitles</text>
+
+</svg>

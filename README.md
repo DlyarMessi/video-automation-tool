@@ -1,5 +1,13 @@
 # Script-First Video Automation Tool
 
+
+## Architecture
+
+<p align="center">
+  <img src="docs/images/pipeline_architecture.svg" alt="Pipeline Architecture" width="680"/>
+</p>
+
+
 A production-oriented workflow for short-form brand video generation:
 
 1. provide a structured script
