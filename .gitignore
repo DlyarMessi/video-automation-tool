@@ -65,3 +65,4 @@ data/brands/*/bgm/
 # TTS profiles (user-specific voice config)
 # =========================================================
 data/tts_profiles/elevenlabs.json
+creative_scripts/
