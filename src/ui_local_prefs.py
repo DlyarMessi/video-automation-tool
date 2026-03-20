@@ -8,6 +8,7 @@ from pathlib import Path
 @dataclass
 class UILocalPrefs:
     last_company: str = ""
+    last_orientation: str = ""
 
 
 def _prefs_path(root: Path) -> Path:
@@ -51,4 +52,15 @@ def clear_last_company(root: Path) -> None:
     if not prefs.last_company:
         return
     prefs.last_company = ""
+    save_ui_local_prefs(root, prefs)
+
+
+def remember_last_orientation(root: Path, orientation: str) -> None:
+    clean = str(orientation or "").strip()
+    if clean not in ("portrait", "landscape"):
+        return
+    prefs = load_ui_local_prefs(root)
+    if prefs.last_orientation == clean:
+        return
+    prefs.last_orientation = clean
     save_ui_local_prefs(root, prefs)

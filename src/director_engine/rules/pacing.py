@@ -36,10 +36,16 @@ def apply(shots: List[Dict[str, Any]], context: Dict[str, Any]) -> List[Dict[str
             elif coverage == "hero":
                 target *= 1.08
 
-            if min_dur is not None:
-                target = max(float(min_dur), target)
-            if max_dur is not None:
-                target = min(float(max_dur), target)
+            shot_hint = float(new_shot.get("_beat_duration_hint", 0) or 0)
+            if shot_hint > 0:
+                target = max(min(float(min_dur or 2.5), shot_hint), 1.5)
+                if max_dur is not None:
+                    target = min(float(max_dur), target)
+            else:
+                if min_dur is not None:
+                    target = max(float(min_dur), target)
+                if max_dur is not None:
+                    target = min(float(max_dur), target)
 
             new_shot["duration"] = round(float(target), 3)
 

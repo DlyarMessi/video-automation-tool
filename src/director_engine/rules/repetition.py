@@ -40,8 +40,13 @@ def apply(shots: List[Dict[str, Any]], context: Dict[str, Any]) -> List[Dict[str
             last_sig = cur_sig
 
         if cur_sig and streak > max_consecutive:
+            cur_beat = int(directed[i].get("_beat_no", 0) or 0)
             swap_idx = None
             for j in range(i + 1, len(directed)):
+                # never swap across beat boundaries
+                cand_beat = int(directed[j].get("_beat_no", 0) or 0)
+                if cur_beat and cand_beat and cand_beat != cur_beat:
+                    continue
                 other_sig = _signature(directed[j])
                 if other_sig and other_sig != cur_sig:
                     swap_idx = j

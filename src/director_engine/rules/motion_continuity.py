@@ -66,16 +66,24 @@ def apply(shots: List[Dict[str, Any]], context: Dict[str, Any]) -> List[Dict[str
 
     directed = [dict(s) for s in shots]
 
+    def _beat(s):
+        return int(s.get("_beat_no", 0) or 0)
+
     for i in range(1, len(directed)):
         prev_shot = directed[i - 1]
         cur_shot = directed[i]
+        cur_beat = _beat(cur_shot)
         base_score = _pair_score(prev_shot, cur_shot, context)
 
         best_idx = i
         best_score = base_score
 
         for j in range(i + 1, min(len(directed), i + 1 + local_swap_window)):
-            cand_score = _pair_score(prev_shot, directed[j], context)
+            cand = directed[j]
+            # never swap across beat boundaries
+            if cur_beat and _beat(cand) and _beat(cand) != cur_beat:
+                continue
+            cand_score = _pair_score(prev_shot, cand, context)
             if cand_score > best_score:
                 best_score = cand_score
                 best_idx = j

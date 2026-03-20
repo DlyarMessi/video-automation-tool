@@ -47,7 +47,7 @@ from src.brand_workspace import (
 )
 from src.ui_provider_settings import render_ai_provider_settings
 from src.ui_ai_entry import render_ai_script_entry_panel
-from src.ui_local_prefs import load_ui_local_prefs, remember_last_company, clear_last_company
+from src.ui_local_prefs import load_ui_local_prefs, remember_last_company, clear_last_company, remember_last_orientation
 
 from src.render_profile import get_default_fps, get_filter_preset
 from src.language_checks import build_language_check
@@ -187,8 +187,31 @@ def priority_score(priority: str) -> int:
 
 
 def build_pool_slot_rows(slots, factory_files):
-    """Build normalized slot rows for both Pool Fill and Project Mode."""
+    """Build normalized slot rows with budget-aware counting.
+    
+    Multiple slots sharing the same pool bucket (scene/content/coverage)
+    share the available clips. One clip cannot satisfy two slots.
+    """
     rows = []
+
+    # Phase 1: count total pool clips per bucket (scene/content/coverage)
+    bucket_pool_count: dict[tuple[str,str,str], int] = {}
+    for slot in slots:
+        if not isinstance(slot, dict):
+            continue
+        key = (
+            str(slot.get("scene", "")).strip().lower(),
+            str(slot.get("content", "")).strip().lower(),
+            str(slot.get("coverage", "")).strip().lower(),
+        )
+        if key not in bucket_pool_count:
+            bucket_pool_count[key] = count_pool_matches(
+                factory_files,
+                key[0], key[1], key[2], "",
+            )
+
+    # Phase 2: budget remaining clips across slots per bucket
+    bucket_remaining: dict[tuple[str,str,str], int] = dict(bucket_pool_count)
 
     for slot in slots:
         if not isinstance(slot, dict):
@@ -202,8 +225,11 @@ def build_pool_slot_rows(slots, factory_files):
         priority = str(slot.get("priority", "medium") or "medium")
         defaults = slot.get("defaults", {}) if isinstance(slot.get("defaults"), dict) else {}
 
-        existing = count_pool_matches(factory_files, scene_name, content_name, coverage_name, move_name)
-        missing = max(0, target - existing)
+        key = (scene_name.lower(), content_name.lower(), coverage_name.lower())
+        available = bucket_remaining.get(key, 0)
+        allocated = min(target, available)
+        bucket_remaining[key] = max(0, available - allocated)
+        missing = max(0, target - allocated)
 
         row = dict(slot)
         row.update(
@@ -215,7 +241,7 @@ def build_pool_slot_rows(slots, factory_files):
                 "target": target,
                 "priority": priority,
                 "priority_score": priority_score(priority),
-                "existing": existing,
+                "existing": allocated,
                 "missing": missing,
                 "defaults": defaults,
             }
@@ -473,7 +499,7 @@ def render_pool_active_slot_card(
             st.caption(canonical_tuple_text)
         if registry_key_text:
             st.caption(f"registry_key: `{registry_key_text}`")
-        st.markdown(f"🎬 `{move_name}` · ⏱️ `{row['duration_label']}` · ⚠️ **missing {missing}**")
+        st.markdown(f"🎬 recommended `{row.get('move', 'static')}` · ⏱️ `{row['duration_label']}` · ⚠️ **missing {missing}**")
         if shoot_brief_text:
             st.caption(shoot_brief_text)
         st.caption(f"💡 {row['framing_label']} · {row['move_label']}")
@@ -491,13 +517,25 @@ def render_pool_active_slot_card(
                 unsafe_allow_html=True,
             )
 
-        uploads = st.file_uploader(
-            "Upload clips for this slot",
-            type=VIDEO_EXTS,
-            accept_multiple_files=True,
-            key=f"pool_fill_v3_upload_{pool_topic}_{i}",
-            label_visibility="collapsed",
-        )
+        _move_options = ["static", "slide", "pushin", "follow", "orbit", "reveal", "pan"]
+        _move_default_idx = _move_options.index(move_name) if move_name in _move_options else 0
+        _sel_col, _upload_col = st.columns([1, 3])
+        with _sel_col:
+            move_name = st.selectbox(
+                "Move",
+                _move_options,
+                index=_move_default_idx,
+                key=f"pool_fill_v3_move_{pool_topic}_{i}",
+                help="Recommended: " + str(row.get("move", "static")) + " — choose based on your actual footage",
+            )
+        with _upload_col:
+            uploads = st.file_uploader(
+                "Upload clips for this slot",
+                type=VIDEO_EXTS,
+                accept_multiple_files=True,
+                key=f"pool_fill_v3_upload_{pool_topic}_{i}",
+                label_visibility="collapsed",
+            )
 
         pick_inbox = []
         if inbox_files:
@@ -617,7 +655,7 @@ def render_pool_active_slot_card(
                         st.write(f"- {msg}")
 
                 if saved_count > 0:
-                    st.success("Saved to pool.")
+                    st.session_state["_pool_save_flash"] = f"Saved {saved_count} clip(s) to pool."
                     st.rerun()
                 elif not rejected_msgs:
                     st.info("No clips were saved.")
@@ -663,7 +701,7 @@ def render_pool_completed_slot_card(
             st.caption(canonical_tuple_text)
         if registry_key_text:
             st.caption(f"registry_key: `{registry_key_text}`")
-        st.markdown(f"🎬 `{move_name}` · ⏱️ `{row['duration_label']}` · ✅ **ready {existing}/{target}**")
+        st.markdown(f"🎬 recommended `{row.get('move', 'static')}` · ⏱️ `{row['duration_label']}` · ✅ **ready {existing}/{target}**")
         if shoot_brief_text:
             st.caption(shoot_brief_text)
         st.caption(f"💡 {row['framing_label']} · {row['move_label']}")
@@ -683,13 +721,25 @@ def render_pool_completed_slot_card(
 
         st.caption("Current clips already meet target. Upload here only if you want replacements or alternates.")
 
-        uploads = st.file_uploader(
-            "Upload clips for this slot",
-            type=VIDEO_EXTS,
-            accept_multiple_files=True,
-            key=f"pool_fill_v3_done_upload_{pool_topic}_{i}",
-            label_visibility="collapsed",
-        )
+        _move_options_d = ["static", "slide", "pushin", "follow", "orbit", "reveal", "pan"]
+        _move_default_idx_d = _move_options_d.index(move_name) if move_name in _move_options_d else 0
+        _sel_col_d, _upload_col_d = st.columns([1, 3])
+        with _sel_col_d:
+            move_name = st.selectbox(
+                "Move",
+                _move_options_d,
+                index=_move_default_idx_d,
+                key=f"pool_fill_v3_done_move_{pool_topic}_{i}",
+                help="Recommended: " + str(row.get("move", "static")) + " — choose based on your actual footage",
+            )
+        with _upload_col_d:
+            uploads = st.file_uploader(
+                "Upload clips for this slot",
+                type=VIDEO_EXTS,
+                accept_multiple_files=True,
+                key=f"pool_fill_v3_done_upload_{pool_topic}_{i}",
+                label_visibility="collapsed",
+            )
 
         pick_inbox = []
         if inbox_files:
@@ -809,7 +859,7 @@ def render_pool_completed_slot_card(
                         st.write(f"- {msg}")
 
                 if saved_count > 0:
-                    st.success("Saved to pool.")
+                    st.session_state["_pool_save_flash"] = f"Saved {saved_count} clip(s) to pool."
                     st.rerun()
                 elif not rejected_msgs:
                     st.info("No clips were saved.")
@@ -1055,26 +1105,26 @@ def count_pool_matches(factory_files: list[Path], scene: str, content: str, cove
     scene = safe_slug(scene).lower()
     content = safe_slug(content).lower()
     coverage = safe_slug(coverage).lower()
-    move = safe_slug(move).lower()
+    # move is a soft preference, not a hard filter
+    # scene + content + coverage is the real identity
 
     count = 0
     for p in factory_files:
         if not p.is_file() or p.suffix.lower() not in VIDEO_SUFFIXES:
+            continue
+        if p.name.startswith("._"):
             continue
 
         core = parse_filename_core(p.name)
         core_scene = safe_slug(str(core.get("scene", "") or "")).lower()
         core_content = safe_slug(str(core.get("content", "") or "")).lower()
         core_coverage = safe_slug(str(core.get("coverage", "") or "")).lower()
-        core_move = safe_slug(str(core.get("move", "") or "")).lower()
 
         if core_scene != scene:
             continue
         if core_content != content:
             continue
         if core_coverage != coverage:
-            continue
-        if move and core_move != move:
             continue
 
         count += 1
@@ -1496,7 +1546,9 @@ with st.sidebar:
     st.caption(tr("Render / Export becomes available after planning and coverage completion."))
 
     with st.expander(tr("System Settings"), expanded=False):
-        orientation = st.radio(tr("Default Format"), ["portrait", "landscape"], horizontal=True)
+        _saved_orient = load_ui_local_prefs(ROOT).last_orientation or "portrait"
+        orientation = st.radio(tr("Default Format"), ["portrait", "landscape"], index=0 if _saved_orient == "portrait" else 1, horizontal=True)
+        remember_last_orientation(ROOT, orientation)
 
         st.markdown(f"### {tr('Language')}")
         lang_options = [
@@ -1832,6 +1884,10 @@ if normalized_work_mode == "Pool Fill Mode":
         with guide_b:
             st.caption(tr("Field reference for crew phone use. Download once and keep it with the shooting board."))
 
+    _pool_flash_pf = str(st.session_state.pop("_pool_save_flash", "") or "").strip()
+    if _pool_flash_pf:
+        st.success(_pool_flash_pf)
+
     st.markdown(f"### {tr('Task Board')}")
     st.caption(tr("Open missing slots first. Completed slots are folded to the bottom."))
 
@@ -2037,36 +2093,32 @@ if generate_btn:
             st.session_state["task_rows_html_path"] = str(task_rows_html)
             st.session_state["project_slots_json_path"] = str(project_slots_json)
 
+            project_slots = build_project_slots_from_creative(d)
+
             beats = beats_from_creative(d)
+            _beat_durations = {}
+            for _bi, _beat in enumerate(beats, start=1):
+                _beat_durations[_bi] = _beat.get("duration_hint")
+
             rows: list[dict] = []
             row_i = 1
-
-            for i, beat in enumerate(beats, start=1):
-                category = infer_category_from_beat(beat)
-                scene = infer_scene_from_beat(beat)
-                visual = str(beat.get("visual") or beat.get("visual_description") or "")
-                duration_hint = beat.get("duration_hint")
-                seconds_default = str(duration_hint) if duration_hint else ""
-                shots = infer_shots_from_beat(beat)
-
-                for shot in shots:
-                    shot_norm = "detail" if shot in ["close"] else shot
-                    rows.append(
-                        {
-                            "Row": f"S{row_i:03d}",
-                            "Beat": i,
-                            "Category": category,
-                            "Scene": scene,
-                            "Shot": shot_norm,
-                            "Seconds": seconds_default or default_seconds_for_shot(shot_norm),
-                            "Movement": suggested_movement(shot_norm),
-                            "Notes": visual,
-                            "BeatPurpose": str(beat.get("purpose") or ""),
-                        }
-                    )
+            for _slot in project_slots:
+                _beat_no = int(_slot.get("beat_no", 0) or 0)
+                _dur = _beat_durations.get(_beat_no)
+                _repeat = max(1, int(_slot.get("target", 1) or 1))
+                for _ in range(_repeat):
+                    rows.append({
+                        "Row": f"S{row_i:03d}",
+                        "Beat": _beat_no,
+                        "Category": str(_slot.get("content", "") or "").strip(),
+                        "Scene": str(_slot.get("scene", "") or "").strip(),
+                        "Shot": str(_slot.get("coverage", "") or "").strip(),
+                        "Seconds": str(_dur) if _dur else "3",
+                        "Movement": str(_slot.get("move", "static") or "static").strip(),
+                        "Notes": str(_slot.get("shoot_brief", "") or "").strip(),
+                        "BeatPurpose": str(_slot.get("beat_purpose", "") or "").strip(),
+                    })
                     row_i += 1
-
-            project_slots = build_project_slots_from_creative(d)
             st.session_state["shooting_rows"] = rows
             st.session_state["project_slots"] = project_slots
             task_rows_json.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -2087,10 +2139,18 @@ task_rows_html_path = Path(st.session_state["task_rows_html_path"]) if st.sessio
 
 if rows:
     if storage_ready and factory_dir:
-        coverage = summarize_factory_coverage(rows, factory_dir)
-        total_need = coverage["total_need"]
-        total_ready = coverage["total_ready"]
-        total_missing = coverage["total_missing"]
+        if project_slots:
+            _mf = list_video_files(factory_dir, VIDEO_SUFFIXES)
+            _sr = build_pool_slot_rows(project_slots, _mf)
+            _sm = summarize_pool_slot_rows(_sr)
+            total_need = _sm["total_target"]
+            total_ready = _sm["total_existing"]
+            total_missing = _sm["total_missing"]
+        else:
+            coverage = summarize_factory_coverage(rows, factory_dir)
+            total_need = coverage["total_need"]
+            total_ready = coverage["total_ready"]
+            total_missing = coverage["total_missing"]
     else:
         total_need = len(rows)
         total_ready = 0
@@ -2161,6 +2221,10 @@ if rows:
 st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
 st.markdown(f"## 🎞️ {tr('Step 2 · Footage Board')}")
 st.caption(tr("Project-driven intake. Missing task slots can be filled by upload or inbox transfer."))
+
+_pool_flash = str(st.session_state.pop("_pool_save_flash", "") or "").strip()
+if _pool_flash:
+    st.success(_pool_flash)
 
 if not storage_ready or not inbox_dir or not factory_dir:
     st.info("Footage storage is unavailable. Step 2 is currently disabled.")

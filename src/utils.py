@@ -433,6 +433,12 @@ class MaterialPicker:
         if self.last_picked_path and str(p) == self.last_picked_path:
             score += 9
 
+        # penalize file already used for a different role (e.g. intro clip as outro)
+        if role and hasattr(self, "_role_files"):
+            for other_role, files in self._role_files.items():
+                if other_role != role and str(p) in files:
+                    score += 6
+
         # role-aware soft preferences
         if role == "establish_context":
             if not meta["intro_safe"]:
@@ -445,6 +451,9 @@ class MaterialPicker:
                 score += 3
             if not meta["hero_safe"]:
                 score += 2
+            # penalize reusing the intro clip as the closer
+            if meta["intro_safe"] and meta["outro_safe"] and self.last_role == "establish_context":
+                score += 4
 
         elif role == "build_trust":
             if meta["quality_status"] and meta["quality_status"] != "approved":
@@ -526,6 +535,13 @@ class MaterialPicker:
         self.last_picked_path = str(chosen)
         self.last_role = self._selector_role(context)
         self.last_continuity_group = str(meta.get("continuity_group", "") or "").strip()
+
+        # track which role each file served (prevent open=close reuse)
+        role = self.last_role
+        if role:
+            if not hasattr(self, "_role_files"):
+                self._role_files = {}
+            self._role_files.setdefault(role, set()).add(str(chosen))
 
         return chosen
 
@@ -914,25 +930,8 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
             return
 
     # =========================
-    # ✅ Director Engine (Phase -1)
+    # Director Engine — moved to post-pick phase (see Phase 0.5 below)
     # =========================
-    if DirectorEngine is not None:
-        profile_name = project.get("director_profile")
-        if isinstance(profile_name, str) and profile_name.strip():
-            try:
-                profiles_dir = (
-                    Path(__file__).resolve().parent
-                    / "director_engine"
-                    / "profiles"
-                )
-                engine = DirectorEngine(  # type: ignore[call-arg]
-                    profile_name=profile_name,
-                    profiles_dir=profiles_dir,
-                )
-                dsl_shots = engine.apply(dsl_shots)
-                logger.info("[%s] DirectorEngine applied (profile=%s)", company_name, profile_name)
-            except Exception as e:
-                logger.warning("[%s] DirectorEngine failed, fallback to raw DSL: %s", company_name, e)
 
     # ---- output filenames/config ----
     out_cfg = project.get("output", {}) if isinstance(project.get("output", {}), dict) else {}
@@ -1018,6 +1017,41 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
     opened = []
 
     # =========================
+    # ✅ Phase 0.5: Pick files + Director Engine (post-pick)
+    # =========================
+    for _s in dsl_shots:
+        if not isinstance(_s, dict):
+            continue
+        _spec = str(_s.get("source") or _s.get("material") or "")
+        _picked = picker.pick(_spec, context=_s)
+        if _picked:
+            _s["_selected_file"] = str(_picked)
+            _s["source_file"] = str(_picked)
+        else:
+            logger.warning("Phase 0.5: no footage found for %r", _spec)
+
+    if DirectorEngine is not None:
+        _dir_profile = project.get("director_profile")
+        if isinstance(_dir_profile, str) and _dir_profile.strip():
+            try:
+                _profiles_dir = (
+                    Path(__file__).resolve().parent
+                    / "director_engine"
+                    / "profiles"
+                )
+                _dir_engine = DirectorEngine(
+                    profile_name=_dir_profile,
+                    profiles_dir=_profiles_dir,
+                )
+                _engine_idx = _asset_index_for_input_dir(effective_input)
+                dsl_shots = _dir_engine.apply(dsl_shots, extra_context={
+                    "asset_index_path": str(_engine_idx),
+                })
+                logger.info("[%s] DirectorEngine applied post-pick (profile=%s)", company_name, _dir_profile)
+            except Exception as _de:
+                logger.warning("[%s] DirectorEngine post-pick failed: %s", company_name, _de)
+
+    # =========================
     # ✅ Phase 0: VO（只做一次）
     # =========================
     vo_cache = internal_dir / "cache_tts"
@@ -1054,10 +1088,14 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
         for i, s in enumerate(dsl_shots, 1):
             if not isinstance(s, dict):
                 continue
-            source_spec = str(s.get("source") or s.get("material") or "")
-            src_path = picker.pick(source_spec, context=s)
-            if not src_path:
-                logger.error("找不到素材：%r", source_spec)
+            _pre_picked = str(s.get("_selected_file", "") or "").strip()
+            if _pre_picked and Path(_pre_picked).exists():
+                src_path = Path(_pre_picked)
+            else:
+                source_spec = str(s.get("source") or s.get("material") or "")
+                src_path = picker.pick(source_spec, context=s)
+            if not src_path or not src_path.exists():
+                logger.error("找不到素材：%r", s.get("source", ""))
                 return
 
             base = VideoFileClip(str(src_path), audio=False)

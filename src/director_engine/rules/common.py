@@ -236,3 +236,8 @@ def is_hero_safe(shot: Dict[str, Any], context: Dict[str, Any]) -> bool:
 def is_outro_safe(shot: Dict[str, Any], context: Dict[str, Any]) -> bool:
     rec = get_asset_record(shot, context)
     return bool(rec.get("outro_safe", False))
+
+
+def get_beat_no(shot: Dict[str, Any]) -> int:
+    """Return beat number from shot, 0 if not set."""
+    return int(shot.get("_beat_no", 0) or 0)

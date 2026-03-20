@@ -95,6 +95,17 @@ def _prefer_safe_ending(shots: List[Dict[str, Any]], context: Dict[str, Any]) ->
                 break
 
     if best_idx is None:
+        last_beat = int(shots[-1].get("_beat_no", 0) or 0)
+        for idx in range(len(shots) - 1, -1, -1):
+            shot_beat = int(shots[idx].get("_beat_no", 0) or 0)
+            # prefer hero from same beat as current ending, or unassigned
+            if shot_beat and last_beat and shot_beat != last_beat:
+                continue
+            if is_hero_like(shots[idx]):
+                best_idx = idx
+                break
+    # fallback: search all shots if beat-constrained search found nothing
+    if best_idx is None:
         for idx in range(len(shots) - 1, -1, -1):
             if is_hero_like(shots[idx]):
                 best_idx = idx

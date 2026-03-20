@@ -13,7 +13,9 @@ def load_asset_index(index_path: Path) -> List[Dict[str, Any]]:
         return []
     try:
         data = json.loads(index_path.read_text(encoding="utf-8"))
-        return data if isinstance(data, list) else []
+        if isinstance(data, list):
+            return [x for x in data if isinstance(x, dict) and not str(x.get("filename", "")).startswith("._")]
+        return []
     except Exception:
         return []
 
@@ -126,6 +128,9 @@ def make_asset_record(video_path: Path) -> Dict[str, Any]:
 
 
 def upsert_asset_record(index_path: Path, video_path: Path) -> Dict[str, Any]:
+    # skip macOS resource fork files
+    if video_path.name.startswith("._"):
+        return {}
     items = load_asset_index(index_path)
     items_by_name = {str(item.get("filename", "")): item for item in items if isinstance(item, dict)}
 
