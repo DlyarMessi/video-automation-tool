@@ -1,0 +1,29 @@
+# Move vocabulary
+# System scans visual description for movement hints
+# User can override in UI upload card
+
+version: 1
+
+entries:
+  - keywords: ["orbit"]
+    token: orbit
+
+  - keywords: ["push-in", "pushin", "push in"]
+    token: pushin
+
+  - keywords: ["slide", "lateral", "tracking"]
+    token: slide
+
+  - keywords: ["follow"]
+    token: follow
+
+  - keywords: ["reveal"]
+    token: reveal
+
+  - keywords: ["pan ", "panning"]
+    token: pan
+
+  - keywords: ["drone", "aerial"]
+    token: orbit
+
+default: static

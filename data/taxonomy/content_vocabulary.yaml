@@ -1,0 +1,149 @@
+# Content vocabulary
+# System scans visual description top-to-bottom, first match wins
+# token becomes part of filename: factory_factory_<token>_medium_static_01.mp4
+# To add a new category: add entry with keywords + token
+
+version: 1
+
+entries:
+  # Manufacturing
+  - keywords: ["welding", "weld", "sparks"]
+    token: welding
+    label: welding
+    category: manufacturing
+
+  - keywords: ["assembly", "assemble", "fitting"]
+    token: assembly
+    label: assembly
+    category: manufacturing
+
+  - keywords: ["painting", "paint", "coating", "spray", "surface treatment"]
+    token: painting
+    label: painting
+    category: manufacturing
+
+  - keywords: ["cutting", "laser", "cnc", "machining"]
+    token: machining
+    label: machining
+    category: manufacturing
+
+  - keywords: ["packaging", "packing", "shipping"]
+    token: packaging
+    label: packaging
+    category: manufacturing
+
+  # Product
+  - keywords: ["elevator interior", "cabin", "car interior", "ride"]
+    token: product_interior
+    label: product_interior
+    category: product
+
+  - keywords: ["elevator door", "door open", "door close", "landing door"]
+    token: product_door
+    label: product_door
+    category: product
+
+  - keywords: ["elevator exterior", "shaft", "hoistway"]
+    token: product_shaft
+    label: product_shaft
+    category: product
+
+  - keywords: ["control panel", "button", "floor indicator", "display panel"]
+    token: product_controls
+    label: product_controls
+    category: product
+
+  - keywords: ["motor", "traction", "drive", "machine room"]
+    token: product_motor
+    label: product_motor
+    category: product
+
+  - keywords: ["elevator", "lift", "product hero"]
+    token: product
+    label: product
+    category: product
+
+  # Facility
+  - keywords: ["showroom", "display", "exhibition", "demo room"]
+    token: showroom
+    label: showroom
+    category: facility
+
+  - keywords: ["warehouse", "storage", "inventory", "logistics"]
+    token: warehouse
+    label: warehouse
+    category: facility
+
+  - keywords: ["testing", "test rig", "load test", "safety test"]
+    token: testing
+    label: testing
+    category: facility
+
+  - keywords: ["inspection", "quality check", "measure", "qc"]
+    token: inspection
+    label: inspection
+    category: facility
+
+  - keywords: ["certificate", "award", "plaque", "iso", "certification"]
+    token: certification
+    label: certification
+    category: facility
+
+  # Building / exterior
+  - keywords: ["exterior", "facade", "entrance", "gate", "campus"]
+    token: exterior
+    label: exterior
+    category: building
+
+  - keywords: ["lobby", "reception", "front desk"]
+    token: lobby
+    label: lobby
+    category: building
+
+  - keywords: ["aerial", "drone", "bird eye", "overhead"]
+    token: aerial
+    label: aerial
+    category: building
+
+  # People / process
+  - keywords: ["worker", "team", "engineer", "operator", "staff"]
+    token: team
+    label: team
+    category: process
+
+  - keywords: ["installation", "install", "on-site", "deploy"]
+    token: installation
+    label: installation
+    category: process
+
+  # Generic production
+  - keywords: ["production line", "production floor", "conveyor"]
+    token: production
+    label: production
+    category: process
+
+  - keywords: ["automation", "robot", "robotic"]
+    token: automation
+    label: automation
+    category: process
+
+  - keywords: ["panel", "door panel", "frame", "steel", "raw material"]
+    token: panel
+    label: panel
+    category: manufacturing
+
+  - keywords: ["wiring", "electrical", "harness", "circuit"]
+    token: electrical
+    label: electrical
+    category: manufacturing
+
+  - keywords: ["workshop", "factory floor", "factory"]
+    token: workshop
+    label: workshop
+    category: process
+
+purpose_fallback:
+  establish_context: exterior
+  brand_close: exterior
+  show_capability: workshop
+  build_trust: certification

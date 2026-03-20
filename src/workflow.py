@@ -31,6 +31,33 @@ MOVE_TOKEN_VOCAB = set(
 )
 
 
+
+
+# External vocabulary loader
+_TAXONOMY_DIR = Path(__file__).resolve().parent.parent / "data" / "taxonomy"
+_vocab_cache: Dict[str, Any] = {}
+
+
+def _load_vocabulary(name: str) -> Dict[str, Any]:
+    if name in _vocab_cache:
+        return _vocab_cache[name]
+    path = _TAXONOMY_DIR / f"{name}.yaml"
+    if not path.exists():
+        _vocab_cache[name] = {}
+        return {}
+    try:
+        import yaml
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        _vocab_cache[name] = data if isinstance(data, dict) else {}
+        return _vocab_cache[name]
+    except Exception:
+        _vocab_cache[name] = {}
+        return {}
+
+
+def reload_vocabularies() -> None:
+    _vocab_cache.clear()
+
 def now_tag() -> str:
     return datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -326,23 +353,23 @@ def _project_slot(
 
 
 def _infer_move_from_visual(visual: str) -> str:
-    """Derive a move token hint from the visual description text."""
+    """Derive move token. Reads from data/taxonomy/move_vocabulary.yaml."""
     v = (visual or "").lower()
-    if "orbit" in v:
-        return "orbit"
-    if any(tok in v for tok in ("push-in", "pushin", "push in")):
-        return "pushin"
-    if any(tok in v for tok in ("slide", "lateral", "tracking")):
-        return "slide"
-    if "follow" in v:
-        return "follow"
-    if "reveal" in v:
-        return "reveal"
-    if any(tok in v for tok in ("pan ", "panning")):
-        return "pan"
-    if any(tok in v for tok in ("drone", "aerial")):
-        return "orbit"
-    return "static"
+
+    vocab = _load_vocabulary("move_vocabulary")
+    entries = vocab.get("entries", [])
+    if isinstance(entries, list):
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            keywords = entry.get("keywords", [])
+            token = str(entry.get("token", "")).strip()
+            if not token or not isinstance(keywords, list):
+                continue
+            if any(str(kw).lower() in v for kw in keywords):
+                return token
+
+    return str(vocab.get("default", "static"))
 
 
 def _visual_snippet(visual: str, max_len: int = 40) -> str:
@@ -805,91 +832,54 @@ def _infer_scene_token(visual: str) -> str:
 
 
 def _infer_scene_from_visual(visual: str, beat_scene: str) -> str:
-    """Infer scene token from visual description and beat scene field."""
+    """Infer scene token. Reads from data/taxonomy/scene_vocabulary.yaml."""
     v = (visual or "").strip().lower()
     s = (beat_scene or "").strip().lower()
 
-    # explicit scene from beat takes priority
     if s and s not in ("factory", ""):
         return s
 
-    scene_map = [
-        (["showroom", "display room", "exhibition"], "showroom"),
-        (["villa", "residential", "apartment", "home"], "site"),
-        (["construction", "install site", "project site"], "site"),
-        (["office", "meeting", "conference"], "office"),
-        (["warehouse", "storage", "logistics"], "warehouse"),
-        (["outdoor", "campus", "aerial", "drone"], "exterior"),
-    ]
-    for keywords, scene in scene_map:
-        if any(kw in v for kw in keywords):
-            return scene
+    vocab = _load_vocabulary("scene_vocabulary")
+    entries = vocab.get("entries", [])
+    if isinstance(entries, list):
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            keywords = entry.get("keywords", [])
+            token = str(entry.get("token", "")).strip()
+            if not token or not isinstance(keywords, list):
+                continue
+            if any(str(kw).lower() in v for kw in keywords):
+                return token
 
     return s if s else "factory"
 
 
 def _infer_content_from_visual(visual: str, purpose: str) -> str:
     """Infer content token from visual description.
-    
-    This is the fundamental taxonomy driver. Each distinct visual concept
-    gets its own content token → its own pool bucket → precise matching.
+    Reads from data/taxonomy/content_vocabulary.yaml.
     """
     v = (visual or "").strip().lower()
     p = (purpose or "").strip().lower()
 
-    # ordered by specificity — first match wins
-    content_map = [
-        # manufacturing processes
-        (["welding", "weld", "sparks"], "welding"),
-        (["assembly", "assemble", "fitting"], "assembly"),
-        (["painting", "paint", "coating", "spray", "surface treatment"], "painting"),
-        (["cutting", "laser", "cnc", "machining"], "machining"),
-        (["packaging", "packing", "shipping"], "packaging"),
+    vocab = _load_vocabulary("content_vocabulary")
+    entries = vocab.get("entries", [])
+    if isinstance(entries, list):
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            keywords = entry.get("keywords", [])
+            token = str(entry.get("token", "")).strip()
+            if not token or not isinstance(keywords, list):
+                continue
+            if any(str(kw).lower() in v for kw in keywords):
+                return token
 
-        # product-specific
-        (["elevator interior", "cabin", "car interior", "ride"], "product_interior"),
-        (["elevator door", "door open", "door close", "landing door"], "product_door"),
-        (["elevator exterior", "shaft", "hoistway"], "product_shaft"),
-        (["control panel", "button", "floor indicator", "display panel"], "product_controls"),
-        (["motor", "traction", "drive", "machine room"], "product_motor"),
-        (["elevator", "lift", "product hero"], "product"),
+    fallback = vocab.get("purpose_fallback", {})
+    if isinstance(fallback, dict) and p in fallback:
+        return str(fallback[p])
 
-        # facility areas
-        (["showroom", "display", "exhibition", "demo room"], "showroom"),
-        (["warehouse", "storage", "inventory", "logistics"], "warehouse"),
-        (["testing", "test rig", "load test", "safety test"], "testing"),
-        (["inspection", "quality check", "measure", "qc"], "inspection"),
-        (["certificate", "award", "plaque", "iso", "certification"], "certification"),
-
-        # building / exterior
-        (["exterior", "facade", "entrance", "gate", "campus"], "exterior"),
-        (["lobby", "reception", "front desk"], "lobby"),
-        (["aerial", "drone", "bird eye", "overhead"], "aerial"),
-
-        # people / process
-        (["worker", "team", "engineer", "operator", "staff"], "team"),
-        (["installation", "install", "on-site", "deploy"], "installation"),
-
-        # generic production
-        (["production line", "production floor", "conveyor"], "production"),
-        (["automation", "robot", "robotic"], "automation"),
-        (["panel", "door panel", "frame", "steel", "raw material"], "panel"),
-        (["wiring", "electrical", "harness", "circuit"], "electrical"),
-        (["workshop", "factory floor", "factory"], "workshop"),
-    ]
-
-    for keywords, content in content_map:
-        if any(kw in v for kw in keywords):
-            return content
-
-    # fallback by purpose
-    purpose_fallback = {
-        "establish_context": "exterior",
-        "brand_close": "exterior",
-        "show_capability": "workshop",
-        "build_trust": "certification",
-    }
-    return purpose_fallback.get(p, "workshop")
+    return "workshop"
 
 
 def _infer_demo_content_token(purpose: str, visual: str) -> str:

@@ -1,0 +1,24 @@
+# Scene vocabulary
+# System scans visual description, first match wins
+# token becomes first segment: factory_<token>_...
+
+version: 1
+
+entries:
+  - keywords: ["showroom", "display room", "exhibition"]
+    token: showroom
+
+  - keywords: ["villa", "residential", "apartment", "home"]
+    token: site
+
+  - keywords: ["construction", "install site", "project site"]
+    token: site
+
+  - keywords: ["office", "meeting", "conference"]
+    token: office
+
+  - keywords: ["warehouse", "storage", "logistics"]
+    token: warehouse
+
+  - keywords: ["outdoor", "campus", "aerial", "drone"]
+    token: exterior
