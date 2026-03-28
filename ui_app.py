@@ -47,7 +47,15 @@ from src.brand_workspace import (
 )
 from src.ui_provider_settings import render_ai_provider_settings
 from src.ui_ai_entry import render_ai_script_entry_panel
-from src.ui_local_prefs import load_ui_local_prefs, remember_last_company, clear_last_company, remember_last_orientation
+from src.ui_local_prefs import (
+    load_ui_local_prefs,
+    remember_last_company,
+    clear_last_company,
+    remember_last_orientation,
+    remember_last_tts_language,
+    remember_last_eleven_model_id,
+    remember_last_voice_id,
+)
 
 from src.render_profile import get_default_fps, get_filter_preset
 from src.language_checks import build_language_check
@@ -1338,6 +1346,10 @@ def tr(text: str) -> str:
     return text
 
 
+def resolve_ui_tts_provider(lang_code: str) -> str:
+    short = (str(lang_code or "").split("-", 1)[0] if lang_code else "en").lower().strip()
+    return "mms_local" if short in {"kk", "tg", "ky", "ug", "uz"} else "elevenlabs"
+
 
 
 
@@ -1564,62 +1576,113 @@ with st.sidebar:
             ("Other…", "other"),
         ]
         lang_labels = [f"{n} ({c})" if c != "other" else n for n, c in lang_options]
-        sel = st.selectbox(tr("Global Default Language"), lang_labels, index=0)
-        sel_code = dict(zip(lang_labels, [c for _, c in lang_options]))[sel]
+        lang_label_to_code = dict(zip(lang_labels, [c for _, c in lang_options]))
+        code_to_label = {c: lbl for lbl, c in lang_label_to_code.items()}
+
+        _saved_lang_code = str(load_ui_local_prefs(ROOT).last_tts_language or "en-US").strip()
+        _saved_lang_label = code_to_label.get(_saved_lang_code, lang_labels[0])
+
+        sel = st.selectbox(
+            tr("Global Default Language"),
+            lang_labels,
+            index=lang_labels.index(_saved_lang_label) if _saved_lang_label in lang_labels else 0,
+        )
+        sel_code = lang_label_to_code[sel]
         if sel_code == "other":
-            lang_code = st.text_input("Custom Language (BCP-47)", value="", placeholder="e.g. zh-CN / en-GB").strip()
+            lang_code = st.text_input(
+                "Custom Language (BCP-47)",
+                value=_saved_lang_code if _saved_lang_code not in code_to_label else "",
+                placeholder="e.g. zh-CN / en-GB",
+            ).strip()
         else:
             lang_code = sel_code
+
         if not lang_code:
             lang_code = "en-US"
 
-        st.markdown(f"### {tr('ElevenLabs')}")
-        profile = ensure_default_eleven_profile()
-        saved_key = load_eleven_api_key()
-        eleven_key = st.text_input(tr("API Key"), value=saved_key, type="password")
+        remember_last_tts_language(ROOT, lang_code)
 
-        model_id = st.selectbox(
-            tr("TTS Model"),
-            ["eleven_multilingual_v2", "eleven_turbo_v2_5", "eleven_flash_v2_5", "eleven_v3"],
-            index=0,
-        )
 
-        lang_short = (lang_code.split("-")[0] if lang_code else "en").lower()
-        cur_voice_id = str(((profile.get("languages", {}) or {}).get(lang_short, {}) or {}).get("voice_id", "") or "")
-        voice_id_input = st.text_input(
-            f"Voice ID ({lang_short})",
-            value=cur_voice_id,
-            help="Must be an ElevenLabs voice_id.",
-        )
+        lang_short = (lang_code.split("-")[0] if lang_code else "en").lower().strip()
+        if lang_short in {"kk", "tg", "ky"}:
+            effective_tts_provider = "mms_local"
+        elif lang_short == "ug":
+            effective_tts_provider = "human_voice_wip"
+        else:
+            effective_tts_provider = "elevenlabs"
 
-        save_a, save_b = st.columns([1, 1])
-        with save_a:
-            if st.button(tr("Save TTS"), use_container_width=True):
-                if eleven_key.strip():
-                    save_eleven_api_key(eleven_key.strip())
+        st.markdown("### TTS")
 
-                prof = load_eleven_profile()
-                prof.setdefault("defaults", {})
-                prof.setdefault("languages", {})
+        if effective_tts_provider == "elevenlabs":
+            st.caption(f"Provider: ElevenLabs · Language: {lang_code}")
 
-                if isinstance(prof.get("defaults"), dict):
-                    prof["defaults"]["model_id"] = model_id
-                    prof["defaults"].setdefault("output_format", "mp3_44100_128")
+            profile = ensure_default_eleven_profile()
+            saved_key = load_eleven_api_key()
+            saved_ui_prefs = load_ui_local_prefs(ROOT)
 
-                if isinstance(prof.get("languages"), dict):
-                    prof["languages"].setdefault(lang_short, {})
-                    if isinstance(prof["languages"][lang_short], dict):
-                        prof["languages"][lang_short]["voice_id"] = voice_id_input.strip()
+            eleven_key = st.text_input(tr("API Key"), value=saved_key, type="password")
 
-                save_eleven_profile(prof)
-                st.success("Saved")
+            model_options = ["eleven_multilingual_v2", "eleven_turbo_v2_5", "eleven_flash_v2_5", "eleven_v3"]
+            saved_model_id = str(saved_ui_prefs.last_eleven_model_id or "eleven_multilingual_v2").strip()
+            model_id = st.selectbox(
+                tr("TTS Model"),
+                model_options,
+                index=model_options.index(saved_model_id) if saved_model_id in model_options else 0,
+            )
+            remember_last_eleven_model_id(ROOT, model_id)
 
-        with save_b:
-            with st.popover(tr("Voice Map")):
-                langs = profile.get("languages", {}) if isinstance(profile.get("languages", {}), dict) else {}
-                rows_map = [{"lang": k, "voice_id": (v or {}).get("voice_id", "")} for k, v in sorted(langs.items())]
-                st.dataframe(rows_map, width="stretch", hide_index=True)
+            saved_voice_from_profile = str(((profile.get("languages", {}) or {}).get(lang_short, {}) or {}).get("voice_id", "") or "")
+            saved_voice_from_ui = str((saved_ui_prefs.last_voice_ids or {}).get(lang_short, "") or "")
+            cur_voice_id = saved_voice_from_ui or saved_voice_from_profile
 
+            voice_id_input = st.text_input(
+                f"Voice ID ({lang_short})",
+                value=cur_voice_id,
+                help="Must be an ElevenLabs voice_id.",
+            )
+            remember_last_voice_id(ROOT, lang_short, voice_id_input)
+
+            save_a, save_b = st.columns([1, 1])
+            with save_a:
+                if st.button(tr("Save TTS"), use_container_width=True):
+                    if eleven_key.strip():
+                        save_eleven_api_key(eleven_key.strip())
+
+                    prof = load_eleven_profile()
+                    prof.setdefault("defaults", {})
+                    prof.setdefault("languages", {})
+
+                    if isinstance(prof.get("defaults"), dict):
+                        prof["defaults"]["model_id"] = model_id
+                        prof["defaults"].setdefault("output_format", "mp3_44100_128")
+
+                    if isinstance(prof.get("languages"), dict):
+                        prof["languages"].setdefault(lang_short, {})
+                        if isinstance(prof["languages"][lang_short], dict):
+                            prof["languages"][lang_short]["voice_id"] = voice_id_input.strip()
+
+                    save_eleven_profile(prof)
+                    remember_last_eleven_model_id(ROOT, model_id)
+                    remember_last_voice_id(ROOT, lang_short, voice_id_input)
+                    st.success("Saved")
+
+            with save_b:
+                with st.popover(tr("Voice Map")):
+                    langs = profile.get("languages", {}) if isinstance(profile.get("languages", {}), dict) else {}
+                    rows_map = [{"lang": k, "voice_id": (v or {}).get("voice_id", "")} for k, v in sorted(langs.items())]
+                    st.dataframe(rows_map, width="stretch", hide_index=True)
+
+        elif effective_tts_provider == "mms_local":
+            model_id = "mms_local"
+            voice_id_input = ""
+            st.caption(f"Provider: MMS Local · Language: {lang_code}")
+            st.info("This language is automatically routed to local MMS TTS.")
+
+        else:
+            model_id = "human_voice_wip"
+            voice_id_input = ""
+            st.caption(f"Provider: Human Voice Path (WIP) · Language: {lang_code}")
+            st.warning("Uyghur is not using automated TTS in the current workflow. A dedicated human voice path will be used later.")
         ai_provider_settings = render_ai_provider_settings(root=ROOT)
 
         st.markdown(f"### {tr('Output Defaults')}")

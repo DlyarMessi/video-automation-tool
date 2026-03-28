@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 
 from src.script_loader import load_script
 from src.render_profile import get_default_fps, get_subtitle_style, get_filter_preset
+from src.tts_local_settings import load_tts_routing_settings, resolve_tts_provider
 
 
 VIDEO_SUFFIXES = [".mp4", ".mov", ".mkv", ".m4v"]
@@ -1088,9 +1089,17 @@ def apply_runtime_overrides_to_production_dict(
             defaults = {}
 
     if lang:
-        voiceover["provider"] = "elevenlabs"
+        explicit_provider = str(voiceover.get("provider", "") or "").strip().lower()
+        tts_settings = load_tts_routing_settings(Path(__file__).resolve().parent.parent)
+        resolved_provider = resolve_tts_provider(
+            language=lang,
+            explicit_provider=explicit_provider,
+            settings=tts_settings,
+        )
+        voiceover["provider"] = resolved_provider
         voiceover["language"] = lang
-        voiceover["output_format"] = str(defaults.get("output_format", "mp3_44100_128"))
+        if resolved_provider == "elevenlabs":
+            voiceover["output_format"] = str(defaults.get("output_format", "mp3_44100_128"))
         voiceover.setdefault("volume", 1.0)
 
     if model:

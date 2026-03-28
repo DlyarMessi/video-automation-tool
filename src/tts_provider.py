@@ -3,11 +3,15 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
+import wave
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 import requests
+
+from src.tts_local_settings import MMS_MODEL_MAP
 
 
 @dataclass
@@ -15,8 +19,8 @@ class TTSRequest:
     text: str
     language: str                  # e.g. en-US / fr-FR / es-ES / ru-RU / ar-SA
     provider: str = "elevenlabs"
-    voice: Optional[str] = None    # elevenlabs voice_id (optional; env/profile may supply it)
-    model: Optional[str] = None    # elevenlabs model_id
+    voice: Optional[str] = None
+    model: Optional[str] = None
     output_format: str = "mp3_44100_128"
     voice_settings: Optional[Dict[str, Any]] = None
 
@@ -32,13 +36,6 @@ def _hash_key(*parts: str) -> str:
 
 
 def _load_eleven_profile() -> Dict[str, Any]:
-    """
-    Optional config file:
-      data/tts_profiles/elevenlabs.json
-
-    If missing, we fallback to env mapping:
-      ELEVENLABS_VOICE_ID_EN / _FR / _ES / _RU / _AR ...
-    """
     p = Path("data/tts_profiles/elevenlabs.json")
     if p.exists():
         return json.loads(p.read_text(encoding="utf-8"))
@@ -49,10 +46,18 @@ def synthesize(req: TTSRequest, cache_dir: Path, timeout: int = 90) -> Path:
     cache_dir.mkdir(parents=True, exist_ok=True)
     provider = (req.provider or "elevenlabs").lower().strip()
 
-    if provider != "elevenlabs":
-        raise ValueError(f"Only elevenlabs is supported now, got: {provider}")
+    if provider == "elevenlabs":
+        return _elevenlabs_synthesize(req, cache_dir, timeout=timeout)
 
-    return _elevenlabs_synthesize(req, cache_dir, timeout=timeout)
+    if provider == "mms_local":
+        return _mms_local_synthesize(req, cache_dir)
+
+    if provider == "human_voice_wip":
+        raise RuntimeError(
+            "Uyghur currently uses the human voice path and is not available in automated TTS yet."
+        )
+
+    raise ValueError(f"Unsupported TTS provider: {provider}")
 
 
 def _elevenlabs_synthesize(req: TTSRequest, cache_dir: Path, timeout: int = 90) -> Path:
@@ -62,7 +67,6 @@ def _elevenlabs_synthesize(req: TTSRequest, cache_dir: Path, timeout: int = 90) 
 
     lang = _lang_short(req.language)
 
-    # === DEBUG: 强制只从环境变量取 ElevenLabs voice_id ===
     env_voice = (os.environ.get(f"ELEVENLABS_VOICE_ID_{lang.upper()}") or "").strip()
     print("[DEBUG] ELEVENLABS_VOICE_ID_ENV =", env_voice)
 
@@ -74,7 +78,6 @@ def _elevenlabs_synthesize(req: TTSRequest, cache_dir: Path, timeout: int = 90) 
 
     voice_id = env_voice
 
-    # 下面这些保留：用 config 取默认 model / output_format / voice_settings（不影响 voice_id）
     prof = _load_eleven_profile()
     defaults = prof.get("defaults", {}) if isinstance(prof.get("defaults"), dict) else {}
 
@@ -105,7 +108,6 @@ def _elevenlabs_synthesize(req: TTSRequest, cache_dir: Path, timeout: int = 90) 
         "Accept": "audio/mpeg",
     }
 
-    # ✅ 不吃系统 SOCKS 代理
     session = requests.Session()
     session.trust_env = False
 
@@ -114,10 +116,83 @@ def _elevenlabs_synthesize(req: TTSRequest, cache_dir: Path, timeout: int = 90) 
         headers=headers,
         json=payload,
         params={"output_format": output_format},
-        timeout=timeout
+        timeout=timeout,
     )
     if resp.status_code >= 400:
         raise RuntimeError(f"ElevenLabs HTTP {resp.status_code}: {resp.text[:200]}")
 
     out.write_bytes(resp.content)
+    return out
+
+
+def _sanitize_mms_text(text: str, lang: str) -> str:
+    cleaned = str(text or "").strip()
+    if not cleaned:
+        raise RuntimeError("TTS text is empty")
+
+    short = _lang_short(lang)
+
+    if short == "uz":
+        latin_like = re.search(r"[A-Za-z]", cleaned) is not None
+        if latin_like:
+            raise RuntimeError(
+                "MMS Uzbek currently expects Cyrillic Uzbek input. Current text looks Latin-script."
+            )
+
+    return cleaned
+
+
+def _write_wave_file(path: Path, audio, sample_rate: int) -> Path:
+    import numpy as np
+
+    arr = np.asarray(audio)
+    if arr.ndim > 1:
+        arr = arr.squeeze()
+
+    arr = arr.astype("float32")
+    arr = arr.clip(-1.0, 1.0)
+    pcm = (arr * 32767.0).astype("int16")
+
+    with wave.open(str(path), "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(int(sample_rate))
+        wf.writeframes(pcm.tobytes())
+
+    return path
+
+
+def _mms_local_synthesize(req: TTSRequest, cache_dir: Path) -> Path:
+    lang = _lang_short(req.language)
+    model_id = MMS_MODEL_MAP.get(lang)
+    if not model_id:
+        raise RuntimeError(f"No MMS local model mapping configured for language: {req.language}")
+
+    text = _sanitize_mms_text(req.text, req.language)
+    key = _hash_key(lang, model_id, text)
+    out = cache_dir / f"vo_mms_{lang}_{key}.wav"
+    if out.exists() and out.stat().st_size > 2048:
+        return out
+
+    try:
+        import torch
+        from transformers import VitsModel, AutoTokenizer
+    except Exception as e:
+        raise RuntimeError(
+            "MMS local provider requires transformers + torch. "
+            "Install them in the project venv first."
+        ) from e
+
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    model = VitsModel.from_pretrained(model_id)
+
+    inputs = tokenizer(text=text, return_tensors="pt")
+
+    with torch.no_grad():
+        output = model(**inputs).waveform
+
+    waveform = output[0].cpu().numpy()
+    sample_rate = int(getattr(model.config, "sampling_rate", 16000) or 16000)
+
+    _write_wave_file(out, waveform, sample_rate)
     return out
