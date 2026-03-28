@@ -34,27 +34,27 @@ entries:
 
   # Product
   - keywords: ["elevator interior", "cabin", "car interior", "ride"]
-    token: product_interior
+    token: productinterior
     label: product_interior
     category: product
 
   - keywords: ["elevator door", "door open", "door close", "landing door"]
-    token: product_door
+    token: productdoor
     label: product_door
     category: product
 
   - keywords: ["elevator exterior", "shaft", "hoistway"]
-    token: product_shaft
+    token: productshaft
     label: product_shaft
     category: product
 
   - keywords: ["control panel", "button", "floor indicator", "display panel"]
-    token: product_controls
+    token: productcontrols
     label: product_controls
     category: product
 
   - keywords: ["motor", "traction", "drive", "machine room"]
-    token: product_motor
+    token: productmotor
     label: product_motor
     category: product
 

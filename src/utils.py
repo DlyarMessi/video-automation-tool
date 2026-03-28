@@ -866,6 +866,8 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
     runtime_lang = str(os.environ.get("VIDEO_AUTOMATION_LANG", "") or "").strip()
     runtime_model = str(os.environ.get("VIDEO_AUTOMATION_MODEL", "") or "").strip()
     runtime_filter_preset = str(os.environ.get("VIDEO_AUTOMATION_FILTER_PRESET", "clean") or "clean").strip() or "clean"
+    runtime_export_raw_mov = str(os.environ.get("VIDEO_AUTOMATION_EXPORT_RAW_MOV", "") or "").strip().lower() in {"1", "true", "yes", "on"}
+    runtime_export_shot_mov = str(os.environ.get("VIDEO_AUTOMATION_EXPORT_SHOT_MOV", "") or "").strip().lower() in {"1", "true", "yes", "on"}
     runtime_profile_raw = str(os.environ.get("VIDEO_AUTOMATION_ELEVEN_PROFILE_PATH", "") or "").strip()
     runtime_profile_path = Path(runtime_profile_raw).expanduser().resolve() if runtime_profile_raw else None
 
@@ -965,6 +967,8 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
     if not out_name:
         out_name = "output.mp4"
     mp4_path = output_dir / out_name
+    shots_dir = output_dir / "_shots"
+    raw_mov_path = output_dir / f"{Path(out_name).stem}.raw.mov"
 
     timeline_base = internal_dir / "timeline"
 
@@ -1138,6 +1142,21 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
 
             # ✅ 强制竖屏满屏 Crop to Fill（保留你的逻辑）
             # sizing is already handled by fit_to_canvas(clip, canvas, fit_mode)
+            if runtime_export_shot_mov:
+                shots_dir.mkdir(parents=True, exist_ok=True)
+                shot_tag = re.sub(r"[^A-Za-z0-9_\-]+", "_", str(s.get("tag", "shot") or "shot")).strip("_") or "shot"
+                shot_mov_path = shots_dir / f"S{i:03d}_{shot_tag}.mov"
+                logger.info("导出 shot MOV：%s", shot_mov_path)
+                clip.write_videofile(
+                    str(shot_mov_path),
+                    fps=FPS,
+                    codec="libx264",
+                    audio=False,
+                    preset=PRESET,
+                    threads=THREADS,
+                    logger=None,
+                )
+
             final_clips.append(clip)
             current_t += float(clip.duration)
 
@@ -1179,6 +1198,19 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
 
         if tracks:
             final_video = final_video.with_audio(CompositeAudioClip(tracks))
+
+        if runtime_export_raw_mov:
+            logger.info("导出原始拼接 MOV（未烧字幕）：%s", raw_mov_path)
+            final_video.write_videofile(
+                str(raw_mov_path),
+                fps=FPS,
+                codec="libx264",
+                audio_codec=AUDIO_CODEC,
+                preset=PRESET,
+                threads=THREADS,
+                temp_audiofile=str(internal_dir / f"_temp_raw_{company_name}.m4a"),
+                remove_temp=True,
+            )
 
         tmp_mp4 = internal_dir / "_render_tmp.mp4"
         logger.info("导出临时 MP4（无字幕）：%s", tmp_mp4)

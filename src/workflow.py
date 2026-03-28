@@ -452,16 +452,32 @@ def build_project_slots_from_creative(creative: dict) -> list[dict]:
 
             _cap_content = _infer_content_from_visual(visual, purpose)
             _cap_scene = _infer_scene_from_visual(visual, scene)
+
+            med_scene = str(beat.get("medium_scene") or _cap_scene).strip() or _cap_scene
+            med_content = str(beat.get("medium_content") or _cap_content).strip() or _cap_content
+            med_move = str(beat.get("medium_move") or move).strip() or move or "static"
+
+            det_scene = str(beat.get("detail_scene") or med_scene).strip() or med_scene
+            det_content = str(
+                beat.get("detail_content")
+                or (med_content if med_scene == "showroom" else "line")
+            ).strip() or (med_content if med_scene == "showroom" else "line")
+            det_move_override = str(beat.get("detail_move") or "").strip()
+
+            if isinstance(beat.get("medium_target"), (int, float)):
+                med_count = max(0, int(beat.get("medium_target") or 0))
+            if isinstance(beat.get("detail_target"), (int, float)):
+                det_count = max(0, int(beat.get("detail_target") or 0))
             if med_count > 0:
                 out.append(
                     _project_slot(
                         beat_no=i,
                         beat_purpose=purpose,
                         request_family="capability",
-                        scene=_cap_scene,
-                        content=_cap_content,
+                        scene=med_scene,
+                        content=med_content,
                         coverage="medium",
-                        move=move,
+                        move=med_move,
                         target=med_count,
                         priority="high",
                         human_label=f"Capability \u00b7 {snippet}" if snippet else "Capability / Process \u00b7 Stable Medium",
@@ -475,14 +491,14 @@ def build_project_slots_from_creative(creative: dict) -> list[dict]:
                 )
 
             if det_count > 0:
-                det_move = move if move not in ("orbit", "reveal") else "static"
+                det_move = det_move_override or (med_move if med_move not in ("orbit", "reveal") else "static")
                 out.append(
                     _project_slot(
                         beat_no=i,
                         beat_purpose=purpose,
                         request_family="capability",
-                        scene=scene,
-                        content="line",
+                        scene=det_scene,
+                        content=det_content,
                         coverage="detail",
                         move=det_move,
                         target=det_count,
