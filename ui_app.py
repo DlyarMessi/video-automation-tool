@@ -2055,6 +2055,16 @@ else:
         files = sorted(creative_dir.rglob("*.yaml"))
         if not files:
             st.warning("No script YAML files were found for this company.")
+            for _k in (
+                "active_creative_path",
+                "task_rows_json_path",
+                "task_rows_html_path",
+                "project_slots_json_path",
+                "shooting_rows",
+                "project_slots",
+                "select_yaml",
+            ):
+                st.session_state.pop(_k, None)
         else:
             if (
                 active_creative_for_ui
