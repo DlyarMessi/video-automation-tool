@@ -158,22 +158,64 @@ def movement_guidance(move: str) -> str:
     return mapping.get(move, "controlled move")
 
 
-def composition_guidance(scene: str, content: str, coverage: str) -> str:
+def composition_guidance(
+    scene: str,
+    content: str,
+    coverage: str,
+    subject: str = "",
+    action: str = "",
+) -> str:
+    from src.workflow import _legacy_subject_action_from_content
+
     coverage = str(coverage or "").strip().lower()
+    subject = str(subject or "").strip().lower()
+    action = str(action or "").strip().lower()
+
+    if not subject or not action:
+        derived_subject, derived_action = _legacy_subject_action_from_content(content, "")
+        subject = subject or str(derived_subject).strip().lower()
+        action = action or str(derived_action).strip().lower()
 
     if coverage == "wide":
-        return "show full space clearly"
+        if subject == "product":
+            return "show full product and surrounding context clearly"
+        return "show full space or workflow clearly"
     if coverage == "medium":
-        return "one main subject readable"
+        return "one main subject readable and centered"
     if coverage == "detail":
+        if action == "inspect":
+            return "one inspection detail fills frame"
+        if action == "assemble":
+            return "one mechanism or assembly detail fills frame"
         return "one clear detail fills frame"
     if coverage == "hero":
         return "premium brand-style framing"
     return "clean readable framing"
 
 
-def slot_display_name(scene: str, content: str, coverage: str, move: str) -> str:
-    return f"{scene} / {content} / {coverage} / {move}"
+def slot_display_name(
+    scene: str,
+    content: str,
+    coverage: str,
+    move: str,
+    subject: str = "",
+    action: str = "",
+) -> str:
+    from src.workflow import _legacy_subject_action_from_content
+
+    scene = str(scene or "").strip()
+    content = str(content or "").strip()
+    coverage = str(coverage or "").strip()
+    move = str(move or "").strip()
+    subject = str(subject or "").strip()
+    action = str(action or "").strip()
+
+    if not subject or not action:
+        derived_subject, derived_action = _legacy_subject_action_from_content(content, "")
+        subject = subject or str(derived_subject).strip()
+        action = action or str(derived_action).strip()
+
+    return " / ".join([x for x in [scene, subject, action, coverage, move] if x])
 
 
 def priority_badge(priority: str) -> str:
@@ -202,24 +244,44 @@ def build_pool_slot_rows(slots, factory_files):
     """
     rows = []
 
-    # Phase 1: count total pool clips per bucket (scene/content/coverage)
-    bucket_pool_count: dict[tuple[str,str,str], int] = {}
+    from src.workflow import _legacy_subject_action_from_content, _legacy_content_from_subject_action
+
+    # Phase 1: count total pool clips per canonical bucket (scene/subject/action/coverage)
+    bucket_pool_count: dict[tuple[str, str, str, str], int] = {}
     for slot in slots:
         if not isinstance(slot, dict):
             continue
+
+        slot_scene = str(slot.get("scene", "")).strip().lower()
+        slot_content = str(slot.get("content", "")).strip()
+        slot_subject = str(slot.get("subject", "")).strip()
+        slot_action = str(slot.get("action", "")).strip()
+        slot_coverage = str(slot.get("coverage", "")).strip().lower()
+
+        if not slot_subject or not slot_action:
+            derived_subject, derived_action = _legacy_subject_action_from_content(slot_content, "")
+            slot_subject = slot_subject or derived_subject
+            slot_action = slot_action or derived_action
+
         key = (
-            str(slot.get("scene", "")).strip().lower(),
-            str(slot.get("content", "")).strip().lower(),
-            str(slot.get("coverage", "")).strip().lower(),
+            slot_scene,
+            str(slot_subject).strip().lower(),
+            str(slot_action).strip().lower(),
+            slot_coverage,
         )
+
         if key not in bucket_pool_count:
+            legacy_content_for_count = slot_content or _legacy_content_from_subject_action(slot_subject, slot_action)
             bucket_pool_count[key] = count_pool_matches(
                 factory_files,
-                key[0], key[1], key[2], "",
+                slot_scene,
+                legacy_content_for_count,
+                slot_coverage,
+                "",
             )
 
-    # Phase 2: budget remaining clips across slots per bucket
-    bucket_remaining: dict[tuple[str,str,str], int] = dict(bucket_pool_count)
+    # Phase 2: budget remaining clips across slots per canonical bucket
+    bucket_remaining: dict[tuple[str, str, str, str], int] = dict(bucket_pool_count)
 
     for slot in slots:
         if not isinstance(slot, dict):
@@ -227,13 +289,25 @@ def build_pool_slot_rows(slots, factory_files):
 
         scene_name = str(slot.get("scene", "")).strip()
         content_name = str(slot.get("content", "")).strip()
+        subject_name = str(slot.get("subject", "")).strip()
+        action_name = str(slot.get("action", "")).strip()
+        if not subject_name or not action_name:
+            derived_subject, derived_action = _legacy_subject_action_from_content(content_name, "")
+            subject_name = subject_name or derived_subject
+            action_name = action_name or derived_action
+
         coverage_name = str(slot.get("coverage", "")).strip()
         move_name = str(slot.get("move", "")).strip()
         target = int(slot.get("target", 0) or 0)
         priority = str(slot.get("priority", "medium") or "medium")
         defaults = slot.get("defaults", {}) if isinstance(slot.get("defaults"), dict) else {}
 
-        key = (scene_name.lower(), content_name.lower(), coverage_name.lower())
+        key = (
+            scene_name.lower(),
+            subject_name.lower(),
+            action_name.lower(),
+            coverage_name.lower(),
+        )
         available = bucket_remaining.get(key, 0)
         allocated = min(target, available)
         bucket_remaining[key] = max(0, available - allocated)
@@ -244,6 +318,8 @@ def build_pool_slot_rows(slots, factory_files):
             {
                 "scene": scene_name,
                 "content": content_name,
+                "subject": subject_name,
+                "action": action_name,
                 "coverage": coverage_name,
                 "move": move_name,
                 "target": target,
@@ -254,10 +330,10 @@ def build_pool_slot_rows(slots, factory_files):
                 "defaults": defaults,
             }
         )
-        row.setdefault("slot_label", slot_display_name(scene_name, content_name, coverage_name, move_name))
+        row.setdefault("slot_label", slot_display_name(scene_name, content_name, coverage_name, move_name, subject_name, action_name))
         row["duration_label"] = recommended_duration_for_slot(coverage_name, move_name)
         row["move_label"] = movement_guidance(move_name)
-        row["framing_label"] = composition_guidance(scene_name, content_name, coverage_name)
+        row["framing_label"] = composition_guidance(scene_name, content_name, coverage_name, subject_name, action_name)
 
         rows.append(row)
 
@@ -370,18 +446,29 @@ def load_canonical_registry_entries() -> dict[str, dict]:
 
 
 def merge_pool_semantic_fields(slot_rows: list[dict], slots: list[dict]) -> list[dict]:
-    slot_semantic_map: dict[tuple[str, str, str, str], dict] = {}
+    from src.workflow import _legacy_subject_action_from_content
+
+    def _canonical_tuple(item: dict) -> tuple[str, str, str, str, str]:
+        scene = str(item.get("scene", "") or "").strip().lower()
+        subject = str(item.get("subject", "") or "").strip().lower()
+        action = str(item.get("action", "") or "").strip().lower()
+        if not subject or not action:
+            content = str(item.get("content", "") or "").strip()
+            if content:
+                derived_subject, derived_action = _legacy_subject_action_from_content(content, "")
+                subject = subject or str(derived_subject).strip().lower()
+                action = action or str(derived_action).strip().lower()
+        coverage = str(item.get("coverage", "") or "").strip().lower()
+        move = str(item.get("move", "") or "").strip().lower()
+        return (scene, subject, action, coverage, move)
+
+    slot_semantic_map: dict[tuple[str, str, str, str, str], dict] = {}
 
     for slot in slots:
         if not isinstance(slot, dict):
             continue
 
-        key = (
-            str(slot.get("scene", "") or "").strip().lower(),
-            str(slot.get("content", "") or "").strip().lower(),
-            str(slot.get("coverage", "") or "").strip().lower(),
-            str(slot.get("move", "") or "").strip().lower(),
-        )
+        key = _canonical_tuple(slot)
 
         slot_semantic_map[key] = {
             "registry_key": str(slot.get("registry_key", "") or "").strip(),
@@ -401,12 +488,7 @@ def merge_pool_semantic_fields(slot_rows: list[dict], slots: list[dict]) -> list
             continue
 
         merged = dict(row)
-        key = (
-            str(merged.get("scene", "") or "").strip().lower(),
-            str(merged.get("content", "") or "").strip().lower(),
-            str(merged.get("coverage", "") or "").strip().lower(),
-            str(merged.get("move", "") or "").strip().lower(),
-        )
+        key = _canonical_tuple(merged)
 
         slot_semantic = slot_semantic_map.get(key, {})
         computed_registry_key = ".".join(key)
@@ -2349,7 +2431,8 @@ elif project_slots:
                     {
                         "filename": item.get("filename", ""),
                         "scene": item.get("scene", ""),
-                        "content": item.get("content", ""),
+                        "subject": item.get("subject", ""),
+                        "action": item.get("action", ""),
                         "coverage": item.get("coverage", ""),
                         "move": item.get("move", ""),
                         "raw_duration": item.get("raw_duration", ""),
@@ -2415,31 +2498,43 @@ elif project_slots:
                     st.markdown("---")
                     st.caption(tr("Factory file actions"))
 
+                    from src.workflow import _legacy_content_from_subject_action
+                    from src.material_index import SUBJECT_VALUES, ACTION_VALUES, COVERAGE_VALUES, MOVE_VALUES
+
                     current_asset_path = factory_dir / selected_filename
-                    current_content = str(selected_item.get("content", "line") or "line")
+                    current_subject = str(selected_item.get("subject", "workspace") or "workspace")
+                    current_action = str(selected_item.get("action", "display") or "display")
                     current_coverage = str(selected_item.get("coverage", "medium") or "medium")
                     current_move = str(selected_item.get("move", "static") or "static")
 
-                    content_options = ["building", "line"]
-                    coverage_options = ["hero", "medium", "detail"]
-                    move_options = MOVE_TOKEN_OPTIONS
+                    subject_options = sorted(SUBJECT_VALUES)
+                    action_options = sorted(ACTION_VALUES)
+                    coverage_options = sorted(COVERAGE_VALUES)
+                    move_options = sorted(MOVE_VALUES)
 
-                    c_move_1, c_move_2, c_move_3 = st.columns(3)
+                    c_move_1, c_move_2, c_move_3, c_move_4 = st.columns(4)
                     with c_move_1:
-                        reclass_content = st.selectbox(
-                            tr("Move to content"),
-                            content_options,
-                            index=content_options.index(current_content) if current_content in content_options else 1,
-                            key=f"reclass_content_{safe_slug(selected_filename)}",
+                        reclass_subject = st.selectbox(
+                            "Subject",
+                            subject_options,
+                            index=subject_options.index(current_subject) if current_subject in subject_options else 0,
+                            key=f"reclass_subject_{safe_slug(selected_filename)}",
                         )
                     with c_move_2:
+                        reclass_action = st.selectbox(
+                            "Action",
+                            action_options,
+                            index=action_options.index(current_action) if current_action in action_options else 0,
+                            key=f"reclass_action_{safe_slug(selected_filename)}",
+                        )
+                    with c_move_3:
                         reclass_coverage = st.selectbox(
                             tr("Move to coverage"),
                             coverage_options,
-                            index=coverage_options.index(current_coverage) if current_coverage in coverage_options else 1,
+                            index=coverage_options.index(current_coverage) if current_coverage in coverage_options else 0,
                             key=f"reclass_coverage_{safe_slug(selected_filename)}",
                         )
-                    with c_move_3:
+                    with c_move_4:
                         reclass_move = st.selectbox(
                             tr("Move token"),
                             move_options,
@@ -2455,8 +2550,9 @@ elif project_slots:
                                 st.error(f"Asset file not found: {selected_filename}")
                             else:
                                 ext = current_asset_path.suffix.lower() or ".mp4"
-                                next_idx = next_index_for(factory_dir, "factory", reclass_content, reclass_coverage, reclass_move, ext)
-                                new_name = build_factory_filename("factory", reclass_content, reclass_coverage, reclass_move, next_idx, ext)
+                                legacy_content_for_filename = _legacy_content_from_subject_action(reclass_subject, reclass_action)
+                                next_idx = next_index_for(factory_dir, "factory", legacy_content_for_filename, reclass_coverage, reclass_move, ext)
+                                new_name = build_factory_filename("factory", legacy_content_for_filename, reclass_coverage, reclass_move, next_idx, ext)
                                 dst = factory_dir / new_name
                                 if dst.exists():
                                     dst = factory_dir / f"{Path(new_name).stem}_{now_tag()}{ext}"
@@ -2472,7 +2568,8 @@ elif project_slots:
                                         new_rec = dict(rec)
                                         new_rec["filename"] = dst.name
                                         new_rec["scene"] = "factory"
-                                        new_rec["content"] = reclass_content
+                                        new_rec["subject"] = reclass_subject
+                                        new_rec["action"] = reclass_action
                                         new_rec["coverage"] = reclass_coverage
                                         new_rec["move"] = reclass_move
                                         updated_records.append(new_rec)
@@ -2485,7 +2582,8 @@ elif project_slots:
                                         {
                                             "filename": dst.name,
                                             "scene": "factory",
-                                            "content": reclass_content,
+                                            "subject": reclass_subject,
+                                            "action": reclass_action,
                                             "coverage": reclass_coverage,
                                             "move": reclass_move,
                                         }
