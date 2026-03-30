@@ -258,7 +258,7 @@ def compile_brief_to_constraints(
         )
 
     hard_rules = [
-        "RULE:canonical_tuple_required: section planning MUST remain compatible with canonical scene/content/coverage/move.",
+        "RULE:canonical_tuple_required: section planning MUST remain compatible with canonical scene/subject/action/coverage/move.",
         "RULE:semantic_fields_required: each generated section MUST support human_label/shoot_brief/success_criteria/fallback/purpose semantics.",
         "RULE:provider_output_contract: provider output MUST be representable as ScriptProviderResponse without ad hoc fields.",
     ]

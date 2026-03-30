@@ -176,11 +176,6 @@ def get_action(shot: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -
     return ""
 
 
-def get_content(shot: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> str:
-    # Transitional alias so older rules keep running while semantics move to subject/action.
-    return get_subject(shot, context=context)
-
-
 def get_coverage(shot: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> str:
     val = str(
         shot.get("_preferred_coverage")
@@ -272,7 +267,6 @@ def same_subject(a: Dict[str, Any], b: Dict[str, Any], context: Optional[Dict[st
 
 
 def same_content(a: Dict[str, Any], b: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> bool:
-    # Transitional alias for older rules
     return same_subject(a, b, context=context)
 
 
