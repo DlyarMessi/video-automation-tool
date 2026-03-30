@@ -332,13 +332,29 @@ def _project_slot(
     vo: str = "",
     tag: str = "",
     duration_hint: float = 0.0,
+    subject: str = "",
+    action: str = "",
 ) -> dict:
+    content_clean = str(content or "").strip()
+    subject_clean = str(subject or "").strip()
+    action_clean = str(action or "").strip()
+
+    if not subject_clean or not action_clean:
+        _derived_subject, _derived_action = _legacy_subject_action_from_content(
+            content=content_clean,
+            purpose=str(beat_purpose or request_family or "").strip(),
+        )
+        subject_clean = subject_clean or _derived_subject
+        action_clean = action_clean or _derived_action
+
     return {
         "beat_no": int(beat_no),
         "beat_purpose": str(beat_purpose or "").strip(),
         "request_family": str(request_family or "").strip(),
         "scene": str(scene or "").strip(),
-        "content": str(content or "").strip(),
+        "content": content_clean,
+        "subject": subject_clean,
+        "action": action_clean,
         "coverage": str(coverage or "").strip(),
         "move": str(move or "").strip(),
         "target": int(target or 0),
@@ -687,37 +703,31 @@ def render_html_task_table(rows: list[dict]) -> str:
 # Footage pool helpers
 # =========================================================
 def build_factory_filename(scene: str, content: str, coverage: str, move: str, idx: int, ext: str) -> str:
-    scene = safe_slug(scene).lower()
-    content = safe_slug(content).lower()
-    coverage = safe_slug(coverage).lower()
-    move = safe_slug(move).lower() if str(move or "").strip() else ""
+    scene = safe_slug(scene).lower() or "factory-floor"
+    subject, action = _legacy_subject_action_from_content(content, purpose="")
+    subject = safe_slug(subject).lower() or "workspace"
+    action = safe_slug(action).lower() or "display"
+    coverage = _canonical_coverage_from_legacy(coverage)
+    move = safe_slug(move).lower() if str(move or "").strip() else "static"
 
-    core = f"factory_{scene}_{content}"
-    if coverage:
-        core += f"_{coverage}"
-    if move:
-        core += f"_{move}"
-    core += f"_{idx:02d}"
+    variant = f"v{int(idx)}"
     if not ext.startswith("."):
         ext = "." + ext
-    return f"{core}{ext}"
+    return f"{scene}_{subject}_{action}_{coverage}_{move}_{variant}{ext}"
 
 
 def next_index_for(factory_dir: Path, scene: str, content: str, coverage: str, move: str, ext: str) -> int:
-    scene = safe_slug(scene).lower()
-    content = safe_slug(content).lower()
-    coverage = safe_slug(coverage).lower()
-    move = safe_slug(move).lower() if str(move or "").strip() else ""
+    scene = safe_slug(scene).lower() or "factory-floor"
+    subject, action = _legacy_subject_action_from_content(content, purpose="")
+    subject = safe_slug(subject).lower() or "workspace"
+    action = safe_slug(action).lower() or "display"
+    coverage = _canonical_coverage_from_legacy(coverage)
+    move = safe_slug(move).lower() if str(move or "").strip() else "static"
     if not ext.startswith("."):
         ext = "." + ext
 
-    core = f"factory_{scene}_{content}"
-    if coverage:
-        core += f"_{coverage}"
-    if move:
-        core += f"_{move}"
-
-    pat = re.compile(rf"^{re.escape(core)}_(\d\d){re.escape(ext)}$", re.IGNORECASE)
+    core = f"{scene}_{subject}_{action}_{coverage}_{move}_v"
+    pat = re.compile(rf"^{re.escape(core)}(\d\d){re.escape(ext)}$", re.IGNORECASE)
     mx = 0
     if not factory_dir.exists():
         return 1
@@ -754,6 +764,21 @@ def normalize_demo_coverage_token(token: str) -> str:
 
 
 def parse_factory_filename_key(path: Path) -> tuple[str, str] | None:
+    try:
+        from src.material_index import parse_canonical_stem
+        parsed = parse_canonical_stem(path.name)
+        if parsed.get("is_valid"):
+            subject = str(parsed.get("subject", "") or "").strip()
+            action = str(parsed.get("action", "") or "").strip()
+            coverage = str(parsed.get("coverage", "") or "").strip()
+            content_key = normalize_demo_content_token(_legacy_content_from_subject_action(subject, action))
+            coverage_key = normalize_demo_coverage_token(coverage)
+            if content_key and coverage_key:
+                return content_key, coverage_key
+    except Exception:
+        pass
+
+    # legacy fallback
     stem = path.stem.lower()
     parts = stem.split("_")
     if len(parts) < 4 or parts[0] != "factory":
@@ -904,6 +929,77 @@ def _infer_demo_content_token(purpose: str, visual: str) -> str:
     return _infer_content_from_visual(visual, purpose)
 
 
+def _legacy_subject_action_from_content(content: str, purpose: str) -> tuple[str, str]:
+    c = safe_slug(str(content or "")).lower()
+    p = _normalize_purpose(str(purpose or ""))
+
+    if c in {"product", "brand", "display"}:
+        subject = "product"
+    elif c in {"panel"}:
+        subject = "panel"
+    elif c in {"motor", "sensor", "control", "door", "frame", "steel"}:
+        subject = "part"
+    elif c in {"line", "automation", "machine", "robot", "cnc", "conveyor", "assembly", "wiring", "electrical", "welding"}:
+        subject = "machine"
+    elif c in {"testing", "inspection", "certificate", "quality", "safety", "measure", "load"}:
+        subject = "workspace"
+    elif c in {"warehouse", "shipping", "packaging"}:
+        subject = "workspace"
+    elif c in {"people", "team", "worker", "staff"}:
+        subject = "person"
+    else:
+        subject = "workspace"
+
+    if c in {"assembly", "wiring", "electrical", "welding"}:
+        action = "assemble"
+    elif c in {"testing", "inspection", "certificate", "quality", "safety", "measure", "load"}:
+        action = "inspect"
+    elif c in {"warehouse", "shipping", "packaging", "conveyor"}:
+        action = "transport"
+    elif p == "show_capability":
+        action = "operate"
+    elif p == "build_trust":
+        action = "inspect"
+    else:
+        action = "display"
+
+    return subject, action
+
+
+def _legacy_content_from_subject_action(subject: str, action: str) -> str:
+    s = safe_slug(str(subject or "")).lower()
+    a = safe_slug(str(action or "")).lower()
+
+    if s == "product":
+        return "product"
+    if s == "panel":
+        return "panel"
+    if s == "part":
+        return "testing" if a == "inspect" else "panel"
+    if s == "machine":
+        return "line"
+    if s == "workspace":
+        if a == "inspect":
+            return "testing"
+        if a == "transport":
+            return "warehouse"
+        return "line"
+    if s == "person":
+        return "people"
+    return "line"
+
+
+def _canonical_coverage_from_legacy(token: str) -> str:
+    c = safe_slug(str(token or "")).lower()
+    if c in {"hero", "wide"}:
+        return "wide"
+    if c == "medium":
+        return "medium"
+    if c in {"detail", "close", "closeup"}:
+        return "detail"
+    return c or "medium"
+
+
 def _shot(
     scene: str,
     content: str,
@@ -983,12 +1079,24 @@ def compile_creative_dict(creative: Dict[str, Any]) -> Dict[str, Any]:
     for slot in project_slots:
         scene = str(slot.get("scene", "") or "factory").strip()
         content = str(slot.get("content", "") or "line").strip()
+        subject = str(slot.get("subject", "") or "").strip()
+        action = str(slot.get("action", "") or "").strip()
+        if not subject or not action:
+            _derived_subject, _derived_action = _legacy_subject_action_from_content(
+                content=content,
+                purpose=str(slot.get("beat_purpose", "") or slot.get("request_family", "") or ""),
+            )
+            subject = subject or _derived_subject
+            action = action or _derived_action
+
         coverage = str(slot.get("coverage", "") or "medium").strip()
+        source_coverage = _canonical_coverage_from_legacy(coverage)
         move_tok = str(slot.get("move", "") or "").strip()
+
+        source_tags = [scene, subject, action, source_coverage]
         if move_tok and move_tok != "static":
-            source = f"next:tags:{scene},{content},{coverage},{move_tok}"
-        else:
-            source = f"next:tags:{scene},{content},{coverage}"
+            source_tags.append(move_tok)
+        source = "next:tags:" + ",".join([str(x).strip() for x in source_tags if str(x).strip()])
 
         subtitle = str(slot.get("subtitle", "") or "").strip()
         vo_text = str(slot.get("vo", "") or "").strip()
