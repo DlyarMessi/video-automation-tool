@@ -886,6 +886,15 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
             _s["_selection_reason"] = _decision.reason
             _s["_selection_fallback_level"] = _decision.fallback_level
             _s["_selection_candidate_count"] = _decision.candidate_count
+            logger.info(
+                "[%s] Allocation shot=%s asset=%s level=%s candidates=%s reason=%s",
+                company_name,
+                _i,
+                _decision.asset_id or Path(_decision.selected_path).name,
+                _decision.fallback_level,
+                _decision.candidate_count,
+                _decision.reason,
+            )
         else:
             logger.warning("Phase 0.5 allocation failed: %s", _decision.reason)
 

@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from src.material_index import find_asset_record
+from src.material_index import find_asset_record, parse_canonical_stem
 
 
 @dataclass
@@ -38,23 +38,77 @@ class AllocationContext:
 
 
 class AllocationPlanner:
+    COVERAGE_NEIGHBORS = {
+        "detail": {"close"},
+        "close": {"detail", "medium"},
+        "medium": {"close", "wide"},
+        "wide": {"medium"},
+    }
+
     def __init__(self, picker: Any):
         self.picker = picker
         self.context = AllocationContext()
 
     def build_intent(self, shot: Dict[str, Any], shot_index: int) -> ShotIntent:
+        source_spec = str(shot.get("source") or shot.get("material") or "")
+
+        scene = str(
+            shot.get("_preferred_scene")
+            or shot.get("preferred_scene")
+            or shot.get("scene")
+            or ""
+        )
+        subject = str(
+            shot.get("_preferred_subject")
+            or shot.get("preferred_subject")
+            or shot.get("subject")
+            or ""
+        )
+        action = str(
+            shot.get("_preferred_action")
+            or shot.get("preferred_action")
+            or shot.get("action")
+            or ""
+        )
+        coverage = str(
+            shot.get("_preferred_coverage")
+            or shot.get("preferred_coverage")
+            or shot.get("coverage")
+            or ""
+        )
+        move = str(
+            shot.get("_preferred_move")
+            or shot.get("preferred_move")
+            or shot.get("move")
+            or ""
+        )
+
+        # Allow planner to consume canonical direct source specs immediately.
+        if source_spec and "_" in source_spec and not source_spec.startswith(("tags:", "regex:", "random", "next")):
+            parsed = parse_canonical_stem(source_spec)
+            if parsed.get("is_valid"):
+                scene = scene or str(parsed.get("scene") or "")
+                subject = subject or str(parsed.get("subject") or "")
+                action = action or str(parsed.get("action") or "")
+                coverage = coverage or str(parsed.get("coverage") or "")
+                move = move or str(parsed.get("move") or "")
+
         return ShotIntent(
             shot_index=shot_index,
-            source_spec=str(shot.get("source") or shot.get("material") or ""),
-            scene=str(shot.get("scene") or ""),
-            subject=str(shot.get("subject") or ""),
-            action=str(shot.get("action") or ""),
-            coverage=str(shot.get("coverage") or ""),
-            move=str(shot.get("move") or ""),
+            source_spec=source_spec,
+            scene=scene,
+            subject=subject,
+            action=action,
+            coverage=coverage,
+            move=move,
         )
 
     def _asset_record(self, candidate: Path) -> Dict[str, Any]:
         return find_asset_record(self.picker.asset_index_path, candidate.name) or {}
+
+    def _base_candidates(self, intent: ShotIntent, shot: Optional[Dict[str, Any]]) -> List[Path]:
+        context = shot if isinstance(shot, dict) else {}
+        return self.picker.get_candidates(intent.source_spec, context=context)
 
     def _filter_allocatable_assets(self, candidates: List[Path]) -> List[Path]:
         out: List[Path] = []
@@ -73,6 +127,74 @@ class AllocationPlanner:
                 continue
             fresh.append(candidate)
         return fresh
+
+    def _matches_primary_bucket(self, rec: Dict[str, Any], intent: ShotIntent) -> bool:
+        if intent.scene and str(rec.get("scene", "") or "") != intent.scene:
+            return False
+        if intent.subject and str(rec.get("subject", "") or "") != intent.subject:
+            return False
+        if intent.action and str(rec.get("action", "") or "") != intent.action:
+            return False
+        return True
+
+    def _matches_exact_style(self, rec: Dict[str, Any], intent: ShotIntent) -> bool:
+        if intent.coverage and str(rec.get("coverage", "") or "") != intent.coverage:
+            return False
+        if intent.move and str(rec.get("move", "") or "") != intent.move:
+            return False
+        return True
+
+    def _matches_level1_style(self, rec: Dict[str, Any], intent: ShotIntent) -> bool:
+        if intent.coverage and str(rec.get("coverage", "") or "") != intent.coverage:
+            return False
+        return True
+
+    def _matches_level2_style(self, rec: Dict[str, Any], intent: ShotIntent) -> bool:
+        if not intent.coverage:
+            return True
+        rec_cov = str(rec.get("coverage", "") or "")
+        if rec_cov == intent.coverage:
+            return True
+        return rec_cov in self.COVERAGE_NEIGHBORS.get(intent.coverage, set())
+
+    def _primary_bucket_candidates(self, candidates: List[Path], intent: ShotIntent) -> List[Path]:
+        # If intent has no structured bucket fields yet, keep current source-spec path alive.
+        if not (intent.scene or intent.subject or intent.action):
+            return candidates
+        out: List[Path] = []
+        for candidate in candidates:
+            rec = self._asset_record(candidate)
+            if self._matches_primary_bucket(rec, intent):
+                out.append(candidate)
+        return out
+
+    def _level0_candidates(self, candidates: List[Path], intent: ShotIntent) -> List[Path]:
+        if not (intent.coverage or intent.move):
+            return candidates
+        out: List[Path] = []
+        for candidate in candidates:
+            rec = self._asset_record(candidate)
+            if self._matches_exact_style(rec, intent):
+                out.append(candidate)
+        return out
+
+    def _level1_candidates(self, candidates: List[Path], intent: ShotIntent) -> List[Path]:
+        if not intent.coverage:
+            return candidates
+        out: List[Path] = []
+        for candidate in candidates:
+            rec = self._asset_record(candidate)
+            if self._matches_level1_style(rec, intent):
+                out.append(candidate)
+        return out
+
+    def _level2_candidates(self, candidates: List[Path], intent: ShotIntent) -> List[Path]:
+        out: List[Path] = []
+        for candidate in candidates:
+            rec = self._asset_record(candidate)
+            if self._matches_level2_style(rec, intent):
+                out.append(candidate)
+        return out
 
     def _style_penalty(self, candidate: Path) -> int:
         rec = self._asset_record(candidate)
@@ -128,16 +250,34 @@ class AllocationPlanner:
             self.context.recent_style_signatures = self.context.recent_style_signatures[-5:]
         return rec
 
+    def _build_decision(
+        self,
+        *,
+        candidate: Path,
+        fallback_level: str,
+        reason: str,
+        candidate_count: int,
+    ) -> SelectionDecision:
+        rec = self._register_selection(candidate)
+        return SelectionDecision(
+            selected_path=str(candidate),
+            fallback_level=fallback_level,
+            reason=reason,
+            candidate_count=candidate_count,
+            asset_id=str(rec.get("asset_id", "") or ""),
+            primary_bucket_signature=str(rec.get("primary_bucket_signature", "") or ""),
+            style_signature=str(rec.get("style_signature", "") or ""),
+            ingest_status_label=str(rec.get("ingest_status_label", "") or ""),
+        )
+
     def select_primary(self, intent: ShotIntent, shot: Optional[Dict[str, Any]] = None) -> SelectionDecision:
-        context = shot if isinstance(shot, dict) else {}
-        raw_candidates: List[Path] = self.picker.get_candidates(intent.source_spec, context=context)
+        raw_candidates = self._base_candidates(intent, shot=shot)
         if not raw_candidates:
             return SelectionDecision(
                 selected_path="",
                 fallback_level="failed",
                 reason=f"No candidates for spec: {intent.source_spec}",
                 candidate_count=0,
-                asset_id="",
             )
 
         allocatable = self._filter_allocatable_assets(raw_candidates)
@@ -147,28 +287,50 @@ class AllocationPlanner:
                 fallback_level="failed",
                 reason="Candidates found, but none are valid_allocatable",
                 candidate_count=len(raw_candidates),
-                asset_id="",
             )
 
-        fresh = self._filter_used_assets(allocatable)
-        fallback_level = "exact"
-        ranked_source = fresh
+        primary_bucket = self._primary_bucket_candidates(allocatable, intent)
+        if not primary_bucket:
+            return SelectionDecision(
+                selected_path="",
+                fallback_level="failed",
+                reason="Primary bucket empty; not auto-relaxing scene/subject/action",
+                candidate_count=len(allocatable),
+            )
 
-        if not ranked_source:
-            ranked_source = allocatable
-            fallback_level = "repeat_fallback"
+        level0 = self._filter_used_assets(self._level0_candidates(primary_bucket, intent))
+        if level0:
+            ranked = self._rank_candidates(level0)
+            return self._build_decision(
+                candidate=ranked[0],
+                fallback_level="level0_exact",
+                reason="Selected exact scene+subject+action+coverage+move match",
+                candidate_count=len(level0),
+            )
 
-        ranked = self._rank_candidates(ranked_source)
-        selected = ranked[0]
-        rec = self._register_selection(selected)
+        level1 = self._filter_used_assets(self._level1_candidates(primary_bucket, intent))
+        if level1:
+            ranked = self._rank_candidates(level1)
+            return self._build_decision(
+                candidate=ranked[0],
+                fallback_level="level1_move_relaxed",
+                reason="Selected exact bucket + coverage, with move relaxed",
+                candidate_count=len(level1),
+            )
+
+        level2 = self._filter_used_assets(self._level2_candidates(primary_bucket, intent))
+        if level2:
+            ranked = self._rank_candidates(level2)
+            return self._build_decision(
+                candidate=ranked[0],
+                fallback_level="level2_coverage_neighbor",
+                reason="Selected exact bucket with neighbor coverage and move relaxed",
+                candidate_count=len(level2),
+            )
 
         return SelectionDecision(
-            selected_path=str(selected),
-            fallback_level=fallback_level,
-            reason="Selected planner-owned candidate after allocatable filter, asset dedupe, and style ranking",
-            candidate_count=len(allocatable),
-            asset_id=str(rec.get("asset_id", "") or ""),
-            primary_bucket_signature=str(rec.get("primary_bucket_signature", "") or ""),
-            style_signature=str(rec.get("style_signature", "") or ""),
-            ingest_status_label=str(rec.get("ingest_status_label", "") or ""),
+            selected_path="",
+            fallback_level="failed",
+            reason="Primary bucket exists, but no selectable candidate survived level0/1/2",
+            candidate_count=len(primary_bucket),
         )

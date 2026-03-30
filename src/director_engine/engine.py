@@ -45,7 +45,37 @@ class DirectorEngine:
         for rule_name in rules:
             directed_shots = self._apply_rule(rule_name, directed_shots, context)
 
+        directed_shots = self._materialize_preferred_fields(directed_shots)
         return directed_shots
+
+    def _materialize_preferred_fields(self, shots: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        out: List[Dict[str, Any]] = []
+        for shot in shots:
+            if not isinstance(shot, dict):
+                out.append(shot)
+                continue
+
+            new_shot = dict(shot)
+
+            # Only materialize what the current rule stack can speak reliably today.
+            if str(new_shot.get("scene", "") or "").strip():
+                new_shot["_preferred_scene"] = str(new_shot.get("scene") or "").strip()
+
+            if str(new_shot.get("subject", "") or "").strip():
+                new_shot["_preferred_subject"] = str(new_shot.get("subject") or "").strip()
+
+            if str(new_shot.get("action", "") or "").strip():
+                new_shot["_preferred_action"] = str(new_shot.get("action") or "").strip()
+
+            if str(new_shot.get("coverage", "") or "").strip():
+                new_shot["_preferred_coverage"] = str(new_shot.get("coverage") or "").strip()
+
+            if str(new_shot.get("move", "") or "").strip():
+                new_shot["_preferred_move"] = str(new_shot.get("move") or "").strip()
+
+            out.append(new_shot)
+
+        return out
 
     def _apply_rule(
         self,
