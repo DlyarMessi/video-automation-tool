@@ -2,15 +2,16 @@ from __future__ import annotations
 
 from typing import List, Dict, Any
 
-from .common import get_primary_tag, get_scene, get_content, get_coverage
+from .common import get_primary_tag, get_scene, get_subject, get_action, get_coverage
 
 
-def _signature(shot: Dict[str, Any]) -> str:
+def _signature(shot: Dict[str, Any], context: Dict[str, Any]) -> str:
     return "|".join(
         [
-            get_scene(shot),
-            get_content(shot),
-            get_coverage(shot),
+            get_scene(shot, context=context),
+            get_subject(shot, context=context),
+            get_action(shot, context=context),
+            get_coverage(shot, context=context),
             get_primary_tag(shot),
         ]
     )
@@ -31,7 +32,7 @@ def apply(shots: List[Dict[str, Any]], context: Dict[str, Any]) -> List[Dict[str
     i = 0
 
     while i < len(directed):
-        cur_sig = _signature(directed[i])
+        cur_sig = _signature(directed[i], context)
 
         if cur_sig and cur_sig == last_sig:
             streak += 1
@@ -47,14 +48,14 @@ def apply(shots: List[Dict[str, Any]], context: Dict[str, Any]) -> List[Dict[str
                 cand_beat = int(directed[j].get("_beat_no", 0) or 0)
                 if cur_beat and cand_beat and cand_beat != cur_beat:
                     continue
-                other_sig = _signature(directed[j])
+                other_sig = _signature(directed[j], context)
                 if other_sig and other_sig != cur_sig:
                     swap_idx = j
                     break
 
             if swap_idx is not None:
                 directed[i], directed[swap_idx] = directed[swap_idx], directed[i]
-                last_sig = _signature(directed[i])
+                last_sig = _signature(directed[i], context)
                 streak = 1
 
         i += 1

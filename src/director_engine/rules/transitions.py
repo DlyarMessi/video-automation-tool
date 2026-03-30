@@ -31,11 +31,11 @@ def apply(shots: List[Dict[str, Any]], context: Dict[str, Any]) -> List[Dict[str
         transition_type = default_transition
 
         # same family should almost always hard cut
-        if same_family(prev_shot, shot):
+        if same_family(prev_shot, shot, context=context):
             transition_type = "cut"
 
         # repeated detail chain should not fade
-        if get_coverage(prev_shot) == "detail" and get_coverage(shot) == "detail":
+        if get_coverage(prev_shot, context=context) == "detail" and get_coverage(shot, context=context) == "detail":
             transition_type = "cut"
 
         if disable_fade_when_same_tag and cur_tag and cur_tag == prev_tag:

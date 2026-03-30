@@ -28,13 +28,13 @@ def _quality_bonus(shot: Dict[str, Any], context: Dict[str, Any]) -> int:
 def _pair_score(prev_shot: Dict[str, Any], cur_shot: Dict[str, Any], context: Dict[str, Any]) -> int:
     score = 0
 
-    if same_scene(prev_shot, cur_shot):
+    if same_scene(prev_shot, cur_shot, context=context):
         score += 2
-    if same_content(prev_shot, cur_shot):
+    if same_content(prev_shot, cur_shot, context=context):
         score += 2
-    if same_family(prev_shot, cur_shot):
+    if same_family(prev_shot, cur_shot, context=context):
         score += 2
-    if is_progressive_coverage(prev_shot, cur_shot):
+    if is_progressive_coverage(prev_shot, cur_shot, context=context):
         score += 3
 
     prev_group = get_continuity_group(prev_shot, context)
@@ -42,13 +42,13 @@ def _pair_score(prev_shot: Dict[str, Any], cur_shot: Dict[str, Any], context: Di
     if prev_group and cur_group and prev_group == cur_group:
         score += 4
 
-    prev_cov = get_coverage(prev_shot)
-    cur_cov = get_coverage(cur_shot)
+    prev_cov = get_coverage(prev_shot, context=context)
+    cur_cov = get_coverage(cur_shot, context=context)
     if prev_cov == "detail" and cur_cov == "detail":
         score -= 4
 
-    prev_move = get_move(prev_shot)
-    cur_move = get_move(cur_shot)
+    prev_move = get_move(prev_shot, context=context)
+    cur_move = get_move(cur_shot, context=context)
     if prev_move and cur_move and prev_move != cur_move:
         score -= 1
 
