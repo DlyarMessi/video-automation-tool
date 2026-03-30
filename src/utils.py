@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from src.allocation_planner import AllocationPlanner
+
 from voiceover_a2 import build_voiceover_track, preflight_vo_timing
 from subtitle_builder import build_subtitles_from_vo_events
 
@@ -341,13 +343,7 @@ class MaterialPicker:
     def __init__(self, input_dir: Path):
         self.input_dir = input_dir
         self.pool: List[Path] = []
-        self._idx = 0
-        self.used_in_run: set[str] = set()
-        self.recently_used: set[str] = _recently_used_set()
         self.asset_index_path = _asset_index_for_input_dir(input_dir)
-        self.last_picked_path: str = ""
-        self.last_role: str = ""
-        self.last_continuity_group: str = ""
 
         video_exts = {".mp4", ".mov", ".mkv", ".m4v"}
         for p in input_dir.rglob("*"):
@@ -387,189 +383,26 @@ class MaterialPicker:
                 out.append(p)
         return out
 
-    def _quality_rank(self, p: Path) -> int:
-        rec = find_asset_record(self.asset_index_path, p.name)
-        status = str(rec.get("quality_status", "") or "").strip().lower()
-        if status == "approved":
-            return 0
-        if status == "review":
-            return 1
-        if status == "reject":
-            return 9
-        return 2
-
-    def _asset_meta(self, p: Path) -> Dict[str, Any]:
-        rec = find_asset_record(self.asset_index_path, p.name)
-        if not isinstance(rec, dict):
-            rec = {}
-        return {
-            "quality_status": str(rec.get("quality_status", "") or "").strip().lower(),
-            "hero_safe": bool(rec.get("hero_safe", False)),
-            "intro_safe": bool(rec.get("intro_safe", False)),
-            "outro_safe": bool(rec.get("outro_safe", False)),
-            "continuity_group": str(rec.get("continuity_group", "") or "").strip(),
-        }
-
-    def _selector_role(self, context: Optional[Dict[str, Any]]) -> str:
-        if not isinstance(context, dict):
-            return ""
-        tag = str(context.get("tag", "") or "").strip().lower()
-        if tag.startswith("context_") or "establish" in tag:
-            return "establish_context"
-        if tag.startswith("capability_") or "capability" in tag:
-            return "show_capability"
-        if tag.startswith("trust_") or "trust" in tag:
-            return "build_trust"
-        if tag.startswith("brand_") or "brand" in tag or "close" in tag:
-            return "brand_close"
-        return ""
-
-    def _transition_rank(self, p: Path, context: Optional[Dict[str, Any]] = None) -> int:
-        score = 0
-        meta = self._asset_meta(p)
-        role = self._selector_role(context)
-
-        # never prefer the exact same file twice in a row if alternatives exist
-        if self.last_picked_path and str(p) == self.last_picked_path:
-            score += 9
-
-        # penalize file already used for a different role (e.g. intro clip as outro)
-        if role and hasattr(self, "_role_files"):
-            for other_role, files in self._role_files.items():
-                if other_role != role and str(p) in files:
-                    score += 6
-
-        # role-aware soft preferences
-        if role == "establish_context":
-            if not meta["intro_safe"]:
-                score += 2
-            if not meta["hero_safe"]:
-                score += 1
-
-        elif role == "brand_close":
-            if not meta["outro_safe"]:
-                score += 3
-            if not meta["hero_safe"]:
-                score += 2
-            # penalize reusing the intro clip as the closer
-            if meta["intro_safe"] and meta["outro_safe"] and self.last_role == "establish_context":
-                score += 4
-
-        elif role == "build_trust":
-            if meta["quality_status"] and meta["quality_status"] != "approved":
-                score += 1
-
-        # continuity is a preference, not a law
-        continuity_group = meta["continuity_group"]
-        if (
-            role
-            and self.last_role
-            and role == self.last_role
-            and continuity_group
-            and self.last_continuity_group
-            and continuity_group == self.last_continuity_group
-        ):
-            score -= 1
-
-        return score
-
-    def _cooldown_rank(self, p: Path) -> int:
-        return 1 if str(p) in self.recently_used else 0
-
-    def _run_used_rank(self, p: Path) -> int:
-        return 1 if str(p) in self.used_in_run else 0
-
-    def _rank_candidates(self, candidates: List[Path], context: Optional[Dict[str, Any]] = None) -> List[Path]:
-        ranked = sorted(
-            candidates,
-            key=lambda p: (
-                self._run_used_rank(p),
-                self._cooldown_rank(p),
-                self._transition_rank(p, context),
-                self._quality_rank(p),
-                str(p),
-            ),
-        )
-        return ranked
-
-    def _prefer_fresh_candidates(self, candidates: List[Path]) -> List[Path]:
-        if not candidates:
-            return candidates
-
-        unused_in_run = [p for p in candidates if str(p) not in self.used_in_run]
-        if unused_in_run:
-            candidates = unused_in_run
-
-        not_recent = [p for p in candidates if str(p) not in self.recently_used]
-        if not_recent:
-            candidates = not_recent
-
-        return candidates
-
-    def _choose_candidate(
-        self,
-        candidates: List[Path],
-        rotate: bool = False,
-        context: Optional[Dict[str, Any]] = None,
-    ) -> Optional[Path]:
-        if not candidates:
-            return None
-
-        preferred = self._prefer_fresh_candidates(candidates)
-        ranked = self._rank_candidates(preferred, context=context) if preferred else []
-        if not ranked:
-            ranked = self._rank_candidates(candidates, context=context)
-
-        if not ranked:
-            return None
-
-        if rotate and len(ranked) > 1:
-            chosen = ranked[self._idx % len(ranked)]
-            self._idx += 1
-        else:
-            chosen = ranked[0]
-
-        self.used_in_run.add(str(chosen))
-
-        meta = self._asset_meta(chosen)
-        self.last_picked_path = str(chosen)
-        self.last_role = self._selector_role(context)
-        self.last_continuity_group = str(meta.get("continuity_group", "") or "").strip()
-
-        # track which role each file served (prevent open=close reuse)
-        role = self.last_role
-        if role:
-            if not hasattr(self, "_role_files"):
-                self._role_files = {}
-            self._role_files.setdefault(role, set()).add(str(chosen))
-
-        return chosen
-
-    def pick(self, spec: str, context: Optional[Dict[str, Any]] = None) -> Optional[Path]:
+    def get_candidates(self, spec: str, context: Optional[Dict[str, Any]] = None) -> List[Path]:
         if not self.pool:
-            return None
+            return []
 
         s = (spec or "").strip()
         if not s:
-            return self._choose_candidate(self.pool, rotate=True, context=context)
+            return list(self.pool)
 
         p = Path(s)
         if p.is_absolute() and p.exists():
-            self.used_in_run.add(str(p))
-            return p
+            return [p]
 
         p2 = self.input_dir / s
         if p2.exists():
-            self.used_in_run.add(str(p2))
-            return p2
+            return [p2]
 
-        mode = None
         inner = s
         if s.startswith("random"):
-            mode = "random"
             inner = s[len("random"):].lstrip(":")
         elif s.startswith("next"):
-            mode = "next"
             inner = s[len("next"):].lstrip(":")
 
         candidates = self.pool
@@ -592,12 +425,12 @@ class MaterialPicker:
                     candidates = self._match_all_keywords(hard_tags)
 
             if not candidates:
-                return None
+                return []
 
         elif inner.startswith("regex:"):
             candidates = self._match_regex(inner[len("regex:"):])
             if not candidates:
-                return None
+                return []
 
         elif inner:
             tokens = [t for t in re.split(r"\s+|,|，|;|；|\|", inner) if t]
@@ -606,16 +439,9 @@ class MaterialPicker:
                 candidates = self.pool
 
         if not candidates:
-            return None
+            return []
 
-        if mode == "random":
-            return self._choose_candidate(candidates, rotate=True, context=context)
-
-        if mode == "next":
-            return self._choose_candidate(candidates, rotate=True, context=context)
-
-        return self._choose_candidate(candidates, rotate=False, context=context)
-
+        return list(candidates)
 
 # =========================
 # Canvas fit (MoviePy 2.x)
@@ -1021,19 +847,8 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
     opened = []
 
     # =========================
-    # ✅ Phase 0.5: Pick files + Director Engine (post-pick)
+    # ✅ Phase 0.5: DirectorEngine first, AllocationPlanner second
     # =========================
-    for _s in dsl_shots:
-        if not isinstance(_s, dict):
-            continue
-        _spec = str(_s.get("source") or _s.get("material") or "")
-        _picked = picker.pick(_spec, context=_s)
-        if _picked:
-            _s["_selected_file"] = str(_picked)
-            _s["source_file"] = str(_picked)
-        else:
-            logger.warning("Phase 0.5: no footage found for %r", _spec)
-
     if DirectorEngine is not None:
         _dir_profile = project.get("director_profile")
         if isinstance(_dir_profile, str) and _dir_profile.strip():
@@ -1051,9 +866,28 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
                 dsl_shots = _dir_engine.apply(dsl_shots, extra_context={
                     "asset_index_path": str(_engine_idx),
                 })
-                logger.info("[%s] DirectorEngine applied post-pick (profile=%s)", company_name, _dir_profile)
+                logger.info("[%s] DirectorEngine applied pre-allocation (profile=%s)", company_name, _dir_profile)
             except Exception as _de:
-                logger.warning("[%s] DirectorEngine post-pick failed: %s", company_name, _de)
+                logger.warning("[%s] DirectorEngine pre-allocation failed: %s", company_name, _de)
+
+    planner = AllocationPlanner(picker)
+    for _i, _s in enumerate(dsl_shots, 1):
+        if not isinstance(_s, dict):
+            continue
+        _intent = planner.build_intent(_s, shot_index=_i)
+        _decision = planner.select_primary(_intent, shot=_s)
+        if _decision.selected_path:
+            _s["_selected_file"] = _decision.selected_path
+            _s["source_file"] = _decision.selected_path
+            _s["_selected_asset_id"] = _decision.asset_id
+            _s["_selected_primary_bucket_signature"] = _decision.primary_bucket_signature
+            _s["_selected_style_signature"] = _decision.style_signature
+            _s["_selected_ingest_status_label"] = _decision.ingest_status_label
+            _s["_selection_reason"] = _decision.reason
+            _s["_selection_fallback_level"] = _decision.fallback_level
+            _s["_selection_candidate_count"] = _decision.candidate_count
+        else:
+            logger.warning("Phase 0.5 allocation failed: %s", _decision.reason)
 
     # =========================
     # ✅ Phase 0: VO（只做一次）
@@ -1096,8 +930,10 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
             if _pre_picked and Path(_pre_picked).exists():
                 src_path = Path(_pre_picked)
             else:
-                source_spec = str(s.get("source") or s.get("material") or "")
-                src_path = picker.pick(source_spec, context=s)
+                _intent = planner.build_intent(s, shot_index=i)
+                _decision = planner.select_primary(_intent, shot=s)
+                src_path = Path(_decision.selected_path) if _decision.selected_path else None
+
             if not src_path or not src_path.exists():
                 logger.error("找不到素材：%r", s.get("source", ""))
                 return
