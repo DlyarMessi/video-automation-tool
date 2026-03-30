@@ -207,6 +207,7 @@ def validate_variant_value(value: str) -> Dict[str, Any]:
     }
 
 
+
 def parse_canonical_stem(filename: str) -> Dict[str, Any]:
     name_info = split_filename_stem(filename)
     stem = name_info["stem"]

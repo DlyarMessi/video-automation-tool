@@ -59,7 +59,7 @@ from src.ui_local_prefs import (
 
 from src.render_profile import get_default_fps, get_filter_preset
 from src.language_checks import build_language_check
-from src.material_index import load_asset_index, upsert_asset_record, update_asset_record_fields, parse_filename_core
+from src.material_index import load_asset_index, upsert_asset_record, update_asset_record_fields, parse_canonical_stem
 from src.workflow import (
     now_tag,
     safe_slug,
@@ -1123,7 +1123,18 @@ def count_pool_matches(factory_files: list[Path], scene: str, content: str, cove
         if p.name.startswith("._"):
             continue
 
-        core = parse_filename_core(p.name)
+        _parsed = parse_canonical_stem(p.name)
+        core = {
+            "scene": str(_parsed.get("scene", "") or "").strip(),
+            "content": "-".join(
+                [x for x in [
+                    str(_parsed.get("subject", "") or "").strip(),
+                    str(_parsed.get("action", "") or "").strip(),
+                ] if x]
+            ),
+            "coverage": str(_parsed.get("coverage", "") or "").strip(),
+            "move": str(_parsed.get("move", "") or "").strip(),
+        }
         core_scene = safe_slug(str(core.get("scene", "") or "")).lower()
         core_content = safe_slug(str(core.get("content", "") or "")).lower()
         core_coverage = safe_slug(str(core.get("coverage", "") or "")).lower()
