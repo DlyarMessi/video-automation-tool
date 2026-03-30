@@ -1110,11 +1110,13 @@ def attach_pool_row_semantics(slot_rows: list[dict], hydrated_slots: list[dict])
 
 
 def count_pool_matches(factory_files: list[Path], scene: str, content: str, coverage: str, move: str) -> int:
+    from src.workflow import _legacy_subject_action_from_content, _canonical_coverage_from_legacy
+
     scene = safe_slug(scene).lower()
-    content = safe_slug(content).lower()
-    coverage = safe_slug(coverage).lower()
-    # move is a soft preference, not a hard filter
-    # scene + content + coverage is the real identity
+    target_subject, target_action = _legacy_subject_action_from_content(content, purpose="")
+    target_subject = safe_slug(target_subject).lower()
+    target_action = safe_slug(target_action).lower()
+    target_coverage = safe_slug(_canonical_coverage_from_legacy(coverage)).lower()
 
     count = 0
     for p in factory_files:
@@ -1124,26 +1126,18 @@ def count_pool_matches(factory_files: list[Path], scene: str, content: str, cove
             continue
 
         _parsed = parse_canonical_stem(p.name)
-        core = {
-            "scene": str(_parsed.get("scene", "") or "").strip(),
-            "content": "-".join(
-                [x for x in [
-                    str(_parsed.get("subject", "") or "").strip(),
-                    str(_parsed.get("action", "") or "").strip(),
-                ] if x]
-            ),
-            "coverage": str(_parsed.get("coverage", "") or "").strip(),
-            "move": str(_parsed.get("move", "") or "").strip(),
-        }
-        core_scene = safe_slug(str(core.get("scene", "") or "")).lower()
-        core_content = safe_slug(str(core.get("content", "") or "")).lower()
-        core_coverage = safe_slug(str(core.get("coverage", "") or "")).lower()
+        core_scene = safe_slug(str(_parsed.get("scene", "") or "")).lower()
+        core_subject = safe_slug(str(_parsed.get("subject", "") or "")).lower()
+        core_action = safe_slug(str(_parsed.get("action", "") or "")).lower()
+        core_coverage = safe_slug(str(_parsed.get("coverage", "") or "")).lower()
 
         if core_scene != scene:
             continue
-        if core_content != content:
+        if core_subject != target_subject:
             continue
-        if core_coverage != coverage:
+        if core_action != target_action:
+            continue
+        if core_coverage != target_coverage:
             continue
 
         count += 1

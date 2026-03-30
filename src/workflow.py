@@ -763,18 +763,16 @@ def normalize_demo_coverage_token(token: str) -> str:
     return normalized
 
 
-def parse_factory_filename_key(path: Path) -> tuple[str, str] | None:
+def parse_factory_filename_key(path: Path) -> tuple[str, str, str] | None:
     try:
         from src.material_index import parse_canonical_stem
         parsed = parse_canonical_stem(path.name)
         if parsed.get("is_valid"):
-            subject = str(parsed.get("subject", "") or "").strip()
-            action = str(parsed.get("action", "") or "").strip()
-            coverage = str(parsed.get("coverage", "") or "").strip()
-            content_key = normalize_demo_content_token(_legacy_content_from_subject_action(subject, action))
-            coverage_key = normalize_demo_coverage_token(coverage)
-            if content_key and coverage_key:
-                return content_key, coverage_key
+            subject = safe_slug(str(parsed.get("subject", "") or "")).lower()
+            action = safe_slug(str(parsed.get("action", "") or "")).lower()
+            coverage = safe_slug(str(parsed.get("coverage", "") or "")).lower()
+            if subject and action and coverage:
+                return subject, action, coverage
     except Exception:
         pass
 
@@ -791,15 +789,11 @@ def parse_factory_filename_key(path: Path) -> tuple[str, str] | None:
         content = parts[1]
         coverage = parts[2]
 
-    content_key = normalize_demo_content_token(content)
-    coverage_key = normalize_demo_coverage_token(coverage)
-    if not content_key or not coverage_key:
-        return None
-    return content_key, coverage_key
+    return _canonical_need_key_from_legacy(content, coverage)
 
 
-def count_factory_clips_by_key(factory_files: list[Path]) -> dict[tuple[str, str], int]:
-    counts: dict[tuple[str, str], int] = {}
+def count_factory_clips_by_key(factory_files: list[Path]) -> dict[tuple[str, str, str], int]:
+    counts: dict[tuple[str, str, str], int] = {}
     for path in factory_files:
         key = parse_factory_filename_key(path)
         if key is None:
@@ -830,11 +824,13 @@ def allocate_coverage_across_beats(
 
 def summarize_factory_coverage(rows: list[dict], factory_dir: Path) -> dict[str, int]:
     factory_files = list_video_files(factory_dir, VIDEO_SUFFIXES)
-    need_by: dict[tuple[str, str], int] = {}
+    need_by: dict[tuple[str, str, str], int] = {}
     for r in rows:
-        cat = normalize_demo_content_token(str(r.get("Category", "") or ""))
-        shot = normalize_demo_coverage_token(str(r.get("Shot", "") or ""))
-        need_by[(cat, shot)] = need_by.get((cat, shot), 0) + 1
+        key = _canonical_need_key_from_legacy(
+            content=str(r.get("Category", "") or ""),
+            coverage=str(r.get("Shot", "") or ""),
+        )
+        need_by[key] = need_by.get(key, 0) + 1
 
     match_counts = count_factory_clips_by_key(factory_files)
 
@@ -998,6 +994,15 @@ def _canonical_coverage_from_legacy(token: str) -> str:
     if c in {"detail", "close", "closeup"}:
         return "detail"
     return c or "medium"
+
+
+def _canonical_need_key_from_legacy(content: str, coverage: str, purpose: str = "") -> tuple[str, str, str]:
+    subject, action = _legacy_subject_action_from_content(content, purpose)
+    return (
+        safe_slug(subject).lower(),
+        safe_slug(action).lower(),
+        safe_slug(_canonical_coverage_from_legacy(coverage)).lower(),
+    )
 
 
 def _shot(
