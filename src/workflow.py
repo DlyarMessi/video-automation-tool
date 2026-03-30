@@ -1023,10 +1023,16 @@ def _shot(
     tag: str,
     vo: Optional[str] = None,
 ) -> Dict[str, Any]:
-    _ = move  # current stable path omits move tokens from generated source tags.
-    tags = [scene, content, coverage]
+    subject, action = _legacy_subject_action_from_content(content, purpose=tag)
+    coverage_canonical = _canonical_coverage_from_legacy(coverage)
+    move_tok = safe_slug(str(move or "")).lower() if str(move or "").strip() else ""
+
+    tags = [scene, subject, action, coverage_canonical]
+    if move_tok and move_tok != "static":
+        tags.append(move_tok)
+
     out: Dict[str, Any] = {
-        "source": "next:tags:" + ",".join(tags),
+        "source": "next:tags:" + ",".join([str(x).strip() for x in tags if str(x).strip()]),
         "duration": float(duration),
         "subtitle": subtitle if subtitle else None,
         "tag": tag,
@@ -1071,9 +1077,10 @@ def _compile_fallback_shot(beat: Dict[str, Any], default_scene: str) -> Dict[str
     visual = str(beat.get("visual") or "").strip()
     purpose = _normalize_purpose(str(beat.get("purpose") or "").strip())
     content = _infer_demo_content_token(purpose, visual)
+    subject, action = _legacy_subject_action_from_content(content, purpose)
     dur3 = beat.get("duration_hint")
     return {
-        "source": f"next:tags:{default_scene},{content},hero",
+        "source": f"next:tags:{default_scene},{subject},{action},wide",
         "notes": visual if visual else None,
         "duration": float(dur3) if isinstance(dur3, (int, float)) else 3.0,
         "subtitle": subtitle or None,
