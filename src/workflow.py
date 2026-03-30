@@ -826,10 +826,18 @@ def summarize_factory_coverage(rows: list[dict], factory_dir: Path) -> dict[str,
     factory_files = list_video_files(factory_dir, VIDEO_SUFFIXES)
     need_by: dict[tuple[str, str, str], int] = {}
     for r in rows:
-        key = _canonical_need_key_from_legacy(
-            content=str(r.get("Category", "") or ""),
-            coverage=str(r.get("Shot", "") or ""),
-        )
+        subject = safe_slug(str(r.get("Subject", "") or "")).lower()
+        action = safe_slug(str(r.get("Action", "") or "")).lower()
+        coverage = safe_slug(str(r.get("CoverageCanonical", "") or "")).lower()
+
+        if subject and action and coverage:
+            key = (subject, action, coverage)
+        else:
+            key = _canonical_need_key_from_legacy(
+                content=str(r.get("Category", "") or ""),
+                coverage=str(r.get("Shot", "") or ""),
+            )
+
         need_by[key] = need_by.get(key, 0) + 1
 
     match_counts = count_factory_clips_by_key(factory_files)

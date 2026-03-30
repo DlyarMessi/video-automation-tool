@@ -2185,16 +2185,38 @@ if generate_btn:
                 _dur = _beat_durations.get(_beat_no)
                 _repeat = max(1, int(_slot.get("target", 1) or 1))
                 for _ in range(_repeat):
+                    _content = str(_slot.get("content", "") or "").strip()
+                    _subject = str(_slot.get("subject", "") or "").strip()
+                    _action = str(_slot.get("action", "") or "").strip()
+                    _coverage = str(_slot.get("coverage", "") or "").strip()
+                    _move = str(_slot.get("move", "static") or "static").strip()
+
+                    _coverage_slug = safe_slug(_coverage).lower()
+                    if _coverage_slug in {"hero", "wide"}:
+                        _coverage_canonical = "wide"
+                    elif _coverage_slug == "medium":
+                        _coverage_canonical = "medium"
+                    elif _coverage_slug in {"detail", "close", "closeup"}:
+                        _coverage_canonical = "detail"
+                    else:
+                        _coverage_canonical = _coverage_slug or "medium"
+
+                    _move_canonical = safe_slug(_move).lower() or "static"
+
                     rows.append({
                         "Row": f"S{row_i:03d}",
                         "Beat": _beat_no,
-                        "Category": str(_slot.get("content", "") or "").strip(),
+                        "Category": _content,
                         "Scene": str(_slot.get("scene", "") or "").strip(),
-                        "Shot": str(_slot.get("coverage", "") or "").strip(),
+                        "Shot": _coverage,
                         "Seconds": str(_dur) if _dur else "3",
-                        "Movement": str(_slot.get("move", "static") or "static").strip(),
+                        "Movement": _move,
                         "Notes": str(_slot.get("shoot_brief", "") or "").strip(),
                         "BeatPurpose": str(_slot.get("beat_purpose", "") or "").strip(),
+                        "Subject": _subject,
+                        "Action": _action,
+                        "CoverageCanonical": _coverage_canonical,
+                        "MoveCanonical": _move_canonical,
                     })
                     row_i += 1
             st.session_state["shooting_rows"] = rows
