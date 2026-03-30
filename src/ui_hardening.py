@@ -124,20 +124,31 @@ def hydrate_slot_from_registry(slot: dict[str, Any], registry_map: dict[str, dic
 
 
 def attach_pool_row_semantics(slot_rows: list[dict[str, Any]], hydrated_slots: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    from src.workflow import _legacy_subject_action_from_content
+
+    def _canonical_tuple(item: dict[str, Any]) -> tuple[str, str, str, str, str]:
+        scene = _clean_text(item.get("scene", ""))
+        subject = _clean_text(item.get("subject", ""))
+        action = _clean_text(item.get("action", ""))
+        if not subject and not action:
+            content = _clean_text(item.get("content", ""))
+            if content:
+                derived_subject, derived_action = _legacy_subject_action_from_content(content, "")
+                subject = _clean_text(derived_subject)
+                action = _clean_text(derived_action)
+        coverage = _clean_text(item.get("coverage", ""))
+        move = _clean_text(item.get("move", ""))
+        return (scene, subject, action, coverage, move)
+
     by_registry: dict[str, dict[str, Any]] = {}
-    by_tuple: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    by_tuple: dict[tuple[str, str, str, str, str], dict[str, Any]] = {}
 
     for slot in hydrated_slots:
         if not isinstance(slot, dict):
             continue
 
         registry_key = _clean_text(slot.get("registry_key", ""))
-        key_tuple = (
-            _clean_text(slot.get("scene", "")),
-            _clean_text(slot.get("content", "")),
-            _clean_text(slot.get("coverage", "")),
-            _clean_text(slot.get("move", "")),
-        )
+        key_tuple = _canonical_tuple(slot)
 
         if registry_key:
             by_registry[registry_key] = slot
@@ -151,12 +162,7 @@ def attach_pool_row_semantics(slot_rows: list[dict[str, Any]], hydrated_slots: l
 
         merged = dict(row)
         row_registry_key = _clean_text(row.get("registry_key", ""))
-        key_tuple = (
-            _clean_text(row.get("scene", "")),
-            _clean_text(row.get("content", "")),
-            _clean_text(row.get("coverage", "")),
-            _clean_text(row.get("move", "")),
-        )
+        key_tuple = _canonical_tuple(row)
 
         source = None
         if row_registry_key and row_registry_key in by_registry:
@@ -190,14 +196,23 @@ def attach_pool_row_semantics(slot_rows: list[dict[str, Any]], hydrated_slots: l
 
 
 def build_pool_card_view(row: dict[str, Any]) -> dict[str, Any]:
+    from src.workflow import _legacy_subject_action_from_content
+
     out = dict(row) if isinstance(row, dict) else {}
 
     scene = _clean_text(out.get("scene", ""))
     content = _clean_text(out.get("content", ""))
+    subject = _clean_text(out.get("subject", ""))
+    action = _clean_text(out.get("action", ""))
     coverage = _clean_text(out.get("coverage", ""))
     move = _clean_text(out.get("move", ""))
 
-    canonical_tuple_text = " / ".join([x for x in [scene, content, coverage, move] if x])
+    if not subject and not action and content:
+        derived_subject, derived_action = _legacy_subject_action_from_content(content, "")
+        subject = _clean_text(derived_subject)
+        action = _clean_text(derived_action)
+
+    canonical_tuple_text = " / ".join([x for x in [scene, subject, action, coverage, move] if x])
     slot_label = _clean_text(out.get("slot_label", ""))
     human_label = _clean_text(out.get("human_label", ""))
 
@@ -206,6 +221,9 @@ def build_pool_card_view(row: dict[str, Any]) -> dict[str, Any]:
     out["display_label"] = display_label
     out["slot_label_text"] = slot_label
     out["canonical_tuple_text"] = canonical_tuple_text
+    out["legacy_content_text"] = content
+    out["subject_text"] = subject
+    out["action_text"] = action
     out["registry_key_text"] = _clean_text(out.get("registry_key", ""))
     out["shoot_brief_text"] = _clean_text(out.get("shoot_brief", ""))
     out["purpose_text"] = _clean_text(out.get("purpose", ""))
