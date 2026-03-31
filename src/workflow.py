@@ -14,7 +14,7 @@ from src.tts_local_settings import load_tts_routing_settings, resolve_tts_provid
 
 VIDEO_SUFFIXES = [".mp4", ".mov", ".mkv", ".m4v"]
 
-MOVE_TOKEN_OPTIONS = ["static", "pan", "slide", "pushin", "follow", "orbit", "reveal"]
+MOVE_TOKEN_OPTIONS = ["static", "pan", "slide", "pushin", "follow", "orbit", "tilt", "reveal"]
 MOVE_TOKEN_VOCAB = set(
     MOVE_TOKEN_OPTIONS
     + [

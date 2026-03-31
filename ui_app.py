@@ -153,6 +153,7 @@ def movement_guidance(move: str) -> str:
         "pushin": "slow push-in",
         "follow": "smooth follow",
         "orbit": "slow orbit",
+        "tilt": "slow tilt",
         "reveal": "controlled reveal",
     }
     return mapping.get(move, "controlled move")
@@ -586,6 +587,14 @@ def render_pool_active_slot_card(
 
     semantic_hint = " · ".join([x for x in [scene_name, subject_text, action_text, coverage_name, move_name] if x])
 
+    slot_ui_key = safe_slug(
+        str(
+            row.get("registry_key")
+            or row.get("_need_key")
+            or "|".join([scene_name, subject_text, action_text, coverage_name, move_name, display_label])
+        )
+    )
+
     inbox_files = list_video_files(inbox_dir, VIDEO_SUFFIXES) if inbox_dir and inbox_dir.exists() else []
 
     with st.container(border=True):
@@ -626,7 +635,7 @@ def render_pool_active_slot_card(
                 unsafe_allow_html=True,
             )
 
-        _move_options = ["static", "slide", "pushin", "follow", "orbit", "reveal", "pan"]
+        _move_options = ["static", "slide", "pushin", "follow", "orbit", "tilt", "reveal", "pan"]
         _move_default_idx = _move_options.index(move_name) if move_name in _move_options else 0
 
         st.markdown("**Add clip**")
@@ -634,7 +643,7 @@ def render_pool_active_slot_card(
             "Upload clips for this slot",
             type=VIDEO_EXTS,
             accept_multiple_files=True,
-            key=f"pool_fill_v3_upload_{pool_topic}_{i}",
+            key=f"pool_fill_v3_upload_{slot_ui_key}",
             label_visibility="collapsed",
         )
 
@@ -644,7 +653,7 @@ def render_pool_active_slot_card(
                 f"Use existing clip ({len(inbox_files)})",
                 options=inbox_files,
                 format_func=lambda p: f"{p.name}  [{classify_orientation(p)}]",
-                key=f"pool_fill_v3_inbox_{pool_topic}_{i}",
+                key=f"pool_fill_v3_inbox_{slot_ui_key}",
             )
 
         with st.expander("Advanced", expanded=False):
@@ -653,7 +662,7 @@ def render_pool_active_slot_card(
                 "Override move",
                 _move_options,
                 index=_move_default_idx,
-                key=f"pool_fill_v3_move_{pool_topic}_{i}",
+                key=f"pool_fill_v3_move_{slot_ui_key}",
                 help="Default: " + str(row.get("move", "static")) + " — change only if your actual clip clearly differs",
             )
 
@@ -664,35 +673,35 @@ def render_pool_active_slot_card(
                     "energy",
                     ["low", "medium", "high"],
                     index=["low", "medium", "high"].index(default_energy) if default_energy in ["low", "medium", "high"] else 1,
-                    key=f"pool_fill_v3_energy_{pool_topic}_{i}",
+                    key=f"pool_fill_v3_energy_{slot_ui_key}",
                 )
                 quality_default = st.selectbox(
                     "quality_status",
                     ["approved", "review", "reject"],
                     index=["approved", "review", "reject"].index(default_quality) if default_quality in ["approved", "review", "reject"] else 0,
-                    key=f"pool_fill_v3_quality_{pool_topic}_{i}",
+                    key=f"pool_fill_v3_quality_{slot_ui_key}",
                 )
             with meta2:
                 continuity_group_default = st.text_input(
                     "continuity_group",
                     value=default_group,
-                    key=f"pool_fill_v3_group_{pool_topic}_{i}",
+                    key=f"pool_fill_v3_group_{slot_ui_key}",
                 )
                 notes_default = st.text_input(
                     "notes",
                     value="",
-                    key=f"pool_fill_v3_notes_{pool_topic}_{i}",
+                    key=f"pool_fill_v3_notes_{slot_ui_key}",
                 )
 
             t1, t2, t3 = st.columns(3)
             with t1:
-                intro_safe_default = st.checkbox("intro_safe", value=default_intro, key=f"pool_fill_v3_intro_{pool_topic}_{i}")
+                intro_safe_default = st.checkbox("intro_safe", value=default_intro, key=f"pool_fill_v3_intro_{slot_ui_key}")
             with t2:
-                hero_safe_default = st.checkbox("hero_safe", value=default_hero, key=f"pool_fill_v3_hero_{pool_topic}_{i}")
+                hero_safe_default = st.checkbox("hero_safe", value=default_hero, key=f"pool_fill_v3_hero_{slot_ui_key}")
             with t3:
-                outro_safe_default = st.checkbox("outro_safe", value=default_outro, key=f"pool_fill_v3_outro_{pool_topic}_{i}")
+                outro_safe_default = st.checkbox("outro_safe", value=default_outro, key=f"pool_fill_v3_outro_{slot_ui_key}")
 
-        if st.button("Add to slot", key=f"pool_fill_v3_save_{pool_topic}_{i}", use_container_width=True):
+        if st.button("Add to slot", key=f"pool_fill_v3_save_{slot_ui_key}", use_container_width=True):
             if not uploads and not pick_inbox:
                 st.warning("Add at least one upload or pick one existing clip.")
             else:
@@ -801,7 +810,21 @@ def render_pool_completed_slot_card(
 
     subject_text = str(row.get("subject", "") or row.get("Subject", "") or "").strip()
     action_text = str(row.get("action", "") or row.get("Action", "") or "").strip()
+    if not subject_text or not action_text:
+        from src.workflow import _legacy_subject_action_from_content
+        derived_subject, derived_action = _legacy_subject_action_from_content(content_name, "")
+        subject_text = subject_text or str(derived_subject).strip()
+        action_text = action_text or str(derived_action).strip()
+
     semantic_hint = " · ".join([x for x in [scene_name, subject_text, action_text, coverage_name, move_name] if x])
+
+    slot_ui_key = safe_slug(
+        str(
+            row.get("registry_key")
+            or row.get("_need_key")
+            or "|".join([scene_name, subject_text, action_text, coverage_name, move_name, display_label])
+        )
+    )
 
     inbox_files = list_video_files(inbox_dir, VIDEO_SUFFIXES) if inbox_dir and inbox_dir.exists() else []
 
@@ -830,14 +853,14 @@ def render_pool_completed_slot_card(
 
         st.caption("This slot is already covered. Add only if you want a better replacement or an alternate.")
 
-        _move_options_d = ["static", "slide", "pushin", "follow", "orbit", "reveal", "pan"]
+        _move_options_d = ["static", "slide", "pushin", "follow", "orbit", "tilt", "reveal", "pan"]
         _move_default_idx_d = _move_options_d.index(move_name) if move_name in _move_options_d else 0
 
         uploads = st.file_uploader(
             "Upload clips for this slot",
             type=VIDEO_EXTS,
             accept_multiple_files=True,
-            key=f"pool_fill_v3_done_upload_{pool_topic}_{i}",
+            key=f"pool_fill_v3_done_upload_{slot_ui_key}",
             label_visibility="collapsed",
         )
 
@@ -847,7 +870,7 @@ def render_pool_completed_slot_card(
                 f"Use existing clip ({len(inbox_files)})",
                 options=inbox_files,
                 format_func=lambda p: f"{p.name}  [{classify_orientation(p)}]",
-                key=f"pool_fill_v3_done_inbox_{pool_topic}_{i}",
+                key=f"pool_fill_v3_done_inbox_{slot_ui_key}",
             )
 
         with st.expander("Advanced", expanded=False):
@@ -855,7 +878,7 @@ def render_pool_completed_slot_card(
                 "Override move",
                 _move_options_d,
                 index=_move_default_idx_d,
-                key=f"pool_fill_v3_done_move_{pool_topic}_{i}",
+                key=f"pool_fill_v3_done_move_{slot_ui_key}",
                 help="Default: " + str(row.get("move", "static")) + " — change only if your actual clip clearly differs",
             )
             meta1, meta2 = st.columns([1, 1])
@@ -864,35 +887,35 @@ def render_pool_completed_slot_card(
                     "energy",
                     ["low", "medium", "high"],
                     index=["low", "medium", "high"].index(default_energy) if default_energy in ["low", "medium", "high"] else 1,
-                    key=f"pool_fill_v3_done_energy_{pool_topic}_{i}",
+                    key=f"pool_fill_v3_done_energy_{slot_ui_key}",
                 )
                 quality_default = st.selectbox(
                     "quality_status",
                     ["approved", "review", "reject"],
                     index=["approved", "review", "reject"].index(default_quality) if default_quality in ["approved", "review", "reject"] else 0,
-                    key=f"pool_fill_v3_done_quality_{pool_topic}_{i}",
+                    key=f"pool_fill_v3_done_quality_{slot_ui_key}",
                 )
             with meta2:
                 continuity_group_default = st.text_input(
                     "continuity_group",
                     value=default_group,
-                    key=f"pool_fill_v3_done_group_{pool_topic}_{i}",
+                    key=f"pool_fill_v3_done_group_{slot_ui_key}",
                 )
                 notes_default = st.text_input(
                     "notes",
                     value="",
-                    key=f"pool_fill_v3_done_notes_{pool_topic}_{i}",
+                    key=f"pool_fill_v3_done_notes_{slot_ui_key}",
                 )
 
             t1, t2, t3 = st.columns(3)
             with t1:
-                intro_safe_default = st.checkbox("intro_safe", value=default_intro, key=f"pool_fill_v3_done_intro_{pool_topic}_{i}")
+                intro_safe_default = st.checkbox("intro_safe", value=default_intro, key=f"pool_fill_v3_done_intro_{slot_ui_key}")
             with t2:
-                hero_safe_default = st.checkbox("hero_safe", value=default_hero, key=f"pool_fill_v3_done_hero_{pool_topic}_{i}")
+                hero_safe_default = st.checkbox("hero_safe", value=default_hero, key=f"pool_fill_v3_done_hero_{slot_ui_key}")
             with t3:
-                outro_safe_default = st.checkbox("outro_safe", value=default_outro, key=f"pool_fill_v3_done_outro_{pool_topic}_{i}")
+                outro_safe_default = st.checkbox("outro_safe", value=default_outro, key=f"pool_fill_v3_done_outro_{slot_ui_key}")
 
-        if st.button("Add alternate", key=f"pool_fill_v3_done_save_{pool_topic}_{i}", use_container_width=True):
+        if st.button("Add alternate", key=f"pool_fill_v3_done_save_{slot_ui_key}", use_container_width=True):
             if not uploads and not pick_inbox:
                 st.warning("Add at least one upload or pick one existing clip.")
             else:

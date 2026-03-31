@@ -11,6 +11,7 @@ from src.material_index import find_asset_record, parse_canonical_stem
 class ShotIntent:
     shot_index: int
     source_spec: str
+    request_family: str = ""
     scene: str = ""
     subject: str = ""
     action: str = ""
@@ -33,6 +34,7 @@ class SelectionDecision:
 @dataclass
 class AllocationContext:
     used_asset_ids: set[str] = field(default_factory=set)
+    recent_asset_ids: List[str] = field(default_factory=list)
     recent_bucket_signatures: List[str] = field(default_factory=list)
     recent_style_signatures: List[str] = field(default_factory=list)
 
@@ -51,6 +53,7 @@ class AllocationPlanner:
 
     def build_intent(self, shot: Dict[str, Any], shot_index: int) -> ShotIntent:
         source_spec = str(shot.get("source") or shot.get("material") or "")
+        request_family = str(shot.get("request_family") or "").strip()
 
         scene = str(
             shot.get("_preferred_scene")
@@ -73,6 +76,7 @@ class AllocationPlanner:
         coverage = str(
             shot.get("_preferred_coverage")
             or shot.get("preferred_coverage")
+            or shot.get("coverage_canonical")
             or shot.get("coverage")
             or ""
         )
@@ -93,9 +97,21 @@ class AllocationPlanner:
                 coverage = coverage or str(parsed.get("coverage") or "")
                 move = move or str(parsed.get("move") or "")
 
+        # Also recover structured intent from canonical next:tags:scene,subject,action,coverage[,move]
+        if source_spec.startswith("next:tags:"):
+            tag_tokens = [tok.strip() for tok in source_spec[len("next:tags:"):].split(",") if tok.strip()]
+            if len(tag_tokens) >= 4:
+                scene = scene or tag_tokens[0]
+                subject = subject or tag_tokens[1]
+                action = action or tag_tokens[2]
+                coverage = coverage or tag_tokens[3]
+                if len(tag_tokens) >= 5:
+                    move = move or tag_tokens[4]
+
         return ShotIntent(
             shot_index=shot_index,
             source_spec=source_spec,
+            request_family=request_family,
             scene=scene,
             subject=subject,
             action=action,
@@ -108,8 +124,24 @@ class AllocationPlanner:
 
     def _base_candidates(self, intent: ShotIntent, shot: Optional[Dict[str, Any]]) -> List[Path]:
         context = shot if isinstance(shot, dict) else {}
-        return self.picker.get_candidates(intent.source_spec, context=context)
 
+        # When structured intent exists, do NOT let raw source-spec move tags
+        # over-constrain the pool before planner fallback levels can run.
+        if intent.scene or intent.subject or intent.action:
+            tags: List[str] = []
+            if intent.scene:
+                tags.append(intent.scene)
+            if intent.subject:
+                tags.append(intent.subject)
+            if intent.action:
+                tags.append(intent.action)
+            if intent.coverage:
+                tags.append(intent.coverage)
+
+            broad_spec = "next:tags:" + ",".join(tags) if tags else intent.source_spec
+            return self.picker.get_candidates(broad_spec, context=context)
+
+        return self.picker.get_candidates(intent.source_spec, context=context)
     def _filter_allocatable_assets(self, candidates: List[Path]) -> List[Path]:
         out: List[Path] = []
         for candidate in candidates:
@@ -212,6 +244,28 @@ class AllocationPlanner:
         recent = self.context.recent_bucket_signatures[-2:]
         return 1 if bucket in recent else 0
 
+    def _role_penalty(self, candidate: Path, intent: ShotIntent) -> int:
+        rec = self._asset_record(candidate)
+        request_family = str(intent.request_family or "").strip().lower()
+
+        intro_safe = bool(rec.get("intro_safe", False))
+        outro_safe = bool(rec.get("outro_safe", False))
+        hero_safe = bool(rec.get("hero_safe", False))
+
+        penalty = 0
+
+        if request_family == "opening":
+            if not intro_safe:
+                penalty += 3
+
+        elif request_family == "close":
+            if not outro_safe:
+                penalty += 3
+            if not hero_safe:
+                penalty += 2
+
+        return penalty
+
     def _quality_rank(self, candidate: Path) -> int:
         rec = self._asset_record(candidate)
         status = str(rec.get("quality_status", "") or "").strip().lower()
@@ -223,10 +277,39 @@ class AllocationPlanner:
             return 9
         return 1
 
-    def _rank_candidates(self, candidates: List[Path]) -> List[Path]:
+    def _filter_short_distance_repeats(self, candidates: List[Path]) -> List[Path]:
+        """
+        Hard anti-repeat for very recent history.
+        Prefer candidates that do NOT reuse recent style/bucket signatures.
+        If this would eliminate everything, caller should fall back to original set.
+        """
+        recent_assets = set(self.context.recent_asset_ids[-3:])
+        recent_styles = set(self.context.recent_style_signatures[-2:])
+        recent_buckets = set(self.context.recent_bucket_signatures[-2:])
+
+        out: List[Path] = []
+        for candidate in candidates:
+            rec = self._asset_record(candidate)
+            asset_id = str(rec.get("asset_id", "") or "")
+            style = str(rec.get("style_signature", "") or "")
+            bucket = str(rec.get("primary_bucket_signature", "") or "")
+
+            if asset_id and asset_id in recent_assets:
+                continue
+            if style and style in recent_styles:
+                continue
+            if bucket and style and bucket in recent_buckets and style in recent_styles:
+                continue
+
+            out.append(candidate)
+
+        return out
+
+    def _rank_candidates(self, candidates: List[Path], intent: ShotIntent) -> List[Path]:
         return sorted(
             candidates,
             key=lambda p: (
+                self._role_penalty(p, intent),
                 self._style_penalty(p),
                 self._bucket_penalty(p),
                 self._quality_rank(p),
@@ -242,6 +325,8 @@ class AllocationPlanner:
 
         if asset_id:
             self.context.used_asset_ids.add(asset_id)
+            self.context.recent_asset_ids.append(asset_id)
+            self.context.recent_asset_ids = self.context.recent_asset_ids[-4:]
         if bucket:
             self.context.recent_bucket_signatures.append(bucket)
             self.context.recent_bucket_signatures = self.context.recent_bucket_signatures[-5:]
@@ -300,7 +385,8 @@ class AllocationPlanner:
 
         level0 = self._filter_used_assets(self._level0_candidates(primary_bucket, intent))
         if level0:
-            ranked = self._rank_candidates(level0)
+            level0_preferred = self._filter_short_distance_repeats(level0) or level0
+            ranked = self._rank_candidates(level0_preferred, intent)
             return self._build_decision(
                 candidate=ranked[0],
                 fallback_level="level0_exact",
@@ -310,7 +396,8 @@ class AllocationPlanner:
 
         level1 = self._filter_used_assets(self._level1_candidates(primary_bucket, intent))
         if level1:
-            ranked = self._rank_candidates(level1)
+            level1_preferred = self._filter_short_distance_repeats(level1) or level1
+            ranked = self._rank_candidates(level1_preferred, intent)
             return self._build_decision(
                 candidate=ranked[0],
                 fallback_level="level1_move_relaxed",
@@ -320,7 +407,8 @@ class AllocationPlanner:
 
         level2 = self._filter_used_assets(self._level2_candidates(primary_bucket, intent))
         if level2:
-            ranked = self._rank_candidates(level2)
+            level2_preferred = self._filter_short_distance_repeats(level2) or level2
+            ranked = self._rank_candidates(level2_preferred, intent)
             return self._build_decision(
                 candidate=ranked[0],
                 fallback_level="level2_coverage_neighbor",

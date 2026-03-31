@@ -46,7 +46,50 @@ class DirectorEngine:
             directed_shots = self._apply_rule(rule_name, directed_shots, context)
 
         directed_shots = self._materialize_preferred_fields(directed_shots)
+        directed_shots = self._enforce_medium_before_detail(directed_shots)
         return directed_shots
+
+    def _enforce_medium_before_detail(self, shots: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        out = [dict(s) if isinstance(s, dict) else s for s in shots]
+
+        def _cov(item: Dict[str, Any]) -> str:
+            return str(
+                item.get("_preferred_coverage")
+                or item.get("coverage_canonical")
+                or item.get("coverage")
+                or ""
+            ).strip().lower()
+
+        def _group_key(item: Dict[str, Any]) -> tuple:
+            return (
+                int(item.get("_beat_no", 0) or 0),
+                str(item.get("request_family", "") or "").strip(),
+                str(item.get("_preferred_scene") or item.get("scene") or "").strip(),
+                str(item.get("_preferred_subject") or item.get("subject") or "").strip(),
+                str(item.get("_preferred_action") or item.get("action") or "").strip(),
+            )
+
+        i = 0
+        while i < len(out) - 1:
+            a = out[i]
+            b = out[i + 1]
+
+            if not isinstance(a, dict) or not isinstance(b, dict):
+                i += 1
+                continue
+
+            if _group_key(a) == _group_key(b):
+                a_cov = _cov(a)
+                b_cov = _cov(b)
+                if a_cov == "detail" and b_cov == "medium":
+                    out[i], out[i + 1] = out[i + 1], out[i]
+                    i += 2
+                    continue
+
+            i += 1
+
+        return out
+
 
     def _materialize_preferred_fields(self, shots: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         out: List[Dict[str, Any]] = []
@@ -67,8 +110,12 @@ class DirectorEngine:
             if str(new_shot.get("action", "") or "").strip():
                 new_shot["_preferred_action"] = str(new_shot.get("action") or "").strip()
 
-            if str(new_shot.get("coverage", "") or "").strip():
-                new_shot["_preferred_coverage"] = str(new_shot.get("coverage") or "").strip()
+            preferred_coverage_source = (
+                str(new_shot.get("coverage_canonical", "") or "").strip()
+                or str(new_shot.get("coverage", "") or "").strip()
+            )
+            if preferred_coverage_source:
+                new_shot["_preferred_coverage"] = preferred_coverage_source
 
             if str(new_shot.get("move", "") or "").strip():
                 new_shot["_preferred_move"] = str(new_shot.get("move") or "").strip()
