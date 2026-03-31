@@ -10,6 +10,7 @@ from moviepy import AudioFileClip, CompositeAudioClip
 
 # ElevenLabs / Provider router
 from tts_provider import synthesize as tts_synthesize, TTSRequest
+from duration_rescue import plan_duration_rescue
 
 DEFAULT_VO_MIN_GAP = 0.12
 DEFAULT_SEVERE_SHIFT_THRESHOLD = 0.75
@@ -34,6 +35,7 @@ class VOEvent:
     voice: str
     volume: float
     wav_path: Path
+    source_shot_index: int = -1
     requested_start: float = 0.0
     requested_duration: float = 0.0
     schedule_note: str = ""
@@ -123,7 +125,7 @@ def extract_vo_events(
     t = 0.0
     events: List[VOEvent] = []
 
-    for s in dsl_shots:
+    for shot_idx, s in enumerate(dsl_shots):
         dur = float(s.get("duration", 0) or 0)
         vo_text = s.get("vo")
         subtitle_text = s.get("subtitle") or ""
@@ -144,6 +146,7 @@ def extract_vo_events(
                         voice=str(s.get("vo_voice") or default_voice),
                         volume=float(s.get("vo_volume") or default_volume),
                         wav_path=Path(),
+                        source_shot_index=shot_idx,
                     )
                 )
 
@@ -215,6 +218,51 @@ def schedule_vo_events(
         prev_end = actual_start + actual_duration
 
     return warnings
+
+
+def _build_rescue_hint(
+    *,
+    dsl_shots: List[Dict[str, Any]],
+    events: List[VOEvent],
+    warnings: List[VOSchedulingWarning],
+    overrun_s: float,
+) -> str:
+    overrun_warning = None
+    for w in warnings:
+        if getattr(w, "code", "") == "vo_duration_overrun":
+            if overrun_warning is None or float(w.delta_seconds) > float(overrun_warning.delta_seconds):
+                overrun_warning = w
+
+    if overrun_warning and int(overrun_warning.event_index) > 0:
+        event_idx = int(overrun_warning.event_index) - 1
+        if 0 <= event_idx < len(events):
+            anchor_index = int(events[event_idx].source_shot_index)
+        else:
+            anchor_index = -1
+    else:
+        anchor_index = int(events[-1].source_shot_index) if events else -1
+
+    if anchor_index < 0:
+        return ""
+
+    plan = plan_duration_rescue(
+        seq=dsl_shots,
+        anchor_index=anchor_index,
+        overrun_s=float(overrun_s),
+    )
+
+    parts: List[str] = []
+    if plan.soft_extend_s > 0:
+        parts.append(f"soft_extend={plan.soft_extend_s:.2f}s")
+
+    if plan.candidates:
+        top = plan.candidates[:2]
+        cand_text = ", ".join([f"L{c.level}:{c.reason}@shot{c.source_index}" for c in top])
+        parts.append(f"candidates={cand_text}")
+    elif plan.blocked_reason:
+        parts.append(plan.blocked_reason)
+
+    return (" Rescue hint: " + " | ".join(parts)) if parts else ""
 
 
 def preflight_vo_timing(
@@ -298,13 +346,20 @@ def preflight_vo_timing(
                 )
             )
 
+    rescue_hint = _build_rescue_hint(
+        dsl_shots=dsl_shots,
+        events=events,
+        warnings=warnings,
+        overrun_s=overrun_seconds,
+    ) if overrun_seconds > 0 else ""
+
     if status == "green":
         summary = (
             "Timing preflight OK: planned visual pacing "
             f"{planned_visual_duration:.2f}s, estimated narration {estimated_timeline_duration:.2f}s."
         )
     else:
-        summary = warnings[-1].message
+        summary = warnings[-1].message + rescue_hint
 
     return {
         "status": status,
@@ -386,10 +441,18 @@ def build_voiceover_track(
     if total_duration and total_duration > 0:
         overrun = timeline_duration - float(total_duration)
         if overrun > 0:
+            rescue_hint = _build_rescue_hint(
+                dsl_shots=dsl_shots,
+                events=events,
+                warnings=warnings,
+                overrun_s=overrun,
+            )
+
             if overrun >= DEFAULT_FAIL_OVERRUN_SECONDS or overrun / float(total_duration) >= DEFAULT_FAIL_OVERRUN_RATIO:
                 raise ValueError(
                     "Narration timing exceeds available visual pacing budget "
                     f"by {overrun:.2f}s (visual={float(total_duration):.2f}s, narration={timeline_duration:.2f}s)."
+                    + rescue_hint
                 )
             if overrun >= DEFAULT_WARN_OVERRUN_SECONDS:
                 warnings.append(
@@ -398,6 +461,7 @@ def build_voiceover_track(
                         message=(
                             "Narration timing warning: actual VO exceeds planned visual pacing "
                             f"by {overrun:.2f}s; render will extend visuals to stay coherent."
+                            + rescue_hint
                         ),
                         event_index=0,
                         delta_seconds=round(overrun, 3),

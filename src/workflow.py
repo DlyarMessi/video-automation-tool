@@ -1187,8 +1187,25 @@ def compile_creative_dict(creative: Dict[str, Any]) -> Dict[str, Any]:
         subtitle = str(slot.get("subtitle", "") or "").strip()
         vo_text = str(slot.get("vo", "") or "").strip()
         tag = str(slot.get("tag", "") or slot.get("beat_purpose", "") or slot.get("request_family", "") or "slot").strip()
+        request_family = str(slot.get("request_family", "") or "").strip()
+        registry_key = str(slot.get("registry_key", "") or "").strip()
         repeat = max(1, int(slot.get("target", 1) or 1))
         duration = float(_duration_for_project_slot(slot))
+
+        need_key = "|".join([
+            str(scene).strip(),
+            str(subject).strip(),
+            str(action).strip(),
+            str(source_coverage).strip(),
+            str(move_tok or "static").strip(),
+        ])
+        rescue_key = "|".join([
+            str(slot.get("beat_no", 0) or 0),
+            request_family,
+            str(scene).strip(),
+            str(subject).strip(),
+            str(action).strip(),
+        ])
 
         for idx in range(repeat):
             shot: Dict[str, Any] = {
@@ -1197,6 +1214,16 @@ def compile_creative_dict(creative: Dict[str, Any]) -> Dict[str, Any]:
                 "subtitle": subtitle or None,
                 "vo": vo_text if idx == 0 and vo_text else None,
                 "tag": tag,
+                "scene": str(scene).strip(),
+                "subject": str(subject).strip(),
+                "action": str(action).strip(),
+                "coverage": str(coverage).strip(),
+                "coverage_canonical": str(source_coverage).strip(),
+                "move": str(move_tok or "static").strip(),
+                "request_family": request_family,
+                "registry_key": registry_key or None,
+                "_need_key": need_key,
+                "_rescue_key": rescue_key,
                 "_beat_no": int(slot.get("beat_no", 0) or 0),
                 "_beat_duration_hint": float(slot.get("_duration_hint", 0) or 0),
             }
