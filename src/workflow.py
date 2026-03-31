@@ -419,6 +419,22 @@ def _visual_keyword(visual: str) -> str:
     )]
     return words[0] if words else ""
 
+def _resolve_subject_action(
+    *,
+    content: str,
+    purpose: str,
+    subject_override: str = "",
+    action_override: str = "",
+) -> tuple[str, str]:
+    subject = str(subject_override or "").strip()
+    action = str(action_override or "").strip()
+    if not subject or not action:
+        derived_subject, derived_action = _legacy_subject_action_from_content(content, purpose)
+        subject = subject or derived_subject
+        action = action or derived_action
+    return str(subject).strip(), str(action).strip()
+
+
 def build_project_slots_from_creative(creative: dict) -> list[dict]:
     beats = beats_from_creative(creative)
     out: list[dict] = []
@@ -437,6 +453,12 @@ def build_project_slots_from_creative(creative: dict) -> list[dict]:
         # ── establish_context ──────────────────────────────
         if purpose == "establish_context":
             _content = _infer_content_from_visual(visual, purpose)
+            _subject, _action = _resolve_subject_action(
+                content=_content,
+                purpose=purpose,
+                subject_override=str(beat.get("subject") or ""),
+                action_override=str(beat.get("action") or ""),
+            )
             out.append(
                 _project_slot(
                     beat_no=i,
@@ -444,6 +466,8 @@ def build_project_slots_from_creative(creative: dict) -> list[dict]:
                     request_family="opening",
                     scene=_infer_scene_from_visual(visual, scene),
                     content=_content,
+                    subject=_subject,
+                    action=_action,
                     coverage="hero",
                     move=move,
                     target=1,
@@ -472,6 +496,12 @@ def build_project_slots_from_creative(creative: dict) -> list[dict]:
 
             med_scene = str(beat.get("medium_scene") or _cap_scene).strip() or _cap_scene
             med_content = str(beat.get("medium_content") or _cap_content).strip() or _cap_content
+            med_subject, med_action = _resolve_subject_action(
+                content=med_content,
+                purpose=purpose,
+                subject_override=str(beat.get("medium_subject") or beat.get("subject") or ""),
+                action_override=str(beat.get("medium_action") or beat.get("action") or ""),
+            )
             med_move = str(beat.get("medium_move") or move).strip() or move or "static"
 
             det_scene = str(beat.get("detail_scene") or med_scene).strip() or med_scene
@@ -479,6 +509,12 @@ def build_project_slots_from_creative(creative: dict) -> list[dict]:
                 beat.get("detail_content")
                 or (med_content if med_scene == "showroom" else "line")
             ).strip() or (med_content if med_scene == "showroom" else "line")
+            det_subject, det_action = _resolve_subject_action(
+                content=det_content,
+                purpose=purpose,
+                subject_override=str(beat.get("detail_subject") or beat.get("subject") or ""),
+                action_override=str(beat.get("detail_action") or beat.get("action") or ""),
+            )
             det_move_override = str(beat.get("detail_move") or "").strip()
 
             if isinstance(beat.get("medium_target"), (int, float)):
@@ -493,6 +529,8 @@ def build_project_slots_from_creative(creative: dict) -> list[dict]:
                         request_family="capability",
                         scene=med_scene,
                         content=med_content,
+                        subject=med_subject,
+                        action=med_action,
                         coverage="medium",
                         move=med_move,
                         target=med_count,
@@ -516,6 +554,8 @@ def build_project_slots_from_creative(creative: dict) -> list[dict]:
                         request_family="capability",
                         scene=det_scene,
                         content=det_content,
+                        subject=det_subject,
+                        action=det_action,
                         coverage="detail",
                         move=det_move,
                         target=det_count,
@@ -538,6 +578,12 @@ def build_project_slots_from_creative(creative: dict) -> list[dict]:
 
             _trust_content = _infer_content_from_visual(visual, purpose)
             _trust_scene = _infer_scene_from_visual(visual, scene)
+            _trust_subject, _trust_action = _resolve_subject_action(
+                content=_trust_content,
+                purpose=purpose,
+                subject_override=str(beat.get("subject") or ""),
+                action_override=str(beat.get("action") or ""),
+            )
             if med_count > 0:
                 out.append(
                     _project_slot(
@@ -546,6 +592,8 @@ def build_project_slots_from_creative(creative: dict) -> list[dict]:
                         request_family="trust",
                         scene=_trust_scene,
                         content=_trust_content,
+                        subject=_trust_subject,
+                        action=_trust_action,
                         coverage="medium",
                         move=move,
                         target=med_count,
@@ -569,6 +617,8 @@ def build_project_slots_from_creative(creative: dict) -> list[dict]:
                         request_family="trust",
                         scene=_trust_scene,
                         content=_trust_content,
+                        subject=_trust_subject,
+                        action=_trust_action,
                         coverage="detail",
                         move=det_move,
                         target=det_count,
@@ -585,6 +635,12 @@ def build_project_slots_from_creative(creative: dict) -> list[dict]:
         # ── brand_close ────────────────────────────────────
         elif purpose == "brand_close":
             _close_content = _infer_content_from_visual(visual, purpose)
+            _close_subject, _close_action = _resolve_subject_action(
+                content=_close_content,
+                purpose=purpose,
+                subject_override=str(beat.get("subject") or ""),
+                action_override=str(beat.get("action") or ""),
+            )
             out.append(
                 _project_slot(
                     beat_no=i,
@@ -592,6 +648,8 @@ def build_project_slots_from_creative(creative: dict) -> list[dict]:
                     request_family="close",
                     scene=_infer_scene_from_visual(visual, scene),
                     content=_close_content,
+                    subject=_close_subject,
+                    action=_close_action,
                     coverage="hero",
                     move=move,
                     target=1,
@@ -609,6 +667,12 @@ def build_project_slots_from_creative(creative: dict) -> list[dict]:
         # ── fallback (unknown purpose) ─────────────────────
         else:
             content = infer_category_from_beat(beat)
+            fallback_subject, fallback_action = _resolve_subject_action(
+                content=content,
+                purpose=purpose,
+                subject_override=str(beat.get("subject") or ""),
+                action_override=str(beat.get("action") or ""),
+            )
             first = True
             for shot in infer_shots_from_beat(beat):
                 shot_norm = "detail" if shot in ["close"] else shot
@@ -619,6 +683,8 @@ def build_project_slots_from_creative(creative: dict) -> list[dict]:
                         request_family="support",
                         scene=scene,
                         content=content,
+                        subject=fallback_subject,
+                        action=fallback_action,
                         coverage=shot_norm,
                         move=move,
                         target=1,
