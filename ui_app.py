@@ -55,6 +55,10 @@ from src.ui_local_prefs import (
     remember_last_tts_language,
     remember_last_eleven_model_id,
     remember_last_voice_id,
+    get_last_input_root,
+    get_last_output_root,
+    remember_last_input_root,
+    remember_last_output_root,
 )
 
 from src.render_profile import get_default_fps, get_filter_preset
@@ -235,6 +239,92 @@ def priority_score(priority: str) -> int:
     if p == "medium":
         return 1
     return 0
+
+
+def ui_is_zh() -> bool:
+    return str(st.session_state.get("display_lang", "en") or "en") == "zh"
+
+
+def ui_token_label(kind: str, value: str) -> str:
+    v = str(value or "").strip().lower()
+    maps = {
+        "request_family": {
+            "opening": "开场建立",
+            "capability": "能力展示",
+            "trust": "证明/信任",
+            "close": "品牌收束",
+            "support": "补充镜头",
+        },
+        "scene": {
+            "exterior": "外景",
+            "factory-floor": "车间",
+            "factory floor": "车间",
+            "factory": "工厂",
+            "showroom": "展厅",
+            "testing-area": "测试区",
+            "testing area": "测试区",
+            "warehouse": "仓库",
+            "workshop": "车间",
+        },
+        "subject": {
+            "workspace": "环境",
+            "person": "人物",
+            "product": "产品",
+            "machine": "设备",
+            "part": "部件",
+            "panel": "面板",
+        },
+        "action": {
+            "display": "展示",
+            "operate": "运作",
+            "inspect": "检验",
+            "assemble": "装配",
+            "transport": "运输",
+        },
+        "coverage": {
+            "hero": "英雄镜头",
+            "wide": "大全景",
+            "medium": "中景",
+            "detail": "细节",
+        },
+        "move": {
+            "static": "固定",
+            "slide": "平移",
+            "pushin": "推进",
+            "follow": "跟随",
+            "orbit": "环绕",
+            "tilt": "俯仰",
+            "reveal": "揭示",
+            "pan": "摇镜",
+        },
+    }
+    return maps.get(kind, {}).get(v, str(value or "").strip())
+
+
+def build_mission_title(row: dict, fallback: str) -> str:
+    if not ui_is_zh():
+        return fallback
+    parts = [
+        ui_token_label("request_family", row.get("request_family", "")),
+        ui_token_label("scene", row.get("scene", "")),
+        ui_token_label("coverage", row.get("coverage", "")),
+    ]
+    out = " · ".join([x for x in parts if x])
+    return out or fallback
+
+
+def build_spec_line(row: dict) -> str:
+    if not ui_is_zh():
+        return ""
+    parts = [
+        f"场景 {ui_token_label('scene', row.get('scene', ''))}",
+        f"主体 {ui_token_label('subject', row.get('subject', ''))}",
+        f"动作 {ui_token_label('action', row.get('action', ''))}",
+        f"运镜 {ui_token_label('move', row.get('move', ''))}",
+        f"时长 {row.get('duration_label', '')}",
+    ]
+    return "  |  ".join([x for x in parts if x and not x.endswith(" ")])
+
 
 
 def build_pool_slot_rows(slots, factory_files):
@@ -576,6 +666,8 @@ def render_pool_active_slot_card(
 
     display_label = str(row.get("display_label", "") or "").strip() or str(row.get("slot_label", "Slot")).strip()
     shoot_brief_text = str(row.get("shoot_brief_text", "") or "").strip()
+    mission_title = build_mission_title(row, display_label)
+    spec_line = build_spec_line(row)
 
     subject_text = str(row.get("subject", "") or row.get("Subject", "") or "").strip()
     action_text = str(row.get("action", "") or row.get("Action", "") or "").strip()
@@ -598,29 +690,50 @@ def render_pool_active_slot_card(
     inbox_files = list_video_files(inbox_dir, VIDEO_SUFFIXES) if inbox_dir and inbox_dir.exists() else []
 
     with st.container(border=True):
-        _title_col, _badge_col = st.columns([8, 2])
+        _title_col, _need_col, _badge_col = st.columns([6, 2, 2])
         with _title_col:
-            st.markdown(f"**{display_label}**")
+            st.markdown(f"**🎯 {mission_title}**")
+        with _need_col:
+            need_text = f"缺 {missing}" if ui_is_zh() else f"Need {missing}"
+            st.markdown(
+                f"<div style='text-align:center; padding-top:0.15rem;'>"
+                f"<span style='display:inline-block; padding:0.22rem 0.55rem; border-radius:999px; "
+                f"background:#fff1f2; color:#b91c1c; font-weight:700; font-size:0.9rem;'>{need_text}</span>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
         with _badge_col:
             st.markdown(f"<div style='text-align:right'>{priority_badge(priority)}</div>", unsafe_allow_html=True)
 
-        if shoot_brief_text:
-            st.write(shoot_brief_text)
+        if ui_is_zh():
+            if spec_line:
+                st.caption(spec_line)
+            with st.expander("原始英文说明", expanded=False):
+                if shoot_brief_text:
+                    st.caption(shoot_brief_text)
+                else:
+                    st.caption(display_label)
         else:
-            st.write(display_label)
+            if shoot_brief_text:
+                st.write(shoot_brief_text)
+            else:
+                st.caption(f"{row['framing_label']} · {row['move_label']}")
 
-        st.markdown("**Required spec**")
-        st.caption("🔒 core requirement · ↔ adjustable within allowed range")
+        st.markdown(f"**{tr('Required spec')}**")
+        st.caption(tr("🔒 core requirement · ↔ adjustable within allowed range"))
         st.markdown(
-            f"Scene **{scene_name}** 🔒  ·  "
-            f"Subject **{subject_text}** 🔒  ·  "
-            f"Action **{action_text}** 🔒  ·  "
-            f"Coverage **{coverage_name}** ↔  ·  "
-            f"Move **{move_name}** ↔  ·  "
-            f"Duration **{row['duration_label']}**"
+            f"{tr('Scene')} **{scene_name}** 🔒  ·  "
+            f"{tr('Subject')} **{subject_text}** 🔒  ·  "
+            f"{tr('Action')} **{action_text}** 🔒  ·  "
+            f"{tr('Coverage')} **{coverage_name}** ↔  ·  "
+            f"{tr('Movement')} **{move_name}** ↔  ·  "
+            f"{tr('Duration')} **{row['duration_label']}**"
         )
 
-        st.markdown(f"**Need {missing}** · recommended `{row.get('move', 'static')}`")
+        if str(st.session_state.get("display_lang", "en") or "en") == "zh":
+            st.markdown(f"**还缺 {missing}** · 建议 `{row.get('move', 'static')}`")
+        else:
+            st.markdown(f"**Need {missing}** · recommended `{row.get('move', 'static')}`")
 
         progress_col, status_col = st.columns([3, 2])
         with progress_col:
@@ -638,9 +751,9 @@ def render_pool_active_slot_card(
         _move_options = ["static", "slide", "pushin", "follow", "orbit", "tilt", "reveal", "pan"]
         _move_default_idx = _move_options.index(move_name) if move_name in _move_options else 0
 
-        st.markdown("**Add clip**")
+        st.markdown(f"**{tr('Add clip')}**")
         uploads = st.file_uploader(
-            "Upload clips for this slot",
+            tr("Upload clips for this slot"),
             type=VIDEO_EXTS,
             accept_multiple_files=True,
             key=f"pool_fill_v3_upload_{slot_ui_key}",
@@ -650,23 +763,23 @@ def render_pool_active_slot_card(
         pick_inbox = []
         if inbox_files:
             pick_inbox = st.multiselect(
-                f"Use existing clip ({len(inbox_files)})",
+                f"{tr('Use existing clip')} ({len(inbox_files)})",
                 options=inbox_files,
                 format_func=lambda p: f"{p.name}  [{classify_orientation(p)}]",
                 key=f"pool_fill_v3_inbox_{slot_ui_key}",
             )
 
         with st.expander("Advanced", expanded=False):
-            st.caption("Allowed adjustments")
+            st.caption(tr("Allowed adjustments"))
             move_name = st.selectbox(
-                "Override move",
+                tr("Override move"),
                 _move_options,
                 index=_move_default_idx,
                 key=f"pool_fill_v3_move_{slot_ui_key}",
                 help="Default: " + str(row.get("move", "static")) + " — change only if your actual clip clearly differs",
             )
 
-            st.caption("Asset metadata")
+            st.caption(tr("Asset metadata"))
             meta1, meta2 = st.columns([1, 1])
             with meta1:
                 energy_default = st.selectbox(
@@ -701,9 +814,9 @@ def render_pool_active_slot_card(
             with t3:
                 outro_safe_default = st.checkbox("outro_safe", value=default_outro, key=f"pool_fill_v3_outro_{slot_ui_key}")
 
-        if st.button("Add to slot", key=f"pool_fill_v3_save_{slot_ui_key}", use_container_width=True):
+        if st.button(tr("Add to slot"), key=f"pool_fill_v3_save_{slot_ui_key}", use_container_width=True):
             if not uploads and not pick_inbox:
-                st.warning("Add at least one upload or pick one existing clip.")
+                st.warning(tr("Add at least one upload or pick one existing clip."))
             else:
                 rejected_msgs = []
                 saved_count = 0
@@ -770,7 +883,7 @@ def render_pool_active_slot_card(
                             st.error(f"Move Failed: {src.name} → {dst.name} ({e})")
 
                 if rejected_msgs:
-                    st.warning("Some clips were rejected due to orientation mismatch:")
+                    st.warning(tr("Some clips were rejected due to orientation mismatch:"))
                     for msg in rejected_msgs:
                         st.write(f"- {msg}")
 
@@ -778,7 +891,7 @@ def render_pool_active_slot_card(
                     st.session_state["_pool_save_flash"] = f"Saved {saved_count} clip(s) to pool."
                     st.rerun()
                 elif not rejected_msgs:
-                    st.info("No clips were saved.")
+                    st.info(tr("No clips were saved."))
 
 def render_pool_completed_slot_card(
     row,
@@ -829,14 +942,26 @@ def render_pool_completed_slot_card(
     inbox_files = list_video_files(inbox_dir, VIDEO_SUFFIXES) if inbox_dir and inbox_dir.exists() else []
 
     with st.container(border=True):
-        st.markdown(f"**{display_label}** {priority_badge(priority)}")
+        st.markdown(f"**🎯 {mission_title}** {priority_badge(priority)}")
         if semantic_hint:
             st.caption(semantic_hint)
-        st.markdown(f"**Ready {existing}/{target}** · ⏱️ `{row['duration_label']}` · recommended `{row.get('move', 'static')}`")
-        if shoot_brief_text:
-            st.write(shoot_brief_text)
+        if str(st.session_state.get("display_lang", "en") or "en") == "zh":
+            st.markdown(f"**已满足 {existing}/{target}** · ⏱️ `{row['duration_label']}` · 建议 `{row.get('move', 'static')}`")
         else:
-            st.caption(f"{row['framing_label']} · {row['move_label']}")
+            st.markdown(f"**Ready {existing}/{target}** · ⏱️ `{row['duration_label']}` · recommended `{row.get('move', 'static')}`")
+        if ui_is_zh():
+            if spec_line:
+                st.caption(spec_line)
+            with st.expander("原始英文说明", expanded=False):
+                if shoot_brief_text:
+                    st.caption(shoot_brief_text)
+                else:
+                    st.caption(display_label)
+        else:
+            if shoot_brief_text:
+                st.write(shoot_brief_text)
+            else:
+                st.caption(f"{row['framing_label']} · {row['move_label']}")
 
         progress_col, status_col = st.columns([3, 2])
         with progress_col:
@@ -851,7 +976,7 @@ def render_pool_completed_slot_card(
                 unsafe_allow_html=True,
             )
 
-        st.caption("This slot is already covered. Add only if you want a better replacement or an alternate.")
+        st.caption(tr("This slot is already covered. Add only if you want a better replacement or an alternate."))
 
         _move_options_d = ["static", "slide", "pushin", "follow", "orbit", "tilt", "reveal", "pan"]
         _move_default_idx_d = _move_options_d.index(move_name) if move_name in _move_options_d else 0
@@ -915,7 +1040,7 @@ def render_pool_completed_slot_card(
             with t3:
                 outro_safe_default = st.checkbox("outro_safe", value=default_outro, key=f"pool_fill_v3_done_outro_{slot_ui_key}")
 
-        if st.button("Add alternate", key=f"pool_fill_v3_done_save_{slot_ui_key}", use_container_width=True):
+        if st.button(tr("Add alternate"), key=f"pool_fill_v3_done_save_{slot_ui_key}", use_container_width=True):
             if not uploads and not pick_inbox:
                 st.warning("Add at least one upload or pick one existing clip.")
             else:
@@ -1464,6 +1589,25 @@ UI_TEXT_ZH = {
     "Render Failed.": "渲染失败。",
     "Render finished without a final video file. See _internal/render.log for the real failure.": "渲染结束但未生成最终视频文件。真实失败原因请查看 _internal/render.log。",
     "Generate Task Rows in Step 1 first.": "请先在步骤 1 生成任务行。",
+
+    "Required spec": "必需规格",
+    "🔒 core requirement · ↔ adjustable within allowed range": "🔒 必须满足 · ↔ 可在允许范围内调整",
+    "Subject": "主体",
+    "Action": "动作",
+    "Coverage": "景别",
+    "Duration": "时长",
+    "Add clip": "添加素材",
+    "Upload clips for this slot": "为该槽位上传素材",
+    "Use existing clip": "使用现有素材",
+    "Allowed adjustments": "允许调整项",
+    "Asset metadata": "素材元信息",
+    "Override move": "覆盖运镜",
+    "Add to slot": "加入槽位",
+    "Add alternate": "加入备选",
+    "Add at least one upload or pick one existing clip.": "请至少上传一个素材，或选择一个现有素材。",
+    "Some clips were rejected due to orientation mismatch:": "部分素材因画幅方向不匹配而被拒绝：",
+    "No clips were saved.": "没有保存任何素材。",
+    "This slot is already covered. Add only if you want a better replacement or an alternate.": "该槽位已满足。只有在需要更好的替换素材或备选素材时再添加。",
 }
 
 def tr(text: str) -> str:
@@ -1819,8 +1963,15 @@ with st.sidebar:
         st.caption(f"FPS: {target_fps}  |  Filter: {filter_preset_name}")
 
         with st.expander(tr("Advanced"), expanded=False):
-            input_root = st.text_input(tr("Footage Root"), value=str(INPUT_ROOT_DEFAULT))
+            input_root = st.text_input(tr("Footage Root"), value=str(input_root_path))
+            output_root_path = locals().get("output_root_path", OUTPUT_ROOT_DEFAULT)
+            output_root = st.text_input("Output Root", value=str(output_root_path))
             verbose = st.checkbox(tr("Verbose Logs (Dev)"), value=False)
+
+        input_root_path = Path(input_root).expanduser()
+        output_root_path = Path(output_root).expanduser()
+        remember_last_input_root(ROOT, str(input_root_path))
+        remember_last_output_root(ROOT, str(output_root_path))
 
         if company:
             with st.expander("Danger Zone", expanded=False):
@@ -1907,7 +2058,10 @@ else:
 # =========================================================
 if company:
     storage_state = compute_storage_state(
-        input_root_path=input_root_path,
+        requested_input_root=input_root_path,
+        requested_output_root=output_root_path,
+        default_input_root=INPUT_ROOT_DEFAULT,
+        default_output_root=OUTPUT_ROOT_DEFAULT,
         company=company,
         orientation=orientation,
         ensure_company_storage_fn=ensure_company_storage,
@@ -1924,15 +2078,27 @@ else:
 
 storage_ready = storage_state["storage_ready"]
 storage_error = storage_state["storage_error"]
+effective_input_root = storage_state["input_root_effective"]
+effective_output_root = storage_state["output_root_effective"]
 dirs = storage_state["dirs"]
 inbox_dir = storage_state["inbox_dir"]
 factory_dir = storage_state["factory_dir"]
 
 if not storage_ready:
     st.warning("Footage storage is unavailable. You can still edit scripts and settings, but footage actions are disabled.")
-    st.caption(f"Footage Root: {input_root_path}")
-    if storage_error:
+    st.caption(f"Input Root: {effective_input_root}")
+    st.caption(f"Output Root: {effective_output_root}")
+    if storage_state.get("reason"):
+        st.caption(f"Reason: {storage_state['reason']}")
+    elif storage_error:
         st.caption(f"Reason: {storage_error}")
+else:
+    if storage_state.get("input_fallback_active") or storage_state.get("output_fallback_active"):
+        st.warning("External/custom storage unavailable. Falling back to local project storage.")
+        st.caption(f"Input Root: {effective_input_root}")
+        st.caption(f"Output Root: {effective_output_root}")
+        if storage_state.get("reason"):
+            st.caption(f"Reason: {storage_state['reason']}")
 
 # =========================================================
 # Pool Fill Mode (independent page)
@@ -2692,7 +2858,7 @@ elif project_slots:
     if str(st.session_state.get("project_step2_focus_beat", "all")) not in valid_focus_values:
         st.session_state["project_step2_focus_beat"] = str(first_missing_beat or (ordered_beat_nos[0] if ordered_beat_nos else "all"))
 
-    focus_label = "当前编辑 Beat" if str(st.session_state.get("display_lang", "en") or "en") == "zh" else "Current Editing Beat"
+    focus_label = "当前拍摄段落" if str(st.session_state.get("display_lang", "en") or "en") == "zh" else "Current Editing Beat"
     focus_options = ["all"] + [str(x) for x in ordered_beat_nos]
     selected_focus = st.selectbox(
         focus_label,
@@ -2778,7 +2944,7 @@ else:
         try:
             creative_name = active_creative_path.stem.replace(".creative", "")
             run_id = f"{creative_name}_{now_tag()[:15]}"
-            run_dir = output_root_path / orientation / company / run_id
+            run_dir = effective_output_root / orientation / company / run_id
             run_dir.mkdir(parents=True, exist_ok=True)
             layout = ensure_run_layout(run_dir)
             internal_dir = layout["internal_dir"]

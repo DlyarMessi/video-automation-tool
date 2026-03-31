@@ -12,6 +12,8 @@ class UILocalPrefs:
     last_tts_language: str = ""
     last_eleven_model_id: str = "eleven_multilingual_v2"
     last_voice_ids: dict[str, str] | None = None
+    last_input_root: str = ""
+    last_output_root: str = ""
 
     def __post_init__(self) -> None:
         if self.last_voice_ids is None:
@@ -44,6 +46,8 @@ def load_ui_local_prefs(root: Path) -> UILocalPrefs:
         last_orientation=str(payload.get("last_orientation", "") or "").strip(),
         last_tts_language=str(payload.get("last_tts_language", "") or "").strip(),
         last_eleven_model_id=str(payload.get("last_eleven_model_id", "eleven_multilingual_v2") or "eleven_multilingual_v2").strip(),
+        last_input_root=str(payload.get("last_input_root", "") or "").strip(),
+        last_output_root=str(payload.get("last_output_root", "") or "").strip(),
         last_voice_ids={
             str(k).strip().lower(): str(v or "").strip()
             for k, v in raw_voice_ids.items()
@@ -117,3 +121,33 @@ def remember_last_voice_id(root: Path, lang_short: str, voice_id: str) -> None:
     current[key] = clean_voice
     prefs.last_voice_ids = current
     save_ui_local_prefs(root, prefs)
+
+
+def remember_last_input_root(root: Path, input_root: str) -> None:
+    clean = str(input_root or "").strip()
+    prefs = load_ui_local_prefs(root)
+    if prefs.last_input_root == clean:
+        return
+    prefs.last_input_root = clean
+    save_ui_local_prefs(root, prefs)
+
+
+def remember_last_output_root(root: Path, output_root: str) -> None:
+    clean = str(output_root or "").strip()
+    prefs = load_ui_local_prefs(root)
+    if prefs.last_output_root == clean:
+        return
+    prefs.last_output_root = clean
+    save_ui_local_prefs(root, prefs)
+
+
+def get_last_input_root(root: Path, default: Path) -> Path:
+    prefs = load_ui_local_prefs(root)
+    raw = str(prefs.last_input_root or "").strip()
+    return Path(raw).expanduser() if raw else default
+
+
+def get_last_output_root(root: Path, default: Path) -> Path:
+    prefs = load_ui_local_prefs(root)
+    raw = str(prefs.last_output_root or "").strip()
+    return Path(raw).expanduser() if raw else default

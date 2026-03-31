@@ -52,35 +52,82 @@ def build_workspace_controls_state(
     }
 
 
+def resolve_storage_root(requested_path: Path, default_path: Path) -> dict[str, Any]:
+    requested = Path(requested_path).expanduser()
+    default = Path(default_path).expanduser()
+
+    requested_ok = requested.exists() and requested.is_dir()
+    default_ok = default.exists() and default.is_dir()
+
+    if requested_ok:
+        return {
+            "requested_root": requested,
+            "effective_root": requested,
+            "fallback_active": False,
+            "reason": "",
+        }
+
+    if not default.exists():
+        default.mkdir(parents=True, exist_ok=True)
+
+    if default.is_dir():
+        return {
+            "requested_root": requested,
+            "effective_root": default,
+            "fallback_active": requested != default,
+            "reason": "" if requested == default else f"Requested root unavailable: {requested}",
+        }
+
+    return {
+        "requested_root": requested,
+        "effective_root": default,
+        "fallback_active": True,
+        "reason": f"Both requested and default roots are unusable. requested={requested} default={default}",
+    }
+
+
 def compute_storage_state(
     *,
-    input_root_path: Path,
+    requested_input_root: Path,
+    requested_output_root: Path,
+    default_input_root: Path,
+    default_output_root: Path,
     company: str,
     orientation: str,
     ensure_company_storage_fn: Callable[[Path, str], None],
     get_storage_dirs_fn: Callable[[Path, str, str], dict[str, Path]],
 ) -> dict[str, Any]:
+    input_state = resolve_storage_root(requested_input_root, default_input_root)
+    output_state = resolve_storage_root(requested_output_root, default_output_root)
+
     storage_ready = True
     storage_error = ""
 
+    input_root = input_state["effective_root"]
+    output_root = output_state["effective_root"]
+
     try:
-        if input_root_path.exists() and not input_root_path.is_dir():
-            storage_ready = False
-            storage_error = f"Footage root exists but is not a directory: {input_root_path}"
-        else:
-            ensure_company_storage_fn(input_root_path, company)
+        ensure_company_storage_fn(input_root, company)
+        output_root.mkdir(parents=True, exist_ok=True)
     except Exception as e:
         storage_ready = False
         storage_error = str(e)
 
-    dirs = get_storage_dirs_fn(input_root_path, orientation, company) if storage_ready else {}
+    dirs = get_storage_dirs_fn(input_root, orientation, company) if storage_ready else {}
     inbox_dir = dirs.get("inbox") if dirs else None
     factory_dir = dirs.get("factory") if dirs else None
 
     return {
         "storage_ready": storage_ready,
         "storage_error": storage_error,
+        "input_root_requested": input_state["requested_root"],
+        "input_root_effective": input_root,
+        "input_fallback_active": bool(input_state["fallback_active"]),
+        "output_root_requested": output_state["requested_root"],
+        "output_root_effective": output_root,
+        "output_fallback_active": bool(output_state["fallback_active"]),
         "dirs": dirs,
         "inbox_dir": inbox_dir,
         "factory_dir": factory_dir,
+        "reason": " | ".join([x for x in [input_state["reason"], output_state["reason"]] if x]),
     }
