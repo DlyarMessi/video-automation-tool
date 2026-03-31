@@ -915,6 +915,10 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
     )
     for warning in preflight.get("warnings", []):
         logger.warning("%s", warning.get("message", warning))
+
+    if preflight.get("status") in {"yellow", "red"}:
+        logger.warning("VO preflight summary: %s", preflight.get("summary", ""))
+
     if preflight.get("status") == "red":
         raise ValueError(preflight.get("summary") or "Timing preflight failed.")
 

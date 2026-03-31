@@ -10,7 +10,7 @@ from moviepy import AudioFileClip, CompositeAudioClip
 
 # ElevenLabs / Provider router
 from tts_provider import synthesize as tts_synthesize, TTSRequest
-from duration_rescue import plan_duration_rescue
+from duration_rescue import plan_duration_rescue, RescuePolicy
 
 DEFAULT_VO_MIN_GAP = 0.12
 DEFAULT_SEVERE_SHIFT_THRESHOLD = 0.75
@@ -220,12 +220,41 @@ def schedule_vo_events(
     return warnings
 
 
+def _load_rescue_policy(vo_cfg: Dict[str, Any]) -> RescuePolicy:
+    rescue_cfg = vo_cfg.get("duration_rescue", {}) if isinstance(vo_cfg.get("duration_rescue", {}), dict) else {}
+
+    def _bool(name: str, default: bool) -> bool:
+        value = rescue_cfg.get(name, default)
+        return bool(value)
+
+    def _float(name: str, default: float) -> float:
+        try:
+            return float(rescue_cfg.get(name, default))
+        except Exception:
+            return float(default)
+
+    def _int(name: str, default: int) -> int:
+        try:
+            return int(rescue_cfg.get(name, default))
+        except Exception:
+            return int(default)
+
+    return RescuePolicy(
+        max_soft_extend_s=_float("max_soft_extend_s", 0.35),
+        allow_same_need_key=_bool("allow_same_need_key", True),
+        allow_same_rescue_key=_bool("allow_same_rescue_key", True),
+        allow_same_beat_family=_bool("allow_same_beat_family", False),
+        max_level=_int("max_level", 1),
+    )
+
+
 def _build_rescue_hint(
     *,
     dsl_shots: List[Dict[str, Any]],
     events: List[VOEvent],
     warnings: List[VOSchedulingWarning],
     overrun_s: float,
+    policy: RescuePolicy | None = None,
 ) -> str:
     overrun_warning = None
     for w in warnings:
@@ -249,17 +278,38 @@ def _build_rescue_hint(
         seq=dsl_shots,
         anchor_index=anchor_index,
         overrun_s=float(overrun_s),
+        policy=policy or RescuePolicy(),
     )
 
     parts: List[str] = []
-    if plan.soft_extend_s > 0:
-        parts.append(f"soft_extend={plan.soft_extend_s:.2f}s")
 
-    if plan.candidates:
+    if plan.actions:
+        action_bits: List[str] = []
+        for action in plan.actions[:4]:
+            if action.kind == "soft_extend":
+                action_bits.append(f"extend shot{action.shot_index} +{action.delta_seconds:.2f}s")
+            elif action.kind == "rebalance_existing":
+                action_bits.append(f"trim shot{action.shot_index} {action.delta_seconds:.2f}s")
+            elif action.kind == "insert_candidate":
+                action_bits.append(
+                    f"insert from shot{action.source_index} for +{action.delta_seconds:.2f}s "
+                    f"(L{action.level}:{action.reason})"
+                )
+            else:
+                action_bits.append(f"{action.kind}@shot{action.shot_index}")
+
+        if action_bits:
+            parts.append("plan=" + "; ".join(action_bits))
+
+    if plan.remaining_overrun_s > 0:
+        parts.append(f"remaining={plan.remaining_overrun_s:.2f}s")
+
+    if not plan.actions and plan.candidates:
         top = plan.candidates[:2]
         cand_text = ", ".join([f"L{c.level}:{c.reason}@shot{c.source_index}" for c in top])
         parts.append(f"candidates={cand_text}")
-    elif plan.blocked_reason:
+
+    if plan.blocked_reason:
         parts.append(plan.blocked_reason)
 
     return (" Rescue hint: " + " | ".join(parts)) if parts else ""
@@ -346,11 +396,14 @@ def preflight_vo_timing(
                 )
             )
 
+    rescue_policy = _load_rescue_policy(vo_cfg)
+
     rescue_hint = _build_rescue_hint(
         dsl_shots=dsl_shots,
         events=events,
         warnings=warnings,
         overrun_s=overrun_seconds,
+        policy=rescue_policy,
     ) if overrun_seconds > 0 else ""
 
     if status == "green":
@@ -441,11 +494,13 @@ def build_voiceover_track(
     if total_duration and total_duration > 0:
         overrun = timeline_duration - float(total_duration)
         if overrun > 0:
+            rescue_policy = _load_rescue_policy(vo_cfg)
             rescue_hint = _build_rescue_hint(
                 dsl_shots=dsl_shots,
                 events=events,
                 warnings=warnings,
                 overrun_s=overrun,
+                policy=rescue_policy,
             )
 
             if overrun >= DEFAULT_FAIL_OVERRUN_SECONDS or overrun / float(total_duration) >= DEFAULT_FAIL_OVERRUN_RATIO:

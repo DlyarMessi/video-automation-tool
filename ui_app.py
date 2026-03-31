@@ -574,25 +574,44 @@ def render_pool_active_slot_card(
     default_outro = bool(defaults.get("outro_safe", False))
 
     display_label = str(row.get("display_label", "") or "").strip() or str(row.get("slot_label", "Slot")).strip()
-    slot_label_text = str(row.get("slot_label_text", "") or row.get("slot_label", "") or "").strip()
-    canonical_tuple_text = str(row.get("canonical_tuple_text", "") or "").strip()
-    registry_key_text = str(row.get("registry_key_text", "") or "").strip()
     shoot_brief_text = str(row.get("shoot_brief_text", "") or "").strip()
+
+    subject_text = str(row.get("subject", "") or row.get("Subject", "") or "").strip()
+    action_text = str(row.get("action", "") or row.get("Action", "") or "").strip()
+    if not subject_text or not action_text:
+        from src.workflow import _legacy_subject_action_from_content
+        derived_subject, derived_action = _legacy_subject_action_from_content(content_name, "")
+        subject_text = subject_text or str(derived_subject).strip()
+        action_text = action_text or str(derived_action).strip()
+
+    semantic_hint = " · ".join([x for x in [scene_name, subject_text, action_text, coverage_name, move_name] if x])
 
     inbox_files = list_video_files(inbox_dir, VIDEO_SUFFIXES) if inbox_dir and inbox_dir.exists() else []
 
     with st.container(border=True):
-        st.markdown(f"**{display_label}** {priority_badge(priority)}")
-        if slot_label_text and display_label != slot_label_text:
-            st.caption(f"`{slot_label_text}`")
-        if canonical_tuple_text:
-            st.caption(canonical_tuple_text)
-        if registry_key_text:
-            st.caption(f"registry_key: `{registry_key_text}`")
-        st.markdown(f"🎬 recommended `{row.get('move', 'static')}` · ⏱️ `{row['duration_label']}` · ⚠️ **missing {missing}**")
+        _title_col, _badge_col = st.columns([8, 2])
+        with _title_col:
+            st.markdown(f"**{display_label}**")
+        with _badge_col:
+            st.markdown(f"<div style='text-align:right'>{priority_badge(priority)}</div>", unsafe_allow_html=True)
+
         if shoot_brief_text:
-            st.caption(shoot_brief_text)
-        st.caption(f"💡 {row['framing_label']} · {row['move_label']}")
+            st.write(shoot_brief_text)
+        else:
+            st.write(display_label)
+
+        st.markdown("**Required spec**")
+        st.caption("🔒 core requirement · ↔ adjustable within allowed range")
+        st.markdown(
+            f"Scene **{scene_name}** 🔒  ·  "
+            f"Subject **{subject_text}** 🔒  ·  "
+            f"Action **{action_text}** 🔒  ·  "
+            f"Coverage **{coverage_name}** ↔  ·  "
+            f"Move **{move_name}** ↔  ·  "
+            f"Duration **{row['duration_label']}**"
+        )
+
+        st.markdown(f"**Need {missing}** · recommended `{row.get('move', 'static')}`")
 
         progress_col, status_col = st.columns([3, 2])
         with progress_col:
@@ -609,34 +628,36 @@ def render_pool_active_slot_card(
 
         _move_options = ["static", "slide", "pushin", "follow", "orbit", "reveal", "pan"]
         _move_default_idx = _move_options.index(move_name) if move_name in _move_options else 0
-        _sel_col, _upload_col = st.columns([1, 3])
-        with _sel_col:
-            move_name = st.selectbox(
-                "Move",
-                _move_options,
-                index=_move_default_idx,
-                key=f"pool_fill_v3_move_{pool_topic}_{i}",
-                help="Recommended: " + str(row.get("move", "static")) + " — choose based on your actual footage",
-            )
-        with _upload_col:
-            uploads = st.file_uploader(
-                "Upload clips for this slot",
-                type=VIDEO_EXTS,
-                accept_multiple_files=True,
-                key=f"pool_fill_v3_upload_{pool_topic}_{i}",
-                label_visibility="collapsed",
-            )
+
+        st.markdown("**Add clip**")
+        uploads = st.file_uploader(
+            "Upload clips for this slot",
+            type=VIDEO_EXTS,
+            accept_multiple_files=True,
+            key=f"pool_fill_v3_upload_{pool_topic}_{i}",
+            label_visibility="collapsed",
+        )
 
         pick_inbox = []
         if inbox_files:
             pick_inbox = st.multiselect(
-                f"Move from Inbox ({len(inbox_files)})",
+                f"Use existing clip ({len(inbox_files)})",
                 options=inbox_files,
                 format_func=lambda p: f"{p.name}  [{classify_orientation(p)}]",
                 key=f"pool_fill_v3_inbox_{pool_topic}_{i}",
             )
 
-        with st.expander(tr("Clip tags"), expanded=False):
+        with st.expander("Advanced", expanded=False):
+            st.caption("Allowed adjustments")
+            move_name = st.selectbox(
+                "Override move",
+                _move_options,
+                index=_move_default_idx,
+                key=f"pool_fill_v3_move_{pool_topic}_{i}",
+                help="Default: " + str(row.get("move", "static")) + " — change only if your actual clip clearly differs",
+            )
+
+            st.caption("Asset metadata")
             meta1, meta2 = st.columns([1, 1])
             with meta1:
                 energy_default = st.selectbox(
@@ -671,9 +692,9 @@ def render_pool_active_slot_card(
             with t3:
                 outro_safe_default = st.checkbox("outro_safe", value=default_outro, key=f"pool_fill_v3_outro_{pool_topic}_{i}")
 
-        if st.button(tr("Save to Pool"), key=f"pool_fill_v3_save_{pool_topic}_{i}", use_container_width=True):
+        if st.button("Add to slot", key=f"pool_fill_v3_save_{pool_topic}_{i}", use_container_width=True):
             if not uploads and not pick_inbox:
-                st.warning("Please upload at least one clip or move one from Inbox.")
+                st.warning("Add at least one upload or pick one existing clip.")
             else:
                 rejected_msgs = []
                 saved_count = 0
@@ -776,25 +797,23 @@ def render_pool_completed_slot_card(
     default_outro = bool(defaults.get("outro_safe", False))
 
     display_label = str(row.get("display_label", "") or "").strip() or str(row.get("slot_label", "Slot")).strip()
-    slot_label_text = str(row.get("slot_label_text", "") or row.get("slot_label", "") or "").strip()
-    canonical_tuple_text = str(row.get("canonical_tuple_text", "") or "").strip()
-    registry_key_text = str(row.get("registry_key_text", "") or "").strip()
     shoot_brief_text = str(row.get("shoot_brief_text", "") or "").strip()
+
+    subject_text = str(row.get("subject", "") or row.get("Subject", "") or "").strip()
+    action_text = str(row.get("action", "") or row.get("Action", "") or "").strip()
+    semantic_hint = " · ".join([x for x in [scene_name, subject_text, action_text, coverage_name, move_name] if x])
 
     inbox_files = list_video_files(inbox_dir, VIDEO_SUFFIXES) if inbox_dir and inbox_dir.exists() else []
 
     with st.container(border=True):
         st.markdown(f"**{display_label}** {priority_badge(priority)}")
-        if slot_label_text and display_label != slot_label_text:
-            st.caption(f"`{slot_label_text}`")
-        if canonical_tuple_text:
-            st.caption(canonical_tuple_text)
-        if registry_key_text:
-            st.caption(f"registry_key: `{registry_key_text}`")
-        st.markdown(f"🎬 recommended `{row.get('move', 'static')}` · ⏱️ `{row['duration_label']}` · ✅ **ready {existing}/{target}**")
+        if semantic_hint:
+            st.caption(semantic_hint)
+        st.markdown(f"**Ready {existing}/{target}** · ⏱️ `{row['duration_label']}` · recommended `{row.get('move', 'static')}`")
         if shoot_brief_text:
-            st.caption(shoot_brief_text)
-        st.caption(f"💡 {row['framing_label']} · {row['move_label']}")
+            st.write(shoot_brief_text)
+        else:
+            st.caption(f"{row['framing_label']} · {row['move_label']}")
 
         progress_col, status_col = st.columns([3, 2])
         with progress_col:
@@ -809,38 +828,36 @@ def render_pool_completed_slot_card(
                 unsafe_allow_html=True,
             )
 
-        st.caption("Current clips already meet target. Upload here only if you want replacements or alternates.")
+        st.caption("This slot is already covered. Add only if you want a better replacement or an alternate.")
 
         _move_options_d = ["static", "slide", "pushin", "follow", "orbit", "reveal", "pan"]
         _move_default_idx_d = _move_options_d.index(move_name) if move_name in _move_options_d else 0
-        _sel_col_d, _upload_col_d = st.columns([1, 3])
-        with _sel_col_d:
-            move_name = st.selectbox(
-                "Move",
-                _move_options_d,
-                index=_move_default_idx_d,
-                key=f"pool_fill_v3_done_move_{pool_topic}_{i}",
-                help="Recommended: " + str(row.get("move", "static")) + " — choose based on your actual footage",
-            )
-        with _upload_col_d:
-            uploads = st.file_uploader(
-                "Upload clips for this slot",
-                type=VIDEO_EXTS,
-                accept_multiple_files=True,
-                key=f"pool_fill_v3_done_upload_{pool_topic}_{i}",
-                label_visibility="collapsed",
-            )
+
+        uploads = st.file_uploader(
+            "Upload clips for this slot",
+            type=VIDEO_EXTS,
+            accept_multiple_files=True,
+            key=f"pool_fill_v3_done_upload_{pool_topic}_{i}",
+            label_visibility="collapsed",
+        )
 
         pick_inbox = []
         if inbox_files:
             pick_inbox = st.multiselect(
-                f"Move from Inbox ({len(inbox_files)})",
+                f"Use existing clip ({len(inbox_files)})",
                 options=inbox_files,
                 format_func=lambda p: f"{p.name}  [{classify_orientation(p)}]",
                 key=f"pool_fill_v3_done_inbox_{pool_topic}_{i}",
             )
 
-        with st.expander(tr("Clip tags"), expanded=False):
+        with st.expander("Advanced", expanded=False):
+            move_name = st.selectbox(
+                "Override move",
+                _move_options_d,
+                index=_move_default_idx_d,
+                key=f"pool_fill_v3_done_move_{pool_topic}_{i}",
+                help="Default: " + str(row.get("move", "static")) + " — change only if your actual clip clearly differs",
+            )
             meta1, meta2 = st.columns([1, 1])
             with meta1:
                 energy_default = st.selectbox(
@@ -875,9 +892,9 @@ def render_pool_completed_slot_card(
             with t3:
                 outro_safe_default = st.checkbox("outro_safe", value=default_outro, key=f"pool_fill_v3_done_outro_{pool_topic}_{i}")
 
-        if st.button(tr("Save Alternate to Pool"), key=f"pool_fill_v3_done_save_{pool_topic}_{i}", use_container_width=True):
+        if st.button("Add alternate", key=f"pool_fill_v3_done_save_{pool_topic}_{i}", use_container_width=True):
             if not uploads and not pick_inbox:
-                st.warning("Please upload at least one clip or move one from Inbox.")
+                st.warning("Add at least one upload or pick one existing clip.")
             else:
                 rejected_msgs = []
                 saved_count = 0
@@ -2781,7 +2798,19 @@ else:
 
                 if preflight_summary:
                     status.markdown("**Timing Preflight Blocked Video Creation.**")
-                    st.error(f"Timing preflight blocked video creation: {preflight_summary}")
+
+                    rescue_hint = ""
+                    main_summary = preflight_summary
+                    if "Rescue hint:" in preflight_summary:
+                        main_summary, rescue_hint = preflight_summary.split("Rescue hint:", 1)
+                        main_summary = main_summary.strip()
+                        rescue_hint = rescue_hint.strip()
+
+                    st.error(f"Timing preflight blocked video creation: {main_summary}")
+
+                    if rescue_hint:
+                        st.info(f"Rescue hint: {rescue_hint}")
+
                     st.info("Shorten narration or increase visual timing, then try again.")
                 else:
                     st.error("Video rendering failed. See _internal/render.log in the Run Folder.")

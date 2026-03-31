@@ -39,11 +39,23 @@ class RescueCandidate:
 
 
 @dataclass
+class RescueAction:
+    kind: str
+    shot_index: int = -1
+    delta_seconds: float = 0.0
+    level: int = -1
+    reason: str = ""
+    source_index: int = -1
+
+
+@dataclass
 class RescuePlan:
     anchor_index: int
     overrun_s: float
     soft_extend_s: float = 0.0
     candidates: List[RescueCandidate] = field(default_factory=list)
+    actions: List[RescueAction] = field(default_factory=list)
+    remaining_overrun_s: float = 0.0
     blocked_reason: str = ""
 
 
@@ -185,8 +197,19 @@ def plan_duration_rescue(
     if overrun_s <= 0:
         return plan
 
-    # Always allow a tiny, visually-safe extension before clip insertion.
+    # Step 1 — tiny safe extension on the anchor shot.
     plan.soft_extend_s = min(float(overrun_s), float(policy.max_soft_extend_s))
+    if plan.soft_extend_s > 0:
+        plan.actions.append(
+            RescueAction(
+                kind="soft_extend",
+                shot_index=anchor_index,
+                delta_seconds=round(plan.soft_extend_s, 3),
+                reason="small_safe_extension",
+            )
+        )
+
+    remaining = max(0.0, float(overrun_s) - float(plan.soft_extend_s))
 
     candidate_map = build_rescue_candidate_map(seq)
     raw_candidates = candidate_map.get(anchor_index, [])
@@ -199,7 +222,64 @@ def plan_duration_rescue(
 
     plan.candidates = [c for c in raw_candidates if c.level in allowed_levels and c.level <= policy.max_level]
 
-    if not plan.candidates and overrun_s > plan.soft_extend_s:
+    # Step 2 — mild rebalance inside same beat before insertion.
+    if remaining > 0:
+        anchor = seq[anchor_index] if 0 <= anchor_index < len(seq) else {}
+        anchor_rescue_key = str(anchor.get("_rescue_key", "") or "").strip()
+        for idx, shot in enumerate(seq):
+            if idx == anchor_index or not isinstance(shot, dict):
+                continue
+            if str(shot.get("_rescue_key", "") or "").strip() != anchor_rescue_key:
+                continue
+
+            coverage = str(shot.get("coverage_canonical", "") or shot.get("coverage", "") or "").strip().lower()
+            base_duration = float(shot.get("duration", 0.0) or 0.0)
+
+            if coverage in {"wide", "medium"}:
+                max_trim = min(0.35, max(0.0, base_duration * 0.10))
+            elif coverage in {"detail", "close"}:
+                max_trim = min(0.20, max(0.0, base_duration * 0.08))
+            else:
+                max_trim = min(0.20, max(0.0, base_duration * 0.08))
+
+            if max_trim <= 0:
+                continue
+
+            trim = min(remaining, max_trim)
+            if trim > 0:
+                plan.actions.append(
+                    RescueAction(
+                        kind="rebalance_existing",
+                        shot_index=idx,
+                        delta_seconds=round(-trim, 3),
+                        reason="same_rescue_key_trim_budget",
+                    )
+                )
+                remaining = max(0.0, remaining - trim)
+
+            if remaining <= 0:
+                break
+
+    # Step 3 — insert one candidate instead of blindly stuffing many clips.
+    if remaining > 0 and plan.candidates:
+        best = plan.candidates[0]
+        plan.actions.append(
+            RescueAction(
+                kind="insert_candidate",
+                shot_index=anchor_index,
+                delta_seconds=round(remaining, 3),
+                level=best.level,
+                reason=best.reason,
+                source_index=best.source_index,
+            )
+        )
+        remaining = 0.0
+
+    plan.remaining_overrun_s = round(remaining, 3)
+
+    if plan.remaining_overrun_s > 0 and not plan.candidates:
         plan.blocked_reason = "No allowed rescue candidates under current policy."
+    elif plan.remaining_overrun_s > 0:
+        plan.blocked_reason = "Allowed rescue candidates exist but remaining overrun still exceeds current plan."
 
     return plan
