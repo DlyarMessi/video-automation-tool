@@ -76,3 +76,5 @@ creative_scripts/
 # Debug artifacts
 # =========================================================
 _debug_local/
+**/.DS_Store
+**/__pycache__/
