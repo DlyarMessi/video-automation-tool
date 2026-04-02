@@ -327,19 +327,19 @@ def build_spec_line(row: dict) -> str:
 
 
 def pool_canonical_tuple(item: dict) -> tuple[str, str, str, str, str]:
-    from src.workflow import _legacy_subject_action_from_content
+    from src.workflow import _legacy_subject_action_from_content, _canonical_coverage_from_legacy
 
-    scene = str(item.get("scene", "") or "").strip().lower()
-    subject = str(item.get("subject", "") or "").strip().lower()
-    action = str(item.get("action", "") or "").strip().lower()
+    scene = safe_slug(str(item.get("scene", "") or "")).lower()
+    subject = safe_slug(str(item.get("subject", "") or "")).lower()
+    action = safe_slug(str(item.get("action", "") or "")).lower()
     if not subject or not action:
         content = str(item.get("content", "") or "").strip()
         if content:
             derived_subject, derived_action = _legacy_subject_action_from_content(content, "")
-            subject = subject or str(derived_subject).strip().lower()
-            action = action or str(derived_action).strip().lower()
-    coverage = str(item.get("coverage", "") or "").strip().lower()
-    move = str(item.get("move", "") or "").strip().lower()
+            subject = subject or safe_slug(str(derived_subject)).lower()
+            action = action or safe_slug(str(derived_action)).lower()
+    coverage = safe_slug(_canonical_coverage_from_legacy(str(item.get("coverage", "") or ""))).lower()
+    move = safe_slug(str(item.get("move", "") or "")).lower()
     return (scene, subject, action, coverage, move)
 
 
@@ -420,12 +420,14 @@ def build_pool_slot_rows(slots, factory_files):
         priority = str(slot.get("priority", "medium") or "medium")
         defaults = slot.get("defaults", {}) if isinstance(slot.get("defaults"), dict) else {}
 
-        exact_key = (
-            scene_name.lower(),
-            subject_name.lower(),
-            action_name.lower(),
-            coverage_name.lower(),
-            move_name.lower(),
+        exact_key = pool_canonical_tuple(
+            {
+                "scene": scene_name,
+                "subject": subject_name,
+                "action": action_name,
+                "coverage": coverage_name,
+                "move": move_name,
+            }
         )
         primary_key = exact_key[:4]
         existing_exact = exact_remaining.get(exact_key, 0)
@@ -434,9 +436,8 @@ def build_pool_slot_rows(slots, factory_files):
         missing_exact = max(0, target - allocated_exact)
         existing_primary = bucket_pool_count.get(primary_key, 0)
         style_mismatch_count = max(0, existing_primary - exact_pool_count.get(exact_key, 0))
-        row_uid = safe_slug(
-            f"{slot_index}-{'|'.join([scene_name, subject_name, action_name, coverage_name, move_name, str(slot.get('registry_key', ''))])}"
-        )
+        uid_seed = "|".join([scene_name, subject_name, action_name, coverage_name, move_name, str(slot.get("registry_key", "") or ""), str(slot_index)])
+        row_uid = f"pool-slot-{slot_index}-{hashlib.sha1(uid_seed.encode('utf-8')).hexdigest()[:12]}"
 
         row = dict(slot)
         row.update(
