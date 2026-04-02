@@ -326,55 +326,82 @@ def build_spec_line(row: dict) -> str:
     return "  |  ".join([x for x in parts if x and not x.endswith(" ")])
 
 
+def pool_canonical_tuple(item: dict) -> tuple[str, str, str, str, str]:
+    from src.workflow import _legacy_subject_action_from_content
+
+    scene = str(item.get("scene", "") or "").strip().lower()
+    subject = str(item.get("subject", "") or "").strip().lower()
+    action = str(item.get("action", "") or "").strip().lower()
+    if not subject or not action:
+        content = str(item.get("content", "") or "").strip()
+        if content:
+            derived_subject, derived_action = _legacy_subject_action_from_content(content, "")
+            subject = subject or str(derived_subject).strip().lower()
+            action = action or str(derived_action).strip().lower()
+    coverage = str(item.get("coverage", "") or "").strip().lower()
+    move = str(item.get("move", "") or "").strip().lower()
+    return (scene, subject, action, coverage, move)
+
+
 
 def build_pool_slot_rows(slots, factory_files):
-    """Build normalized slot rows with budget-aware counting.
-    
-    Multiple slots sharing the same pool bucket (scene/content/coverage)
-    share the available clips. One clip cannot satisfy two slots.
-    """
+    """Build normalized slot rows with exact-style budget-aware counting."""
     rows = []
 
-    from src.workflow import _legacy_subject_action_from_content, _legacy_content_from_subject_action
+    from src.workflow import _legacy_subject_action_from_content
 
-    # Phase 1: count total pool clips per canonical bucket (scene/subject/action/coverage)
+    # Phase 1: count total pool clips per exact canonical bucket (scene/subject/action/coverage/move)
+    exact_pool_count: dict[tuple[str, str, str, str, str], int] = {}
+    # Secondary diagnostic count by primary bucket (scene/subject/action/coverage).
     bucket_pool_count: dict[tuple[str, str, str, str], int] = {}
     for slot in slots:
         if not isinstance(slot, dict):
             continue
 
-        slot_scene = str(slot.get("scene", "")).strip().lower()
-        slot_content = str(slot.get("content", "")).strip()
-        slot_subject = str(slot.get("subject", "")).strip()
-        slot_action = str(slot.get("action", "")).strip()
-        slot_coverage = str(slot.get("coverage", "")).strip().lower()
+        slot_scene, slot_subject, slot_action, slot_coverage, slot_move = pool_canonical_tuple(slot)
 
         if not slot_subject or not slot_action:
+            slot_content = str(slot.get("content", "")).strip()
             derived_subject, derived_action = _legacy_subject_action_from_content(slot_content, "")
             slot_subject = slot_subject or derived_subject
             slot_action = slot_action or derived_action
 
-        key = (
+        exact_key = (
             slot_scene,
             str(slot_subject).strip().lower(),
             str(slot_action).strip().lower(),
             slot_coverage,
+            slot_move,
+        )
+        primary_key = (
+            exact_key[0],
+            exact_key[1],
+            exact_key[2],
+            exact_key[3],
         )
 
-        if key not in bucket_pool_count:
-            legacy_content_for_count = slot_content or _legacy_content_from_subject_action(slot_subject, slot_action)
-            bucket_pool_count[key] = count_pool_matches(
+        if exact_key not in exact_pool_count:
+            exact_pool_count[exact_key] = count_exact_pool_matches(
                 factory_files,
-                slot_scene,
-                legacy_content_for_count,
-                slot_coverage,
-                "",
+                scene=exact_key[0],
+                subject=exact_key[1],
+                action=exact_key[2],
+                coverage=exact_key[3],
+                move=exact_key[4],
+            )
+        if primary_key not in bucket_pool_count:
+            bucket_pool_count[primary_key] = count_primary_bucket_matches(
+                factory_files,
+                scene=primary_key[0],
+                subject=primary_key[1],
+                action=primary_key[2],
+                coverage=primary_key[3],
             )
 
-    # Phase 2: budget remaining clips across slots per canonical bucket
-    bucket_remaining: dict[tuple[str, str, str, str], int] = dict(bucket_pool_count)
+    # Phase 2: budget remaining clips across slots per exact bucket.
+    exact_remaining: dict[tuple[str, str, str, str, str], int] = dict(exact_pool_count)
 
-    for slot in slots:
+    for slot_index, slot in enumerate(slots):
         if not isinstance(slot, dict):
             continue
 
@@ -393,16 +420,23 @@ def build_pool_slot_rows(slots, factory_files):
         priority = str(slot.get("priority", "medium") or "medium")
         defaults = slot.get("defaults", {}) if isinstance(slot.get("defaults"), dict) else {}
 
-        key = (
+        exact_key = (
             scene_name.lower(),
             subject_name.lower(),
             action_name.lower(),
             coverage_name.lower(),
+            move_name.lower(),
         )
-        available = bucket_remaining.get(key, 0)
-        allocated = min(target, available)
-        bucket_remaining[key] = max(0, available - allocated)
-        missing = max(0, target - allocated)
+        primary_key = exact_key[:4]
+        existing_exact = exact_remaining.get(exact_key, 0)
+        allocated_exact = min(target, existing_exact)
+        exact_remaining[exact_key] = max(0, existing_exact - allocated_exact)
+        missing_exact = max(0, target - allocated_exact)
+        existing_primary = bucket_pool_count.get(primary_key, 0)
+        style_mismatch_count = max(0, existing_primary - exact_pool_count.get(exact_key, 0))
+        row_uid = safe_slug(
+            f"{slot_index}-{'|'.join([scene_name, subject_name, action_name, coverage_name, move_name, str(slot.get('registry_key', ''))])}"
+        )
 
         row = dict(slot)
         row.update(
@@ -416,8 +450,13 @@ def build_pool_slot_rows(slots, factory_files):
                 "target": target,
                 "priority": priority,
                 "priority_score": priority_score(priority),
-                "existing": allocated,
-                "missing": missing,
+                "row_uid": row_uid,
+                "existing_exact": allocated_exact,
+                "existing_primary": existing_primary,
+                "missing_exact": missing_exact,
+                "style_mismatch_count": style_mismatch_count,
+                "existing": allocated_exact,
+                "missing": missing_exact,
                 "defaults": defaults,
             }
         )
@@ -537,29 +576,13 @@ def load_canonical_registry_entries() -> dict[str, dict]:
 
 
 def merge_pool_semantic_fields(slot_rows: list[dict], slots: list[dict]) -> list[dict]:
-    from src.workflow import _legacy_subject_action_from_content
-
-    def _canonical_tuple(item: dict) -> tuple[str, str, str, str, str]:
-        scene = str(item.get("scene", "") or "").strip().lower()
-        subject = str(item.get("subject", "") or "").strip().lower()
-        action = str(item.get("action", "") or "").strip().lower()
-        if not subject or not action:
-            content = str(item.get("content", "") or "").strip()
-            if content:
-                derived_subject, derived_action = _legacy_subject_action_from_content(content, "")
-                subject = subject or str(derived_subject).strip().lower()
-                action = action or str(derived_action).strip().lower()
-        coverage = str(item.get("coverage", "") or "").strip().lower()
-        move = str(item.get("move", "") or "").strip().lower()
-        return (scene, subject, action, coverage, move)
-
     slot_semantic_map: dict[tuple[str, str, str, str, str], dict] = {}
 
     for slot in slots:
         if not isinstance(slot, dict):
             continue
 
-        key = _canonical_tuple(slot)
+        key = pool_canonical_tuple(slot)
 
         slot_semantic_map[key] = {
             "registry_key": str(slot.get("registry_key", "") or "").strip(),
@@ -579,7 +602,7 @@ def merge_pool_semantic_fields(slot_rows: list[dict], slots: list[dict]) -> list
             continue
 
         merged = dict(row)
-        key = _canonical_tuple(merged)
+        key = pool_canonical_tuple(merged)
 
         slot_semantic = slot_semantic_map.get(key, {})
         computed_registry_key = ".".join(key)
@@ -681,9 +704,10 @@ def render_pool_active_slot_card(
 
     slot_ui_key = safe_slug(
         str(
-            row.get("registry_key")
+            row.get("row_uid")
+            or row.get("registry_key")
             or row.get("_need_key")
-            or "|".join([scene_name, subject_text, action_text, coverage_name, move_name, display_label])
+            or "|".join([scene_name, subject_text, action_text, coverage_name, move_name, display_label, str(i)])
         )
     )
 
@@ -933,9 +957,10 @@ def render_pool_completed_slot_card(
 
     slot_ui_key = safe_slug(
         str(
-            row.get("registry_key")
+            row.get("row_uid")
+            or row.get("registry_key")
             or row.get("_need_key")
-            or "|".join([scene_name, subject_text, action_text, coverage_name, move_name, display_label])
+            or "|".join([scene_name, subject_text, action_text, coverage_name, move_name, display_label, str(i)])
         )
     )
 
@@ -1306,12 +1331,7 @@ def attach_pool_row_semantics(slot_rows: list[dict], hydrated_slots: list[dict])
         if not isinstance(slot, dict):
             continue
         rk = str(slot.get("registry_key", "") or "").strip()
-        key_tuple = (
-            str(slot.get("scene", "") or "").strip(),
-            str(slot.get("content", "") or "").strip(),
-            str(slot.get("coverage", "") or "").strip(),
-            str(slot.get("move", "") or "").strip(),
-        )
+        key_tuple = pool_canonical_tuple(slot)
         if rk:
             by_registry[rk] = slot
         by_tuple[key_tuple] = slot
@@ -1324,12 +1344,7 @@ def attach_pool_row_semantics(slot_rows: list[dict], hydrated_slots: list[dict])
 
         merged = dict(row)
         row_rk = str(row.get("registry_key", "") or "").strip()
-        key_tuple = (
-            str(row.get("scene", "") or "").strip(),
-            str(row.get("content", "") or "").strip(),
-            str(row.get("coverage", "") or "").strip(),
-            str(row.get("move", "") or "").strip(),
-        )
+        key_tuple = pool_canonical_tuple(row)
 
         source = None
         if row_rk and row_rk in by_registry:
@@ -1356,13 +1371,12 @@ def attach_pool_row_semantics(slot_rows: list[dict], hydrated_slots: list[dict])
     return out
 
 
-def count_pool_matches(factory_files: list[Path], scene: str, content: str, coverage: str, move: str) -> int:
-    from src.workflow import _legacy_subject_action_from_content, _canonical_coverage_from_legacy
+def count_primary_bucket_matches(factory_files: list[Path], scene: str, subject: str, action: str, coverage: str) -> int:
+    from src.workflow import _canonical_coverage_from_legacy
 
     scene = safe_slug(scene).lower()
-    target_subject, target_action = _legacy_subject_action_from_content(content, purpose="")
-    target_subject = safe_slug(target_subject).lower()
-    target_action = safe_slug(target_action).lower()
+    target_subject = safe_slug(subject).lower()
+    target_action = safe_slug(action).lower()
     target_coverage = safe_slug(_canonical_coverage_from_legacy(coverage)).lower()
 
     count = 0
@@ -1385,6 +1399,45 @@ def count_pool_matches(factory_files: list[Path], scene: str, content: str, cove
         if core_action != target_action:
             continue
         if core_coverage != target_coverage:
+            continue
+
+        count += 1
+
+    return count
+
+
+def count_exact_pool_matches(factory_files: list[Path], scene: str, subject: str, action: str, coverage: str, move: str) -> int:
+    from src.workflow import _canonical_coverage_from_legacy
+
+    scene = safe_slug(scene).lower()
+    target_subject = safe_slug(subject).lower()
+    target_action = safe_slug(action).lower()
+    target_coverage = safe_slug(_canonical_coverage_from_legacy(coverage)).lower()
+    target_move = safe_slug(move).lower()
+
+    count = 0
+    for p in factory_files:
+        if not p.is_file() or p.suffix.lower() not in VIDEO_SUFFIXES:
+            continue
+        if p.name.startswith("._"):
+            continue
+
+        _parsed = parse_canonical_stem(p.name)
+        core_scene = safe_slug(str(_parsed.get("scene", "") or "")).lower()
+        core_subject = safe_slug(str(_parsed.get("subject", "") or "")).lower()
+        core_action = safe_slug(str(_parsed.get("action", "") or "")).lower()
+        core_coverage = safe_slug(str(_parsed.get("coverage", "") or "")).lower()
+        core_move = safe_slug(str(_parsed.get("move", "") or "")).lower()
+
+        if core_scene != scene:
+            continue
+        if core_subject != target_subject:
+            continue
+        if core_action != target_action:
+            continue
+        if core_coverage != target_coverage:
+            continue
+        if core_move != target_move:
             continue
 
         count += 1
@@ -3022,4 +3075,3 @@ else:
         except Exception as e:
             progress.progress(100)
             st.error(f"Unexpected Error: {e}")
-
