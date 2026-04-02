@@ -3034,9 +3034,13 @@ else:
                 progress.progress(100)
 
                 preflight_summary = None
+                inventory_preflight_summary = None
                 for line in render_logs.splitlines():
                     if "Timing preflight failed:" in line:
                         preflight_summary = line.split("Timing preflight failed:", 1)[1].strip()
+                        break
+                    if "Inventory preflight failed:" in line:
+                        inventory_preflight_summary = line.split("Inventory preflight failed:", 1)[1].strip()
                         break
 
                 if preflight_summary:
@@ -3055,6 +3059,14 @@ else:
                         st.info(f"Rescue hint: {rescue_hint}")
 
                     st.info("Shorten narration or increase visual timing, then try again.")
+                elif inventory_preflight_summary:
+                    status.markdown("**Inventory Preflight Blocked Video Creation.**")
+                    st.error(
+                        "Inventory preflight blocked video creation: required inventory buckets are missing "
+                        "before VO, TTS, and render can start."
+                    )
+                    st.info(inventory_preflight_summary)
+                    st.info("Add footage for the missing bucket(s) or adjust the script to use available inventory, then try again.")
                 else:
                     st.error("Video rendering failed. See _internal/render.log in the Run Folder.")
 
