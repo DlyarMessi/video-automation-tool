@@ -1033,5 +1033,129 @@ class MixedSceneSummaryTests(unittest.TestCase):
         self.assertEqual(summary["total_missing"], 0)
 
 
+class BrandCloseSlotRoundTripTests(unittest.TestCase):
+    """
+    Lock the brand_close purpose path through the full round-trip:
+      build_project_slots_from_creative → build_factory_filename
+      → parse_factory_filename_key → summarize_factory_coverage.
+
+    brand_close always emits exactly one slot with coverage='wide'.
+    """
+
+    def test_brand_close_slot_round_trip(self) -> None:
+        """
+        brand_close beat with a product-hero visual must produce one wide slot
+        that round-trips through the filename chain without loss.
+        """
+        creative = {
+            "meta": {"target_length": 20},
+            "beats": [
+                {
+                    "purpose": "brand_close",
+                    "subtitle": "Closing shot",
+                    "vo": "Driven by quality.",
+                    "visual": "product hero closing shot exterior",
+                },
+            ],
+        }
+        slots = build_project_slots_from_creative(creative)
+        self.assertEqual(len(slots), 1, "brand_close must yield exactly one slot")
+        slot = slots[0]
+        self.assertEqual(slot.get("coverage"), "wide",
+                         f"brand_close slot must have coverage=wide, got {slot!r}")
+
+        subject = slot["subject"]
+        action = slot["action"]
+        scene = slot.get("scene", "factory-floor")
+        move = slot.get("move", "static")
+        self.assertTrue(subject and action,
+                        f"brand_close slot missing subject/action: {slot!r}")
+
+        filename = build_factory_filename(
+            scene, slot.get("content", ""), "wide", move, 1, ".mp4",
+            subject=subject, action=action,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / filename
+            p.write_bytes(b"x")
+            file_key = parse_factory_filename_key(p)
+            self.assertEqual(file_key, (subject, action, "wide"),
+                             f"brand_close filename {filename!r} parsed to wrong key {file_key!r}")
+
+            summary = summarize_factory_coverage(
+                [{"Subject": subject, "Action": action, "CoverageCanonical": "wide"}],
+                Path(tmp),
+            )
+        self.assertEqual(summary["total_ready"], 1,
+                         "brand_close slot file must count as ready")
+        self.assertEqual(summary["total_missing"], 0)
+
+    def test_brand_close_emits_only_one_slot_regardless_of_duration_hint(self) -> None:
+        """brand_close must never generate a second slot for longer duration hints."""
+        creative = {
+            "meta": {"target_length": 30},
+            "beats": [
+                {
+                    "purpose": "brand_close",
+                    "subtitle": "S",
+                    "vo": "V",
+                    "visual": "product hero wide shot",
+                    "duration_hint": 8.0,
+                },
+            ],
+        }
+        slots = build_project_slots_from_creative(creative)
+        self.assertEqual(len(slots), 1,
+                         "brand_close must always yield exactly one slot regardless of duration")
+
+
+class NextIndexForNonFactorySceneTests(unittest.TestCase):
+    """
+    Prove next_index_for is not factory-scene-specific.
+
+    Uses testing-area with explicit subject/action so the test does not depend
+    on legacy content derivation.
+    """
+
+    _SCENE = "testing-area"
+    _KWARGS = dict(subject="workspace", action="inspect")
+
+    def _write(self, factory_dir: Path, filename: str) -> None:
+        (factory_dir / filename).write_bytes(b"x")
+
+    def test_next_index_for_counts_mixed_variants_on_non_factory_scene(self) -> None:
+        """v1, v2, v10 under testing-area must all be counted; next = 11."""
+        with tempfile.TemporaryDirectory() as tmp:
+            factory_dir = Path(tmp)
+            for suffix in ("v1", "v2", "v10"):
+                self._write(factory_dir,
+                            f"testing-area_workspace_inspect_medium_static_{suffix}.mp4")
+
+            nxt = next_index_for(
+                factory_dir, self._SCENE, "inspection", "medium", "static", ".mp4",
+                **self._KWARGS,
+            )
+        self.assertEqual(nxt, 11,
+                         "next_index_for must see all three testing-area variants")
+
+    def test_next_index_for_ignores_wrong_coverage_and_move_on_non_factory_scene(self) -> None:
+        """Wrong coverage and wrong move files must be ignored even for non-factory scenes."""
+        with tempfile.TemporaryDirectory() as tmp:
+            factory_dir = Path(tmp)
+            self._write(factory_dir,
+                        "testing-area_workspace_inspect_medium_static_v1.mp4")   # matching
+            self._write(factory_dir,
+                        "testing-area_workspace_inspect_wide_static_v2.mp4")     # wrong coverage
+            self._write(factory_dir,
+                        "testing-area_workspace_inspect_medium_pushin_v3.mp4")   # wrong move
+
+            nxt = next_index_for(
+                factory_dir, self._SCENE, "inspection", "medium", "static", ".mp4",
+                **self._KWARGS,
+            )
+        self.assertEqual(nxt, 2,
+                         "only the matching file (v1) must be counted; wrong-coverage/move ignored")
+
+
 if __name__ == "__main__":
     unittest.main()
