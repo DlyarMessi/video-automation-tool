@@ -31,3 +31,5 @@ Pool Fill save writes wrong canonical action in filename.
 2. `summarize_factory_coverage` — `safe_slug("")` returns `"untitled"` (truthy), causing it to take the wrong branch. Separate fix needed.
 3. `test_workflow_compile_pool_tags` — pre-existing failure, `allowed` set doesn't match current `compile_creative_dict` output. Needs fixture update.
 4. Reclass path (~ln 2817 in ui_app.py) round-trips canonical subject/action back through legacy content string — wasteful but currently correct.
+5. Render button click causes Streamlit to scroll to top — framework behavior, fixable with st.fragment if needed.
+6. Vocabulary divergence: SCENE_VALUES, SUBJECT_VALUES, ACTION_VALUES, COVERAGE_VALUES, MOVE_VALUES across material_index.py, workflow.py, scene/move_vocabulary.yaml, and script_pipeline.py are not unified. Future task: single source of truth.
