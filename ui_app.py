@@ -845,7 +845,7 @@ def render_pool_active_slot_card(
             else:
                 rejected_msgs = []
                 saved_count = 0
-                cur = next_index_for(factory_dir, scene_name, content_name, coverage_name, move_name, ext_choice_pool)
+                cur = next_index_for(factory_dir, scene_name, content_name, coverage_name, move_name, ext_choice_pool, subject=subject_text, action=action_text)
 
                 def _apply_defaults(saved_name: str):
                     update_asset_record_fields(
@@ -874,7 +874,7 @@ def render_pool_active_slot_card(
                                     rejected_msgs.append(f"{uf.name}: {actual} does not match current layout ({orientation}).")
                                     continue
 
-                            fname = build_factory_filename(scene_name, content_name, coverage_name, move_name, cur, ext)
+                            fname = build_factory_filename(scene_name, content_name, coverage_name, move_name, cur, ext, subject=subject_text, action=action_text)
                             saved_path = safe_write_file(factory_dir / fname, uf.getbuffer().tobytes())
                             upsert_asset_record(factory_dir / "asset_index.json", saved_path)
                             _apply_defaults(saved_path.name)
@@ -893,7 +893,7 @@ def render_pool_active_slot_card(
                                 continue
 
                         ext = src.suffix.lower() or ext_choice_pool
-                        fname = build_factory_filename(scene_name, content_name, coverage_name, move_name, cur, ext)
+                        fname = build_factory_filename(scene_name, content_name, coverage_name, move_name, cur, ext, subject=subject_text, action=action_text)
                         dst = factory_dir / fname
                         if dst.exists():
                             dst = factory_dir / f"{Path(fname).stem}_{now_tag()}{ext}"
@@ -914,6 +914,9 @@ def render_pool_active_slot_card(
 
                 if saved_count > 0:
                     st.session_state["_pool_save_flash"] = f"Saved {saved_count} clip(s) to pool."
+                    _beat_no = int(row.get("beat_no", 0) or 0)
+                    if _beat_no > 0:
+                        st.session_state["project_step2_focus_beat"] = str(_beat_no)
                     st.rerun()
                 elif not rejected_msgs:
                     st.info(tr("No clips were saved."))
@@ -945,6 +948,8 @@ def render_pool_completed_slot_card(
 
     display_label = str(row.get("display_label", "") or "").strip() or str(row.get("slot_label", "Slot")).strip()
     shoot_brief_text = str(row.get("shoot_brief_text", "") or "").strip()
+    mission_title = build_mission_title(row, display_label)
+    spec_line = build_spec_line(row)
 
     subject_text = str(row.get("subject", "") or row.get("Subject", "") or "").strip()
     action_text = str(row.get("action", "") or row.get("Action", "") or "").strip()
@@ -1072,7 +1077,7 @@ def render_pool_completed_slot_card(
             else:
                 rejected_msgs = []
                 saved_count = 0
-                cur = next_index_for(factory_dir, scene_name, content_name, coverage_name, move_name, ext_choice_pool)
+                cur = next_index_for(factory_dir, scene_name, content_name, coverage_name, move_name, ext_choice_pool, subject=subject_text, action=action_text)
 
                 def _apply_defaults(saved_name: str):
                     update_asset_record_fields(
@@ -1101,7 +1106,7 @@ def render_pool_completed_slot_card(
                                     rejected_msgs.append(f"{uf.name}: {actual} does not match current layout ({orientation}).")
                                     continue
 
-                            fname = build_factory_filename(scene_name, content_name, coverage_name, move_name, cur, ext)
+                            fname = build_factory_filename(scene_name, content_name, coverage_name, move_name, cur, ext, subject=subject_text, action=action_text)
                             saved_path = safe_write_file(factory_dir / fname, uf.getbuffer().tobytes())
                             upsert_asset_record(factory_dir / "asset_index.json", saved_path)
                             _apply_defaults(saved_path.name)
@@ -1120,7 +1125,7 @@ def render_pool_completed_slot_card(
                                 continue
 
                         ext = src.suffix.lower() or ext_choice_pool
-                        fname = build_factory_filename(scene_name, content_name, coverage_name, move_name, cur, ext)
+                        fname = build_factory_filename(scene_name, content_name, coverage_name, move_name, cur, ext, subject=subject_text, action=action_text)
                         dst = factory_dir / fname
                         if dst.exists():
                             dst = factory_dir / f"{Path(fname).stem}_{now_tag()}{ext}"
@@ -1141,6 +1146,9 @@ def render_pool_completed_slot_card(
 
                 if saved_count > 0:
                     st.session_state["_pool_save_flash"] = f"Saved {saved_count} clip(s) to pool."
+                    _beat_no = int(row.get("beat_no", 0) or 0)
+                    if _beat_no > 0:
+                        st.session_state["project_step2_focus_beat"] = str(_beat_no)
                     st.rerun()
                 elif not rejected_msgs:
                     st.info("No clips were saved.")
@@ -2012,7 +2020,7 @@ with st.sidebar:
 
         st.markdown(f"### {tr('Output Defaults')}")
         target_fps = get_default_fps()
-        filter_preset_name = st.selectbox(tr("Visual Filter"), ["clean", "industrial", "warm_brand"], index=1)
+        filter_preset_name = st.selectbox(tr("Visual Filter"), ["clean", "industrial", "warm_brand"], index=0)
         _ = get_filter_preset(filter_preset_name)
         st.caption(f"FPS: {target_fps}  |  Filter: {filter_preset_name}")
 
@@ -3034,9 +3042,13 @@ else:
                 progress.progress(100)
 
                 preflight_summary = None
+                inventory_preflight_summary = None
                 for line in render_logs.splitlines():
                     if "Timing preflight failed:" in line:
                         preflight_summary = line.split("Timing preflight failed:", 1)[1].strip()
+                        break
+                    if "Inventory preflight failed:" in line:
+                        inventory_preflight_summary = line.split("Inventory preflight failed:", 1)[1].strip()
                         break
 
                 if preflight_summary:
@@ -3055,6 +3067,14 @@ else:
                         st.info(f"Rescue hint: {rescue_hint}")
 
                     st.info("Shorten narration or increase visual timing, then try again.")
+                elif inventory_preflight_summary:
+                    status.markdown("**Inventory Preflight Blocked Video Creation.**")
+                    st.error(
+                        "Inventory preflight blocked video creation: required inventory buckets are missing "
+                        "before VO, TTS, and render can start."
+                    )
+                    st.info(inventory_preflight_summary)
+                    st.info("Add footage for the missing bucket(s) or adjust the script to use available inventory, then try again.")
                 else:
                     st.error("Video rendering failed. See _internal/render.log in the Run Folder.")
 

@@ -683,6 +683,20 @@ def _normalize_shots_from_dsl(dsl: dict) -> list:
     return shots
 
 
+def _raise_inventory_preflight_error(failures: List[Dict[str, Any]]) -> None:
+    if not failures:
+        return
+
+    parts: List[str] = []
+    for failure in failures:
+        shot_index = int(failure.get("shot_index", 0) or 0)
+        source_spec = str(failure.get("source_spec", "") or "").strip()
+        reason = str(failure.get("reason", "") or "").strip()
+        parts.append(f"shot {shot_index}: source={source_spec!r}; reason={reason}")
+
+    raise ValueError("Inventory preflight failed: " + " | ".join(parts))
+
+
 # =========================
 # Main pipeline
 # =========================
@@ -871,6 +885,7 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
                 logger.warning("[%s] DirectorEngine pre-allocation failed: %s", company_name, _de)
 
     planner = AllocationPlanner(picker)
+    inventory_failures: List[Dict[str, Any]] = []
     for _i, _s in enumerate(dsl_shots, 1):
         if not isinstance(_s, dict):
             continue
@@ -897,6 +912,15 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
             )
         else:
             logger.warning("Phase 0.5 allocation failed: %s", _decision.reason)
+            inventory_failures.append(
+                {
+                    "shot_index": _i,
+                    "source_spec": _intent.source_spec,
+                    "reason": _decision.reason,
+                }
+            )
+
+    _raise_inventory_preflight_error(inventory_failures)
 
     # =========================
     # ✅ Phase 0: VO（只做一次）
