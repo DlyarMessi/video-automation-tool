@@ -845,7 +845,7 @@ def render_pool_active_slot_card(
             else:
                 rejected_msgs = []
                 saved_count = 0
-                cur = next_index_for(factory_dir, scene_name, content_name, coverage_name, move_name, ext_choice_pool)
+                cur = next_index_for(factory_dir, scene_name, content_name, coverage_name, move_name, ext_choice_pool, subject=subject_text, action=action_text)
 
                 def _apply_defaults(saved_name: str):
                     update_asset_record_fields(
@@ -874,7 +874,7 @@ def render_pool_active_slot_card(
                                     rejected_msgs.append(f"{uf.name}: {actual} does not match current layout ({orientation}).")
                                     continue
 
-                            fname = build_factory_filename(scene_name, content_name, coverage_name, move_name, cur, ext)
+                            fname = build_factory_filename(scene_name, content_name, coverage_name, move_name, cur, ext, subject=subject_text, action=action_text)
                             saved_path = safe_write_file(factory_dir / fname, uf.getbuffer().tobytes())
                             upsert_asset_record(factory_dir / "asset_index.json", saved_path)
                             _apply_defaults(saved_path.name)
@@ -893,7 +893,7 @@ def render_pool_active_slot_card(
                                 continue
 
                         ext = src.suffix.lower() or ext_choice_pool
-                        fname = build_factory_filename(scene_name, content_name, coverage_name, move_name, cur, ext)
+                        fname = build_factory_filename(scene_name, content_name, coverage_name, move_name, cur, ext, subject=subject_text, action=action_text)
                         dst = factory_dir / fname
                         if dst.exists():
                             dst = factory_dir / f"{Path(fname).stem}_{now_tag()}{ext}"
@@ -1074,7 +1074,7 @@ def render_pool_completed_slot_card(
             else:
                 rejected_msgs = []
                 saved_count = 0
-                cur = next_index_for(factory_dir, scene_name, content_name, coverage_name, move_name, ext_choice_pool)
+                cur = next_index_for(factory_dir, scene_name, content_name, coverage_name, move_name, ext_choice_pool, subject=subject_text, action=action_text)
 
                 def _apply_defaults(saved_name: str):
                     update_asset_record_fields(
@@ -1103,7 +1103,7 @@ def render_pool_completed_slot_card(
                                     rejected_msgs.append(f"{uf.name}: {actual} does not match current layout ({orientation}).")
                                     continue
 
-                            fname = build_factory_filename(scene_name, content_name, coverage_name, move_name, cur, ext)
+                            fname = build_factory_filename(scene_name, content_name, coverage_name, move_name, cur, ext, subject=subject_text, action=action_text)
                             saved_path = safe_write_file(factory_dir / fname, uf.getbuffer().tobytes())
                             upsert_asset_record(factory_dir / "asset_index.json", saved_path)
                             _apply_defaults(saved_path.name)
@@ -1122,7 +1122,7 @@ def render_pool_completed_slot_card(
                                 continue
 
                         ext = src.suffix.lower() or ext_choice_pool
-                        fname = build_factory_filename(scene_name, content_name, coverage_name, move_name, cur, ext)
+                        fname = build_factory_filename(scene_name, content_name, coverage_name, move_name, cur, ext, subject=subject_text, action=action_text)
                         dst = factory_dir / fname
                         if dst.exists():
                             dst = factory_dir / f"{Path(fname).stem}_{now_tag()}{ext}"

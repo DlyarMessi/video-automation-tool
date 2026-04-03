@@ -768,11 +768,15 @@ def render_html_task_table(rows: list[dict]) -> str:
 # =========================================================
 # Footage pool helpers
 # =========================================================
-def build_factory_filename(scene: str, content: str, coverage: str, move: str, idx: int, ext: str) -> str:
+def build_factory_filename(scene: str, content: str, coverage: str, move: str, idx: int, ext: str, *, subject: str | None = None, action: str | None = None) -> str:
     scene = safe_slug(scene).lower() or "factory-floor"
-    subject, action = _legacy_subject_action_from_content(content, purpose="")
-    subject = safe_slug(subject).lower() or "workspace"
-    action = safe_slug(action).lower() or "display"
+    if subject is not None and action is not None:
+        subject = safe_slug(subject).lower() or "workspace"
+        action = safe_slug(action).lower() or "display"
+    else:
+        subject, action = _legacy_subject_action_from_content(content, purpose="")
+        subject = safe_slug(subject).lower() or "workspace"
+        action = safe_slug(action).lower() or "display"
     coverage = _canonical_coverage_from_legacy(coverage)
     move = safe_slug(move).lower() if str(move or "").strip() else "static"
 
@@ -782,11 +786,15 @@ def build_factory_filename(scene: str, content: str, coverage: str, move: str, i
     return f"{scene}_{subject}_{action}_{coverage}_{move}_{variant}{ext}"
 
 
-def next_index_for(factory_dir: Path, scene: str, content: str, coverage: str, move: str, ext: str) -> int:
+def next_index_for(factory_dir: Path, scene: str, content: str, coverage: str, move: str, ext: str, *, subject: str | None = None, action: str | None = None) -> int:
     scene = safe_slug(scene).lower() or "factory-floor"
-    subject, action = _legacy_subject_action_from_content(content, purpose="")
-    subject = safe_slug(subject).lower() or "workspace"
-    action = safe_slug(action).lower() or "display"
+    if subject is not None and action is not None:
+        subject = safe_slug(subject).lower() or "workspace"
+        action = safe_slug(action).lower() or "display"
+    else:
+        subject, action = _legacy_subject_action_from_content(content, purpose="")
+        subject = safe_slug(subject).lower() or "workspace"
+        action = safe_slug(action).lower() or "display"
     coverage = _canonical_coverage_from_legacy(coverage)
     move = safe_slug(move).lower() if str(move or "").strip() else "static"
     if not ext.startswith("."):
