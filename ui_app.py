@@ -945,6 +945,8 @@ def render_pool_completed_slot_card(
 
     display_label = str(row.get("display_label", "") or "").strip() or str(row.get("slot_label", "Slot")).strip()
     shoot_brief_text = str(row.get("shoot_brief_text", "") or "").strip()
+    mission_title = build_mission_title(row, display_label)
+    spec_line = build_spec_line(row)
 
     subject_text = str(row.get("subject", "") or row.get("Subject", "") or "").strip()
     action_text = str(row.get("action", "") or row.get("Action", "") or "").strip()
