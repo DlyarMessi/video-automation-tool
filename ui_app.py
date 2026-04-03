@@ -914,6 +914,9 @@ def render_pool_active_slot_card(
 
                 if saved_count > 0:
                     st.session_state["_pool_save_flash"] = f"Saved {saved_count} clip(s) to pool."
+                    _beat_no = int(row.get("beat_no", 0) or 0)
+                    if _beat_no > 0:
+                        st.session_state["project_step2_focus_beat"] = str(_beat_no)
                     st.rerun()
                 elif not rejected_msgs:
                     st.info(tr("No clips were saved."))
@@ -1143,6 +1146,9 @@ def render_pool_completed_slot_card(
 
                 if saved_count > 0:
                     st.session_state["_pool_save_flash"] = f"Saved {saved_count} clip(s) to pool."
+                    _beat_no = int(row.get("beat_no", 0) or 0)
+                    if _beat_no > 0:
+                        st.session_state["project_step2_focus_beat"] = str(_beat_no)
                     st.rerun()
                 elif not rejected_msgs:
                     st.info("No clips were saved.")
@@ -2014,7 +2020,7 @@ with st.sidebar:
 
         st.markdown(f"### {tr('Output Defaults')}")
         target_fps = get_default_fps()
-        filter_preset_name = st.selectbox(tr("Visual Filter"), ["clean", "industrial", "warm_brand"], index=1)
+        filter_preset_name = st.selectbox(tr("Visual Filter"), ["clean", "industrial", "warm_brand"], index=0)
         _ = get_filter_preset(filter_preset_name)
         st.caption(f"FPS: {target_fps}  |  Filter: {filter_preset_name}")
 

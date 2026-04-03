@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Siglen · default · portrait · Pool Fill Gap Report</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+    margin: 24px;
+    color: #111;
+    background: #fafafa;
+  }
+  .page {
+    max-width: 1120px;
+    margin: 0 auto;
+  }
+  .header {
+    background: white;
+    border: 1px solid #e5e5e5;
+    border-radius: 16px;
+    padding: 18px 20px;
+    margin-bottom: 22px;
+  }
+  h1 { font-size: 30px; margin: 0 0 8px; }
+  h2 { font-size: 22px; margin: 0 0 8px; }
+  h3 { font-size: 18px; margin: 0 0 6px; }
+  .muted { color: #666; }
+  .tiny { color: #777; font-size: 13px; }
+  .summary {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+  }
+  .topic-section { margin-bottom: 28px; }
+  .topic-header {
+    background: white;
+    border: 1px solid #ececec;
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+  }
+  .slot-card {
+    background: white;
+    border: 1px solid #e8e8e8;
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 14px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+  }
+  .slot-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: flex-start;
+    margin-bottom: 12px;
+  }
+  .slot-meta {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .pill {
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 999px;
+    padding: 6px 10px;
+    font-size: 12px;
+    color: #333;
+  }
+  .pill.ok {
+    background: #ecfdf5;
+    border-color: #a7f3d0;
+  }
+  .pill.warn {
+    background: #fff7ed;
+    border-color: #fdba74;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+  .cell {
+    background: #fcfcfc;
+    border: 1px solid #efefef;
+    border-radius: 12px;
+    padding: 12px;
+  }
+  .label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #666;
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+  ul {
+    margin: 0;
+    padding-left: 18px;
+  }
+  p {
+    margin: 0;
+    line-height: 1.5;
+  }
+  @media (max-width: 780px) {
+    body { margin: 14px; }
+    .grid { grid-template-columns: 1fr; }
+    .slot-top { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+  <div class="page">
+    <div class="header">
+      <h1>Siglen · default · portrait · Pool Fill Gap Report</h1>
+      <p class="muted">Full plan gap report</p>
+      <p class="tiny">Factory dir: /Users/messi/Documents/Github/Projects/video-automation-tool/input_videos/portrait/Siglen/factory</p>
+      <div class="summary">
+        <span class="pill">target 158</span>
+        <span class="pill ok">existing 0</span>
+        <span class="pill warn">missing 158</span>
+      </div>
+    </div>
+    
+    <section class="topic-section">
+      <div class="topic-header">
+        <div>
+          <h2>Factory Strength</h2>
+          <p class="muted">Target 46 · Existing 0 · Missing 46</p>
+        </div>
+      </div>
+      
+            <div class="slot-card">
+              <div class="slot-top">
+                <div>
+                  <h3>Automation process detail</h3>
+                  <div class="tiny">factory / automation / detail / static</div>
+                  <div class='tiny'>registry_key: factory.automation.detail.static</div>
+                </div>
+                <div class="slot-meta">
+                  <span class='pill'>high</span>
+                  <span class="pill">target 12</span>
+                  <span class="pill ok">have 0</span>
+                  <span class="pill warn">missing 12</span>
+                </div>
+              </div>
+
+              <div class="grid">
+                <div class="cell">
+                  <div class="label">Shoot Brief</div>
+                  <p>Capture a stable close detail of automated machinery, robotic movement, or a precise production process.</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Purpose</div>
+                  <p>Provide precise visual proof of automated production</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Success Criteria</div>
+                  <ul><li>The detail clearly feels automated rather than generic factory footage</li><li>The frame is tight enough to show precision</li><li>The shot is stable and visually clean</li></ul>
+                </div>
+                <div class="cell">
+                  <div class="label">Fallback</div>
+                  <ul><li>Use another machine detail if the original process is inaccessible</li><li>Use a different robotic or mechanical close detail if it still clearly signals automation</li></ul>
+                </div>
+              </div>
+            </div>
+            
+            <div class="slot-card">
+              <div class="slot-top">
+                <div>
+                  <h3>Automation line wide shot</h3>
+                  <div class="tiny">factory / automation / wide / static</div>
+                  <div class='tiny'>registry_key: factory.automation.wide.static</div>
+                </div>
+                <div class="slot-meta">
+                  <span class='pill'>high</span>
+                  <span class="pill">target 10</span>
+                  <span class="pill ok">have 0</span>
+                  <span class="pill warn">missing 10</span>
+                </div>
+              </div>
+
+              <div class="grid">
+                <div class="cell">
+                  <div class="label">Shoot Brief</div>
+                  <p>Capture a stable wide shot that clearly shows the automated production area, machines, and workflow context.</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Purpose</div>
+                  <p>Show manufacturing capability and automation scale</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Success Criteria</div>
+                  <ul><li>The automation area is clearly recognizable</li><li>The frame shows enough space to understand the production setup</li><li>The shot feels stable and usable as a capability overview</li></ul>
+                </div>
+                <div class="cell">
+                  <div class="label">Fallback</div>
+                  <ul><li>Use a slightly tighter static angle if the full line cannot be framed cleanly</li><li>Use another wide automation area if it still communicates scale and automation clearly</li></ul>
+                </div>
+              </div>
+            </div>
+            
+            <div class="slot-card">
+              <div class="slot-top">
+                <div>
+                  <h3>Automation medium slide shot</h3>
+                  <div class="tiny">factory / automation / medium / slide</div>
+                  <div class='tiny'>registry_key: factory.automation.medium.slide</div>
+                </div>
+                <div class="slot-meta">
+                  <span class='pill'>high</span>
+                  <span class="pill">target 10</span>
+                  <span class="pill ok">have 0</span>
+                  <span class="pill warn">missing 10</span>
+                </div>
+              </div>
+
+              <div class="grid">
+                <div class="cell">
+                  <div class="label">Shoot Brief</div>
+                  <p>Capture a smooth side movement across the automated production area with one main machine or process clearly readable.</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Purpose</div>
+                  <p>Show automation capability with more dynamic motion</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Success Criteria</div>
+                  <ul><li>The movement feels controlled and smooth</li><li>One main automation subject remains readable throughout the shot</li><li>The shot feels more dynamic than a static overview</li></ul>
+                </div>
+                <div class="cell">
+                  <div class="label">Fallback</div>
+                  <ul><li>Use a shorter controlled side move if space is limited</li><li>Use a slow push or alternate side angle if sliding is not practical</li></ul>
+                </div>
+              </div>
+            </div>
+            
+            <div class="slot-card">
+              <div class="slot-top">
+                <div>
+                  <h3>Factory exterior wide establishing shot</h3>
+                  <div class="tiny">factory / building / wide / static</div>
+                  <div class='tiny'>registry_key: factory.building.wide.static</div>
+                </div>
+                <div class="slot-meta">
+                  <span class='pill'>high</span>
+                  <span class="pill">target 8</span>
+                  <span class="pill ok">have 0</span>
+                  <span class="pill warn">missing 8</span>
+                </div>
+              </div>
+
+              <div class="grid">
+                <div class="cell">
+                  <div class="label">Shoot Brief</div>
+                  <p>Capture a stable wide shot that clearly shows the factory building, scale, and surrounding context.</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Purpose</div>
+                  <p>Establish context and show factory scale</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Success Criteria</div>
+                  <ul><li>The full building or main facade is clearly visible</li><li>The shot feels stable and usable as an opening context shot</li><li>Brand or facility identity is readable if available</li></ul>
+                </div>
+                <div class="cell">
+                  <div class="label">Fallback</div>
+                  <ul><li>Use a slightly tighter static exterior if the full facade cannot be captured cleanly</li><li>Use a higher or more diagonal angle if it still clearly communicates factory scale</li></ul>
+                </div>
+              </div>
+            </div>
+            
+            <div class="slot-card">
+              <div class="slot-top">
+                <div>
+                  <h3>Factory hero orbit shot</h3>
+                  <div class="tiny">factory / building / hero / orbit</div>
+                  <div class='tiny'>registry_key: factory.building.hero.orbit</div>
+                </div>
+                <div class="slot-meta">
+                  <span class='pill'>high</span>
+                  <span class="pill">target 6</span>
+                  <span class="pill ok">have 0</span>
+                  <span class="pill warn">missing 6</span>
+                </div>
+              </div>
+
+              <div class="grid">
+                <div class="cell">
+                  <div class="label">Shoot Brief</div>
+                  <p>Capture a premium-looking orbit or curved movement around the factory exterior for brand-level usage.</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Purpose</div>
+                  <p>Create a premium brand-scale hero image</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Success Criteria</div>
+                  <ul><li>The movement feels smooth and intentional</li><li>The building remains the clear hero subject</li><li>The shot feels premium enough for key brand moments or closing use</li></ul>
+                </div>
+                <div class="cell">
+                  <div class="label">Fallback</div>
+                  <ul><li>Use a slow diagonal reveal if a full orbit is not practical</li><li>Use a controlled push or side move that still feels cinematic and brand-led</li></ul>
+                </div>
+              </div>
+            </div>
+            
+    </section>
+    
+    <section class="topic-section">
+      <div class="topic-header">
+        <div>
+          <h2>Quality &amp; Safety</h2>
+          <p class="muted">Target 34 · Existing 0 · Missing 34</p>
+        </div>
+      </div>
+      
+            <div class="slot-card">
+              <div class="slot-top">
+                <div>
+                  <h3>Test tower proof detail</h3>
+                  <div class="tiny">tower / testing / detail / static</div>
+                  <div class='tiny'>registry_key: tower.testing.detail.static</div>
+                </div>
+                <div class="slot-meta">
+                  <span class='pill'>high</span>
+                  <span class="pill">target 10</span>
+                  <span class="pill ok">have 0</span>
+                  <span class="pill warn">missing 10</span>
+                </div>
+              </div>
+
+              <div class="grid">
+                <div class="cell">
+                  <div class="label">Shoot Brief</div>
+                  <p>Capture a stable detail that acts as proof of testing, such as movement, indicators, machinery, or a testing interface.</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Purpose</div>
+                  <p>Provide precise visual proof of quality testing</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Success Criteria</div>
+                  <ul><li>The detail clearly supports the claim that testing is actively happening</li><li>The frame is tight enough to feel precise and technical</li><li>The shot remains stable and visually clean</li></ul>
+                </div>
+                <div class="cell">
+                  <div class="label">Fallback</div>
+                  <ul><li>Use another tower testing detail if the original detail is not accessible</li><li>Capture a different close proof point such as panel readout, movement interface, or mechanical testing detail</li></ul>
+                </div>
+              </div>
+            </div>
+            
+            <div class="slot-card">
+              <div class="slot-top">
+                <div>
+                  <h3>Test tower operation medium shot</h3>
+                  <div class="tiny">tower / testing / medium / static</div>
+                  <div class='tiny'>registry_key: tower.testing.medium.static</div>
+                </div>
+                <div class="slot-meta">
+                  <span class='pill'>high</span>
+                  <span class="pill">target 8</span>
+                  <span class="pill ok">have 0</span>
+                  <span class="pill warn">missing 8</span>
+                </div>
+              </div>
+
+              <div class="grid">
+                <div class="cell">
+                  <div class="label">Shoot Brief</div>
+                  <p>Capture a stable medium shot that clearly shows elevator testing activity happening in the tower area.</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Purpose</div>
+                  <p>Build trust by showing real testing in progress</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Success Criteria</div>
+                  <ul><li>Testing activity is visually understandable without extra explanation</li><li>The frame includes enough surrounding context to identify the area as a testing environment</li><li>The shot is stable and readable for trust-building use</li></ul>
+                </div>
+                <div class="cell">
+                  <div class="label">Fallback</div>
+                  <ul><li>Use a slightly wider static shot if medium framing cannot explain the testing clearly</li><li>Use a different tower testing angle if it still proves active testing behavior</li></ul>
+                </div>
+              </div>
+            </div>
+            
+            <div class="slot-card">
+              <div class="slot-top">
+                <div>
+                  <h3>Inspection detail shot</h3>
+                  <div class="tiny">factory / inspection / detail / static</div>
+                  <div class='tiny'>registry_key: factory.inspection.detail.static</div>
+                </div>
+                <div class="slot-meta">
+                  <span class='pill'>medium</span>
+                  <span class="pill">target 8</span>
+                  <span class="pill ok">have 0</span>
+                  <span class="pill warn">missing 8</span>
+                </div>
+              </div>
+
+              <div class="grid">
+                <div class="cell">
+                  <div class="label">Shoot Brief</div>
+                  <p>Capture a clear close detail of manual or visual inspection work, showing checking, reviewing, or confirming product quality.</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Purpose</div>
+                  <p>Show quality control and manual verification</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Success Criteria</div>
+                  <ul><li>Inspection activity is obvious from the frame</li><li>The detail feels precise rather than generic factory footage</li><li>The shot can support a quality-control message without extra explanation</li></ul>
+                </div>
+                <div class="cell">
+                  <div class="label">Fallback</div>
+                  <ul><li>Use another close inspection action if the original check point is unavailable</li><li>Use a different operator quality-check detail if it still clearly signals inspection work</li></ul>
+                </div>
+              </div>
+            </div>
+            
+            <div class="slot-card">
+              <div class="slot-top">
+                <div>
+                  <h3>Tower control panel detail</h3>
+                  <div class="tiny">tower / panel / detail / static</div>
+                  <div class='tiny'>registry_key: tower.panel.detail.static</div>
+                </div>
+                <div class="slot-meta">
+                  <span class='pill'>medium</span>
+                  <span class="pill">target 8</span>
+                  <span class="pill ok">have 0</span>
+                  <span class="pill warn">missing 8</span>
+                </div>
+              </div>
+
+              <div class="grid">
+                <div class="cell">
+                  <div class="label">Shoot Brief</div>
+                  <p>Capture a close stable detail of the tower-side control panel, screen, buttons, or instrumentation used in testing.</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Purpose</div>
+                  <p>Support the quality and testing narrative with technical detail</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Success Criteria</div>
+                  <ul><li>The panel or interface is the clear main subject</li><li>Important indicators, screens, or controls are readable or visually meaningful</li><li>The shot feels technical and controlled rather than random</li></ul>
+                </div>
+                <div class="cell">
+                  <div class="label">Fallback</div>
+                  <ul><li>Use another nearby test interface if the exact panel is inaccessible</li><li>Capture a different instrument detail if it still clearly supports the testing workflow</li></ul>
+                </div>
+              </div>
+            </div>
+            
+    </section>
+    
+    <section class="topic-section">
+      <div class="topic-header">
+        <div>
+          <h2>Warehouse &amp; Delivery</h2>
+          <p class="muted">Target 38 · Existing 0 · Missing 38</p>
+        </div>
+      </div>
+      
+            <div class="slot-card">
+              <div class="slot-top">
+                <div>
+                  <h3>Shipment follow shot</h3>
+                  <div class="tiny">loading / shipment / medium / follow</div>
+                  <div class='tiny'>registry_key: loading.shipment.medium.follow</div>
+                </div>
+                <div class="slot-meta">
+                  <span class='pill'>high</span>
+                  <span class="pill">target 8</span>
+                  <span class="pill ok">have 0</span>
+                  <span class="pill warn">missing 8</span>
+                </div>
+              </div>
+
+              <div class="grid">
+                <div class="cell">
+                  <div class="label">Shoot Brief</div>
+                  <p>Follow the moving shipment workflow, such as loading, transfer, or dispatch, with smooth subject-led motion.</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Purpose</div>
+                  <p>Show real delivery workflow and operational readiness</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Success Criteria</div>
+                  <ul><li>The movement clearly follows the shipment action</li><li>The logistics workflow is understandable from the shot</li><li>The motion feels smooth rather than shaky or accidental</li></ul>
+                </div>
+                <div class="cell">
+                  <div class="label">Fallback</div>
+                  <ul><li>Use a side-tracking or front-follow angle if the original path is blocked</li><li>Use a medium static workflow shot if follow movement is impossible but shipment handling remains clear</li></ul>
+                </div>
+              </div>
+            </div>
+            
+            <div class="slot-card">
+              <div class="slot-top">
+                <div>
+                  <h3>Warehouse storage wide shot</h3>
+                  <div class="tiny">warehouse / storage / wide / static</div>
+                  <div class='tiny'>registry_key: warehouse.storage.wide.static</div>
+                </div>
+                <div class="slot-meta">
+                  <span class='pill'>high</span>
+                  <span class="pill">target 8</span>
+                  <span class="pill ok">have 0</span>
+                  <span class="pill warn">missing 8</span>
+                </div>
+              </div>
+
+              <div class="grid">
+                <div class="cell">
+                  <div class="label">Shoot Brief</div>
+                  <p>Capture a stable wide shot of the storage area that shows organized inventory, warehouse scale, and operational readiness.</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Purpose</div>
+                  <p>Show logistics organization and storage readiness</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Success Criteria</div>
+                  <ul><li>Storage organization is visually clear</li><li>The frame communicates warehouse scale and order</li><li>The shot feels usable as a logistics overview</li></ul>
+                </div>
+                <div class="cell">
+                  <div class="label">Fallback</div>
+                  <ul><li>Use another wide warehouse aisle if the original section is cluttered</li><li>Use a slightly elevated or diagonal wide angle if it still shows organized storage clearly</li></ul>
+                </div>
+              </div>
+            </div>
+            
+            <div class="slot-card">
+              <div class="slot-top">
+                <div>
+                  <h3>Loading process detail</h3>
+                  <div class="tiny">loading / shipment / detail / static</div>
+                  <div class='tiny'>registry_key: loading.shipment.detail.static</div>
+                </div>
+                <div class="slot-meta">
+                  <span class='pill'>medium</span>
+                  <span class="pill">target 8</span>
+                  <span class="pill ok">have 0</span>
+                  <span class="pill warn">missing 8</span>
+                </div>
+              </div>
+
+              <div class="grid">
+                <div class="cell">
+                  <div class="label">Shoot Brief</div>
+                  <p>Capture a stable close detail from the shipment loading process, such as handling, package movement, or loading verification.</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Purpose</div>
+                  <p>Show shipment execution through close operational proof</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Success Criteria</div>
+                  <ul><li>The shot clearly belongs to the shipment workflow</li><li>The detail feels operational and specific</li><li>The frame is stable enough for trust-building use</li></ul>
+                </div>
+                <div class="cell">
+                  <div class="label">Fallback</div>
+                  <ul><li>Use another close loading-stage detail if the original action is blocked</li><li>Use a nearby package handling detail if it still clearly supports shipment execution</li></ul>
+                </div>
+              </div>
+            </div>
+            
+            <div class="slot-card">
+              <div class="slot-top">
+                <div>
+                  <h3>Warehouse storage detail</h3>
+                  <div class="tiny">warehouse / storage / detail / static</div>
+                  <div class='tiny'>registry_key: warehouse.storage.detail.static</div>
+                </div>
+                <div class="slot-meta">
+                  <span class='pill'>medium</span>
+                  <span class="pill">target 8</span>
+                  <span class="pill ok">have 0</span>
+                  <span class="pill warn">missing 8</span>
+                </div>
+              </div>
+
+              <div class="grid">
+                <div class="cell">
+                  <div class="label">Shoot Brief</div>
+                  <p>Capture a close stable detail of organized storage, labeling, stacked goods, or shelf-level warehouse order.</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Purpose</div>
+                  <p>Support the warehouse organization narrative with detail proof</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Success Criteria</div>
+                  <ul><li>The detail clearly represents storage rather than generic cargo</li><li>The frame feels organized and operationally clean</li><li>The detail can support a warehouse reliability message</li></ul>
+                </div>
+                <div class="cell">
+                  <div class="label">Fallback</div>
+                  <ul><li>Use another shelf, label, or stacked-goods detail if needed</li><li>Use a different close inventory detail if it still communicates order and control</li></ul>
+                </div>
+              </div>
+            </div>
+            
+            <div class="slot-card">
+              <div class="slot-top">
+                <div>
+                  <h3>Shipment weighing detail</h3>
+                  <div class="tiny">weighing / shipment / detail / static</div>
+                  <div class='tiny'>registry_key: weighing.shipment.detail.static</div>
+                </div>
+                <div class="slot-meta">
+                  <span class='pill'>medium</span>
+                  <span class="pill">target 6</span>
+                  <span class="pill ok">have 0</span>
+                  <span class="pill warn">missing 6</span>
+                </div>
+              </div>
+
+              <div class="grid">
+                <div class="cell">
+                  <div class="label">Shoot Brief</div>
+                  <p>Capture a close stable detail of the weighing step in the shipment process, such as scale readout, package placement, or weight confirmation.</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Purpose</div>
+                  <p>Support delivery credibility with a process-proof detail</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Success Criteria</div>
+                  <ul><li>The weighing action is clear and specific</li><li>The detail feels like a real operational proof point</li><li>The frame is stable enough for trust-building usage</li></ul>
+                </div>
+                <div class="cell">
+                  <div class="label">Fallback</div>
+                  <ul><li>Use another weighing-related close detail if the scale readout is hard to capture</li><li>Use a nearby shipment verification detail if it still supports process credibility</li></ul>
+                </div>
+              </div>
+            </div>
+            
+    </section>
+    
+    <section class="topic-section">
+      <div class="topic-header">
+        <div>
+          <h2>Product Showcase</h2>
+          <p class="muted">Target 40 · Existing 0 · Missing 40</p>
+        </div>
+      </div>
+      
+            <div class="slot-card">
+              <div class="slot-top">
+                <div>
+                  <h3>Cabin detail shot</h3>
+                  <div class="tiny">showroom / cabin / detail / static</div>
+                  <div class='tiny'>registry_key: showroom.cabin.detail.static</div>
+                </div>
+                <div class="slot-meta">
+                  <span class='pill'>medium</span>
+                  <span class="pill">target 10</span>
+                  <span class="pill ok">have 0</span>
+                  <span class="pill warn">missing 10</span>
+                </div>
+              </div>
+
+              <div class="grid">
+                <div class="cell">
+                  <div class="label">Shoot Brief</div>
+                  <p>Capture a stable close detail of the product cabin area, interior finish, or cabin-specific design detail in the showroom.</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Purpose</div>
+                  <p>Show cabin design quality and product finish detail</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Success Criteria</div>
+                  <ul><li>The detail clearly belongs to the cabin or interior area</li><li>The frame highlights finish, craftsmanship, or design clarity</li><li>The shot feels intentional and premium rather than random</li></ul>
+                </div>
+                <div class="cell">
+                  <div class="label">Fallback</div>
+                  <ul><li>Use another cabin-area detail if the original angle is blocked</li><li>Use a nearby interior product detail if it still clearly represents cabin quality</li></ul>
+                </div>
+              </div>
+            </div>
+            
+            <div class="slot-card">
+              <div class="slot-top">
+                <div>
+                  <h3>Showroom product slide shot</h3>
+                  <div class="tiny">showroom / product / medium / slide</div>
+                  <div class='tiny'>registry_key: showroom.product.medium.slide</div>
+                </div>
+                <div class="slot-meta">
+                  <span class='pill'>high</span>
+                  <span class="pill">target 8</span>
+                  <span class="pill ok">have 0</span>
+                  <span class="pill warn">missing 8</span>
+                </div>
+              </div>
+
+              <div class="grid">
+                <div class="cell">
+                  <div class="label">Shoot Brief</div>
+                  <p>Capture a smooth side movement around the showroom product while keeping the product dominant and clearly readable.</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Purpose</div>
+                  <p>Present the product with a more polished and premium motion layer</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Success Criteria</div>
+                  <ul><li>The movement feels smooth and premium</li><li>The product remains the main subject</li><li>The shot feels more polished than a static showroom overview</li></ul>
+                </div>
+                <div class="cell">
+                  <div class="label">Fallback</div>
+                  <ul><li>Use a shorter slide or controlled reveal if full side movement is constrained</li><li>Use a premium push if it keeps the product presentation clean</li></ul>
+                </div>
+              </div>
+            </div>
+            
+            <div class="slot-card">
+              <div class="slot-top">
+                <div>
+                  <h3>Showroom product wide shot</h3>
+                  <div class="tiny">showroom / product / wide / static</div>
+                  <div class='tiny'>registry_key: showroom.product.wide.static</div>
+                </div>
+                <div class="slot-meta">
+                  <span class='pill'>high</span>
+                  <span class="pill">target 8</span>
+                  <span class="pill ok">have 0</span>
+                  <span class="pill warn">missing 8</span>
+                </div>
+              </div>
+
+              <div class="grid">
+                <div class="cell">
+                  <div class="label">Shoot Brief</div>
+                  <p>Capture a stable wide shot of the showroom that clearly presents the featured product in a clean display environment.</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Purpose</div>
+                  <p>Establish product showcase context in a clean display environment</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Success Criteria</div>
+                  <ul><li>The showroom context is visually clear</li><li>The product is still readable as the primary subject</li><li>The shot feels clean and presentation-ready</li></ul>
+                </div>
+                <div class="cell">
+                  <div class="label">Fallback</div>
+                  <ul><li>Use another wide showroom angle if the original display area is crowded</li><li>Use a slightly tighter static composition if it still communicates product showcase context</li></ul>
+                </div>
+              </div>
+            </div>
+            
+            <div class="slot-card">
+              <div class="slot-top">
+                <div>
+                  <h3>Showroom panel detail</h3>
+                  <div class="tiny">showroom / panel / detail / static</div>
+                  <div class='tiny'>registry_key: showroom.panel.detail.static</div>
+                </div>
+                <div class="slot-meta">
+                  <span class='pill'>medium</span>
+                  <span class="pill">target 8</span>
+                  <span class="pill ok">have 0</span>
+                  <span class="pill warn">missing 8</span>
+                </div>
+              </div>
+
+              <div class="grid">
+                <div class="cell">
+                  <div class="label">Shoot Brief</div>
+                  <p>Capture a stable close detail of the showroom-side panel, interface, buttons, or product control area.</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Purpose</div>
+                  <p>Support the product feature narrative with interface detail</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Success Criteria</div>
+                  <ul><li>The panel or interface is the main subject</li><li>The detail feels product-related and presentation-ready</li><li>The shot is clean enough for premium product explanation or support footage</li></ul>
+                </div>
+                <div class="cell">
+                  <div class="label">Fallback</div>
+                  <ul><li>Use another interface or control-area close detail if needed</li><li>Use a nearby feature-control detail if it still clearly represents the product panel experience</li></ul>
+                </div>
+              </div>
+            </div>
+            
+            <div class="slot-card">
+              <div class="slot-top">
+                <div>
+                  <h3>Showroom product hero orbit</h3>
+                  <div class="tiny">showroom / product / hero / orbit</div>
+                  <div class='tiny'>registry_key: showroom.product.hero.orbit</div>
+                </div>
+                <div class="slot-meta">
+                  <span class='pill'>high</span>
+                  <span class="pill">target 6</span>
+                  <span class="pill ok">have 0</span>
+                  <span class="pill warn">missing 6</span>
+                </div>
+              </div>
+
+              <div class="grid">
+                <div class="cell">
+                  <div class="label">Shoot Brief</div>
+                  <p>Capture a premium hero-style orbit around the featured product in the showroom, keeping the product dominant and polished.</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Purpose</div>
+                  <p>Create a premium product hero shot for brand emphasis</p>
+                </div>
+                <div class="cell">
+                  <div class="label">Success Criteria</div>
+                  <ul><li>The product is the unmistakable hero subject</li><li>The movement feels premium, smooth, and intentional</li><li>The shot is strong enough for headline or closing brand usage</li></ul>
+                </div>
+                <div class="cell">
+                  <div class="label">Fallback</div>
+                  <ul><li>Use a premium slide or reveal if a full orbit is not practical</li><li>Use a stable hero framing if movement compromises product clarity</li></ul>
+                </div>
+              </div>
+            </div>
+            
+    </section>
+    
+  </div>
+</body>
+</html>
