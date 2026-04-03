@@ -1,24 +1,51 @@
 # Scene vocabulary
-# System scans visual description, first match wins
-# token becomes first segment: factory_<token>_...
+# System scans visual description top-to-bottom, first match wins
+# token must be a value accepted by SCENE_VALUES in material_index.py
+# Order matters: more specific entries must appear before generic ones
 
 version: 1
 
 entries:
-  - keywords: ["showroom", "display room", "exhibition"]
+  # Showroom / display environment — check before generic factory fallback
+  - keywords: ["showroom", "display room", "exhibition", "demo room"]
     token: showroom
 
-  - keywords: ["villa", "residential", "apartment", "home"]
-    token: site
+  # Dedicated testing / inspection environment — before factory-line/floor to win on QC visuals
+  - keywords: ["test rig", "load test", "safety test", "testing area", "inspection area",
+               "qc station", "test bench", "quality check", "inspection station",
+               "testing", "inspection"]
+    token: testing-area
 
-  - keywords: ["construction", "install site", "project site"]
-    token: site
+  # Production line / assembly area — before generic factory-floor
+  - keywords: ["production line", "assembly line", "conveyor", "automation line",
+               "manufacturing line", "robot arm", "factory line", "assembly floor",
+               "line production"]
+    token: factory-line
 
+  # Individual work area / bench
+  - keywords: ["workstation", "work station", "work bench", "operator station", "bench area"]
+    token: workstation
+
+  # Generic factory interior — catches "factory floor" phrase before bare "factory" fallback
+  - keywords: ["factory floor", "production floor", "factory interior",
+               "machine room", "factory hall", "shop floor"]
+    token: factory-floor
+
+  # Office / meeting environment
   - keywords: ["office", "meeting", "conference"]
     token: office
 
+  # Warehouse / storage / logistics
   - keywords: ["warehouse", "storage", "logistics"]
     token: warehouse
 
-  - keywords: ["outdoor", "campus", "aerial", "drone"]
+  # Exterior / outdoor / on-site — also absorbs the former non-canonical "site" cases
+  - keywords: ["outdoor", "campus", "aerial", "drone", "facade", "building exterior",
+               "villa", "residential", "apartment", "home",
+               "construction site", "install site", "project site"]
     token: exterior
+
+  # Building entrance / lobby
+  - keywords: ["entrance", "lobby", "reception", "front desk", "gate", "entry hall",
+               "building entry"]
+    token: entrance

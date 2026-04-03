@@ -20,6 +20,7 @@ SCENE_VALUES = {
     "testing-area",
     "warehouse",
     "office",
+    "factory",  # backward-compat alias: existing files written before factory-floor normalization
 }
 
 SUBJECT_VALUES = {
@@ -44,7 +45,7 @@ ACTION_VALUES = {
     "close",
 }
 
-COVERAGE_VALUES = {"wide", "medium", "close", "detail"}
+COVERAGE_VALUES = {"wide", "medium", "close", "detail", "hero"}  # "hero" is a backward-compat alias for "wide"; new writes use "wide"
 
 MOVE_VALUES = {
     "static",

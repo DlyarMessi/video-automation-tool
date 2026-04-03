@@ -445,7 +445,7 @@ def build_project_slots_from_creative(creative: dict) -> list[dict]:
         subtitle = str(beat.get("subtitle") or "").strip()
         vo_text = str(beat.get("vo") or "").strip()
         duration_hint = float(beat.get("duration_hint", 0) or 0)
-        scene = str(beat.get("scene") or "factory").strip()
+        scene = str(beat.get("scene") or "factory-floor").strip()
         move = _infer_move_from_visual(visual)
         snippet = _visual_snippet(visual)
         vkw = _visual_keyword(visual)
@@ -468,7 +468,7 @@ def build_project_slots_from_creative(creative: dict) -> list[dict]:
                     content=_content,
                     subject=_subject,
                     action=_action,
-                    coverage="hero",
+                    coverage="wide",
                     move=move,
                     target=1,
                     priority="high",
@@ -650,7 +650,7 @@ def build_project_slots_from_creative(creative: dict) -> list[dict]:
                     content=_close_content,
                     subject=_close_subject,
                     action=_close_action,
-                    coverage="hero",
+                    coverage="wide",
                     move=move,
                     target=1,
                     priority="high",
@@ -770,6 +770,8 @@ def render_html_task_table(rows: list[dict]) -> str:
 # =========================================================
 def build_factory_filename(scene: str, content: str, coverage: str, move: str, idx: int, ext: str, *, subject: str | None = None, action: str | None = None) -> str:
     scene = safe_slug(scene).lower() or "factory-floor"
+    if scene == "factory":
+        scene = "factory-floor"  # normalize bare alias to canonical scene token
     if subject is not None and action is not None:
         subject = safe_slug(subject).lower() or "workspace"
         action = safe_slug(action).lower() or "display"
@@ -788,6 +790,8 @@ def build_factory_filename(scene: str, content: str, coverage: str, move: str, i
 
 def next_index_for(factory_dir: Path, scene: str, content: str, coverage: str, move: str, ext: str, *, subject: str | None = None, action: str | None = None) -> int:
     scene = safe_slug(scene).lower() or "factory-floor"
+    if scene == "factory":
+        scene = "factory-floor"  # normalize bare alias to canonical scene token
     if subject is not None and action is not None:
         subject = safe_slug(subject).lower() or "workspace"
         action = safe_slug(action).lower() or "display"
@@ -801,7 +805,7 @@ def next_index_for(factory_dir: Path, scene: str, content: str, coverage: str, m
         ext = "." + ext
 
     core = f"{scene}_{subject}_{action}_{coverage}_{move}_v"
-    pat = re.compile(rf"^{re.escape(core)}(\d\d){re.escape(ext)}$", re.IGNORECASE)
+    pat = re.compile(rf"^{re.escape(core)}(\d+){re.escape(ext)}$", re.IGNORECASE)
     mx = 0
     if not factory_dir.exists():
         return 1
@@ -819,15 +823,46 @@ def next_index_for(factory_dir: Path, scene: str, content: str, coverage: str, m
     return mx + 1
 
 
+def _normalize_label_slug(raw: str) -> str:
+    """Collapse repeated underscores produced by ' / ' separators in human-readable labels."""
+    s = safe_slug(str(raw or "")).lower()
+    return re.sub(r"_+", "_", s).strip("_")
+
+
+# Human-readable Category labels → canonical content token.
+# Shared by normalize_demo_content_token and _canonical_need_key_from_legacy.
+_HUMAN_CONTENT_LABEL_MAP: dict[str, str] = {
+    "factory_line": "line",
+    "factory_process": "line",
+    "exterior_product_hero": "product",
+    "hero_establishing": "line",
+}
+
+# Human-readable Shot labels → intermediate coverage token.
+# Shared by normalize_demo_coverage_token and _canonical_need_key_from_legacy.
+_HUMAN_COVERAGE_LABEL_MAP: dict[str, str] = {
+    "wide_shot": "wide",
+    "medium_shot": "medium",
+    "detail_closeup": "closeup",
+    "detail_close-up": "closeup",
+    "hero_establishing": "hero",
+}
+
+
 def normalize_demo_content_token(token: str) -> str:
-    normalized = safe_slug(str(token or "")).lower()
+    normalized = _normalize_label_slug(token)
+    normalized = _HUMAN_CONTENT_LABEL_MAP.get(normalized, normalized)
     if normalized in {"line", "factory_line", "automation", "building", "testing", "inspection", "panel"}:
         return "line"
     return normalized or "line"
 
 
 def normalize_demo_coverage_token(token: str) -> str:
-    normalized = safe_slug(str(token or "")).lower()
+    # NOTE: this function returns demo-facing tokens ("hero" for all wide-type labels).
+    # _canonical_need_key_from_legacy uses _HUMAN_COVERAGE_LABEL_MAP directly and then
+    # calls _canonical_coverage_from_legacy, which maps hero/wide → "wide".
+    normalized = _normalize_label_slug(token)
+    normalized = _HUMAN_COVERAGE_LABEL_MAP.get(normalized, normalized)
     if normalized in {"hero", "wide"} or normalized.startswith("hero_") or normalized.startswith("wide_"):
         return "hero"
     if normalized == "medium" or normalized.startswith("medium_"):
@@ -845,6 +880,8 @@ def parse_factory_filename_key(path: Path) -> tuple[str, str, str] | None:
             subject = safe_slug(str(parsed.get("subject", "") or "")).lower()
             action = safe_slug(str(parsed.get("action", "") or "")).lower()
             coverage = safe_slug(str(parsed.get("coverage", "") or "")).lower()
+            if coverage == "hero":
+                coverage = "wide"  # backward-compat alias; old files used hero, canonical is wide
             if subject and action and coverage:
                 return subject, action, coverage
     except Exception:
@@ -900,12 +937,12 @@ def summarize_factory_coverage(rows: list[dict], factory_dir: Path) -> dict[str,
     factory_files = list_video_files(factory_dir, VIDEO_SUFFIXES)
     need_by: dict[tuple[str, str, str], int] = {}
     for r in rows:
-        subject = safe_slug(str(r.get("Subject", "") or "")).lower()
-        action = safe_slug(str(r.get("Action", "") or "")).lower()
-        coverage = safe_slug(str(r.get("CoverageCanonical", "") or "")).lower()
+        subject_raw = str(r.get("Subject", "") or "").strip()
+        action_raw = str(r.get("Action", "") or "").strip()
+        coverage_raw = str(r.get("CoverageCanonical", "") or "").strip()
 
-        if subject and action and coverage:
-            key = (subject, action, coverage)
+        if subject_raw and action_raw and coverage_raw:
+            key = (safe_slug(subject_raw).lower(), safe_slug(action_raw).lower(), safe_slug(coverage_raw).lower())
         else:
             key = _canonical_need_key_from_legacy(
                 content=str(r.get("Category", "") or ""),
@@ -947,8 +984,8 @@ def _infer_scene_token(visual: str) -> str:
     if "villa" in v:
         return "villa"
     if "factory" in v:
-        return "factory"
-    return "factory"
+        return "factory-floor"
+    return "factory-floor"
 
 
 def _infer_scene_from_visual(visual: str, beat_scene: str) -> str:
@@ -956,7 +993,7 @@ def _infer_scene_from_visual(visual: str, beat_scene: str) -> str:
     v = (visual or "").strip().lower()
     s = (beat_scene or "").strip().lower()
 
-    if s and s not in ("factory", ""):
+    if s and s not in ("factory", "factory-floor", ""):
         return s
 
     vocab = _load_vocabulary("scene_vocabulary")
@@ -972,7 +1009,7 @@ def _infer_scene_from_visual(visual: str, beat_scene: str) -> str:
             if any(str(kw).lower() in v for kw in keywords):
                 return token
 
-    return s if s else "factory"
+    return "factory-floor"
 
 
 def _infer_content_from_visual(visual: str, purpose: str) -> str:
@@ -1079,11 +1116,15 @@ def _canonical_coverage_from_legacy(token: str) -> str:
 
 
 def _canonical_need_key_from_legacy(content: str, coverage: str, purpose: str = "") -> tuple[str, str, str]:
-    subject, action = _legacy_subject_action_from_content(content, purpose)
+    content_slug = _normalize_label_slug(content)
+    coverage_slug = _normalize_label_slug(coverage)
+    content_norm = _HUMAN_CONTENT_LABEL_MAP.get(content_slug, content)
+    coverage_norm = _HUMAN_COVERAGE_LABEL_MAP.get(coverage_slug, coverage)
+    subject, action = _legacy_subject_action_from_content(content_norm, purpose)
     return (
         safe_slug(subject).lower(),
         safe_slug(action).lower(),
-        safe_slug(_canonical_coverage_from_legacy(coverage)).lower(),
+        safe_slug(_canonical_coverage_from_legacy(coverage_norm)).lower(),
     )
 
 
@@ -1171,7 +1212,7 @@ def compile_creative_dict(creative: Dict[str, Any]) -> Dict[str, Any]:
     seq: List[Dict[str, Any]] = []
 
     for slot in project_slots:
-        scene = str(slot.get("scene", "") or "factory").strip()
+        scene = str(slot.get("scene", "") or "factory-floor").strip()
         content = str(slot.get("content", "") or "line").strip()
         subject = str(slot.get("subject", "") or "").strip()
         action = str(slot.get("action", "") or "").strip()
