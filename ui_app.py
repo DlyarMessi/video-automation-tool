@@ -914,9 +914,6 @@ def render_pool_active_slot_card(
 
                 if saved_count > 0:
                     st.session_state["_pool_save_flash"] = f"Saved {saved_count} clip(s) to pool."
-                    _beat_no = int(row.get("beat_no", 0) or 0)
-                    if _beat_no > 0:
-                        st.session_state["project_step2_focus_beat"] = str(_beat_no)
                     st.rerun()
                 elif not rejected_msgs:
                     st.info(tr("No clips were saved."))
@@ -1146,9 +1143,6 @@ def render_pool_completed_slot_card(
 
                 if saved_count > 0:
                     st.session_state["_pool_save_flash"] = f"Saved {saved_count} clip(s) to pool."
-                    _beat_no = int(row.get("beat_no", 0) or 0)
-                    if _beat_no > 0:
-                        st.session_state["project_step2_focus_beat"] = str(_beat_no)
                     st.rerun()
                 elif not rejected_msgs:
                     st.info("No clips were saved.")
@@ -2914,11 +2908,14 @@ elif project_slots:
             break
 
     if "project_step2_focus_beat" not in st.session_state:
-        st.session_state["project_step2_focus_beat"] = str(first_missing_beat or (ordered_beat_nos[0] if ordered_beat_nos else "all"))
+        st.session_state["project_step2_focus_beat"] = "all"
 
     valid_focus_values = {"all"} | {str(x) for x in ordered_beat_nos}
     if str(st.session_state.get("project_step2_focus_beat", "all")) not in valid_focus_values:
-        st.session_state["project_step2_focus_beat"] = str(first_missing_beat or (ordered_beat_nos[0] if ordered_beat_nos else "all"))
+        st.session_state["project_step2_focus_beat"] = "all"
+
+    # discard any stale pending key left over from old sessions
+    st.session_state.pop("_project_step2_focus_beat_pending", None)
 
     focus_label = "当前拍摄段落" if str(st.session_state.get("display_lang", "en") or "en") == "zh" else "Current Editing Beat"
     focus_options = ["all"] + [str(x) for x in ordered_beat_nos]
@@ -2954,7 +2951,7 @@ elif project_slots:
 
         with st.expander(
             f"Beat {beat_no} · {beat_label}",
-            expanded=(selected_focus == "all" and beat_no == (first_missing_beat or (ordered_beat_nos[0] if ordered_beat_nos else beat_no))) or (selected_focus == str(beat_no)),
+            expanded=(selected_focus == "all") or (selected_focus == str(beat_no)),
         ):
             if beat_hint:
                 st.caption(tr(beat_hint))
