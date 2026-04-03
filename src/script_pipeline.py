@@ -55,6 +55,12 @@ def _extract_governed_vocab(bundle: CompilerBundle) -> dict[str, set[str]]:
             value = _clean_text(canonical.get(field_name, "")).lower()
             if value:
                 governed[field_name].add(value)
+    if not governed["subject"]:
+        from src.material_index import SUBJECT_VALUES
+        governed["subject"] = set(SUBJECT_VALUES)
+    if not governed["action"]:
+        from src.material_index import ACTION_VALUES
+        governed["action"] = set(ACTION_VALUES)
     return governed
 
 
