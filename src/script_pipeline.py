@@ -61,6 +61,10 @@ def _extract_governed_vocab(bundle: CompilerBundle) -> dict[str, set[str]]:
     if not governed["action"]:
         from src.material_index import ACTION_VALUES
         governed["action"] = set(ACTION_VALUES)
+    from src.material_index import SCENE_VALUES, COVERAGE_VALUES, MOVE_VALUES
+    governed["scene"] = governed.get("scene", set()) | set(SCENE_VALUES)
+    governed["coverage"] = governed.get("coverage", set()) | set(COVERAGE_VALUES)
+    governed["move"] = governed.get("move", set()) | set(MOVE_VALUES)
     return governed
 
 
