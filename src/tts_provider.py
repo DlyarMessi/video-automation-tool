@@ -63,7 +63,7 @@ def synthesize(req: TTSRequest, cache_dir: Path, timeout: int = 90) -> Path:
 def _elevenlabs_synthesize(req: TTSRequest, cache_dir: Path, timeout: int = 90) -> Path:
     api_key = (os.environ.get("ELEVENLABS_API_KEY") or "").strip()
     if not api_key:
-        raise RuntimeError("缺少环境变量 ELEVENLABS_API_KEY")
+        raise RuntimeError("Missing environment variable ELEVENLABS_API_KEY")
 
     lang = _lang_short(req.language)
 

@@ -14,6 +14,11 @@ class UILocalPrefs:
     last_voice_ids: dict[str, str] | None = None
     last_input_root: str = ""
     last_output_root: str = ""
+    last_work_mode: str = ""
+    last_planning_entry_mode_key: str = ""
+    last_src_mode: str = ""
+    last_active_creative_path: str = ""
+    last_selected_script_path: str = ""
 
     def __post_init__(self) -> None:
         if self.last_voice_ids is None:
@@ -48,6 +53,11 @@ def load_ui_local_prefs(root: Path) -> UILocalPrefs:
         last_eleven_model_id=str(payload.get("last_eleven_model_id", "eleven_multilingual_v2") or "eleven_multilingual_v2").strip(),
         last_input_root=str(payload.get("last_input_root", "") or "").strip(),
         last_output_root=str(payload.get("last_output_root", "") or "").strip(),
+        last_work_mode=str(payload.get("last_work_mode", "") or "").strip(),
+        last_planning_entry_mode_key=str(payload.get("last_planning_entry_mode_key", "") or "").strip(),
+        last_src_mode=str(payload.get("last_src_mode", "") or "").strip(),
+        last_active_creative_path=str(payload.get("last_active_creative_path", "") or "").strip(),
+        last_selected_script_path=str(payload.get("last_selected_script_path", "") or "").strip(),
         last_voice_ids={
             str(k).strip().lower(): str(v or "").strip()
             for k, v in raw_voice_ids.items()
@@ -151,3 +161,48 @@ def get_last_output_root(root: Path, default: Path) -> Path:
     prefs = load_ui_local_prefs(root)
     raw = str(prefs.last_output_root or "").strip()
     return Path(raw).expanduser() if raw else default
+
+
+def remember_last_work_mode(root: Path, work_mode: str) -> None:
+    clean = str(work_mode or "").strip()
+    prefs = load_ui_local_prefs(root)
+    if prefs.last_work_mode == clean:
+        return
+    prefs.last_work_mode = clean
+    save_ui_local_prefs(root, prefs)
+
+
+def remember_last_planning_entry_mode_key(root: Path, mode_key: str) -> None:
+    clean = str(mode_key or "").strip()
+    prefs = load_ui_local_prefs(root)
+    if prefs.last_planning_entry_mode_key == clean:
+        return
+    prefs.last_planning_entry_mode_key = clean
+    save_ui_local_prefs(root, prefs)
+
+
+def remember_last_src_mode(root: Path, src_mode: str) -> None:
+    clean = str(src_mode or "").strip()
+    prefs = load_ui_local_prefs(root)
+    if prefs.last_src_mode == clean:
+        return
+    prefs.last_src_mode = clean
+    save_ui_local_prefs(root, prefs)
+
+
+def remember_last_active_creative_path(root: Path, creative_path: str) -> None:
+    clean = str(creative_path or "").strip()
+    prefs = load_ui_local_prefs(root)
+    if prefs.last_active_creative_path == clean:
+        return
+    prefs.last_active_creative_path = clean
+    save_ui_local_prefs(root, prefs)
+
+
+def remember_last_selected_script_path(root: Path, script_path: str) -> None:
+    clean = str(script_path or "").strip()
+    prefs = load_ui_local_prefs(root)
+    if prefs.last_selected_script_path == clean:
+        return
+    prefs.last_selected_script_path = clean
+    save_ui_local_prefs(root, prefs)

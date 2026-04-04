@@ -24,14 +24,14 @@ def load_script(path: Path) -> dict:
             import yaml  # type: ignore
         except Exception as e:
             raise RuntimeError(
-                "需要解析 YAML 脚本，但当前环境没有安装 PyYAML。\n"
-                "请执行: python3 -m pip install pyyaml\n"
-                f"原始错误: {e}"
+                "PyYAML is required to parse YAML scripts, but it is not installed.\n"
+                "Run: python3 -m pip install pyyaml\n"
+                f"Original error: {e}"
             )
         with path.open("r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
         if not isinstance(data, dict):
-            raise ValueError("脚本顶层必须是一个对象(dict)")
+            raise ValueError("Script top-level value must be an object (dict)")
         return data
 
     if suffix == ".toml":
@@ -42,13 +42,13 @@ def load_script(path: Path) -> dict:
         with path.open("rb") as f:
             data = tomllib.load(f)
         if not isinstance(data, dict):
-            raise ValueError("脚本顶层必须是一个对象(dict)")
+            raise ValueError("Script top-level value must be an object (dict)")
         return data
 
     if suffix == ".json":
         data = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
-            raise ValueError("脚本顶层必须是一个对象(dict)")
+            raise ValueError("Script top-level value must be an object (dict)")
         return data
 
-    raise ValueError(f"不支持的脚本格式: {suffix}（支持 .yaml/.yml/.toml/.json）")
+    raise ValueError(f"Unsupported script format: {suffix} (supported: .yaml/.yml/.toml/.json)")

@@ -27,11 +27,11 @@ echo "[2/4] Canonical registry validation"
 "${PYTHON_BIN}" scripts/validate_canonical_registry.py
 
 echo
-echo "[3/4] Brand quality gate · Siglen"
+echo "[3/4] Brand quality gate | Siglen"
 bash scripts/quality_gate_brand.sh Siglen
 
 echo
-echo "[4/4] Brand quality gate · _starter"
+echo "[4/4] Brand quality gate | _starter"
 bash scripts/quality_gate_brand.sh _starter
 
 echo

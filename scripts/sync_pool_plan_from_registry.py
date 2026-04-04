@@ -256,7 +256,7 @@ def main() -> None:
 
     result = sync_plan_from_registry(plan_data, registry, mode=args.mode)
 
-    print(f"=== Registry Sync · {args.brand_name} / {plan_path.stem} ===")
+    print(f"=== Registry Sync | {args.brand_name} / {plan_path.stem} ===")
     print(f"plan_path            : {plan_path.relative_to(ROOT)}")
     print(f"mode                 : {args.mode}")
     print(f"slot_count           : {result['slot_count']}")

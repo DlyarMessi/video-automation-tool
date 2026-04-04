@@ -72,7 +72,7 @@ def main() -> None:
 
     overall_ok = (registry_code == 0) and (plan_code == 0) and (audit_code == 0) and (sync_code == 0)
 
-    print(f"=== Brand Preflight · {brand_name} / {args.plan} ===")
+    print(f"=== Brand Preflight | {brand_name} / {args.plan} ===")
     print(f"brand_dir           : {brand_dir}")
     print(f"logo                : {'found' if logo_path.exists() else 'optional / not set'}")
     print(f"registry_validate   : {status_label(registry_code)}")

@@ -2,9 +2,11 @@
 import json
 import hashlib
 import os
+import re
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -59,6 +61,11 @@ from src.ui_local_prefs import (
     get_last_output_root,
     remember_last_input_root,
     remember_last_output_root,
+    remember_last_work_mode,
+    remember_last_planning_entry_mode_key,
+    remember_last_src_mode,
+    remember_last_active_creative_path,
+    remember_last_selected_script_path,
 )
 
 from src.render_profile import get_default_fps, get_filter_preset
@@ -1247,6 +1254,105 @@ def run_cmd_silent(cmd: list[str], env: dict) -> tuple[int, str]:
     rc = p.wait() or 0
     return rc, "\n".join(lines)
 
+
+def _tail_lines(path: Path, max_lines: int = 120) -> list[str]:
+    if not path.exists():
+        return []
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except Exception:
+        return []
+    if len(lines) > max_lines:
+        return lines[-max_lines:]
+    return lines
+
+
+def _parse_ratio(current: int, total: int) -> float:
+    if total <= 0:
+        return 0.0
+    return max(0.0, min(float(current) / float(total), 1.0))
+
+
+def _clamp_progress(value: float) -> float:
+    return max(0.0, min(value, 1.0))
+
+
+def _render_phase_state(lines: list[str]) -> dict[str, object]:
+    phase = "Validating assets"
+    detail = "Checking script, inventory, and render settings."
+    ratio = 0.08
+    raw_tail = "\n".join(lines[-24:]) if lines else ""
+
+    moviepy_total = 0
+    moviepy_current = 0
+    ffmpeg_total = 0
+    ffmpeg_current = 0
+
+    moviepy_re = re.compile(r"frame_index:\s+\d+%.*?(\d+)/(\d+)")
+    ffmpeg_re = re.compile(r"frame=\s*(\d+)")
+    temp_probe_re = re.compile(r"Temporary MP4 video stream: .*frames=(\d+)")
+
+    for line in lines:
+        if "[INFO] Final MP4 written" in line or line.strip() == "Done":
+            phase = "Finalizing output"
+            detail = "Wrapping up files and verifying the final video."
+            ratio = 0.98
+
+        if "Using script:" in line or "Allocation shot=" in line or "Inventory preflight" in line:
+            phase = "Validating assets"
+            detail = "Matching footage and validating render inputs."
+            ratio = max(ratio, 0.14)
+
+        if "ELEVENLABS_VOICE_ID_ENV" in line or "MMS Local" in line:
+            phase = "Generating voice"
+            detail = "Building voiceover audio."
+            ratio = max(ratio, 0.28)
+
+        moviepy_match = moviepy_re.search(line)
+        if moviepy_match:
+            moviepy_current = int(moviepy_match.group(1))
+            moviepy_total = int(moviepy_match.group(2))
+            compose_ratio = _parse_ratio(moviepy_current, moviepy_total)
+            phase = "Composing timeline frames"
+            detail = f"MoviePy frames {moviepy_current}/{moviepy_total}"
+            ratio = max(ratio, 0.30 + compose_ratio * 0.48)
+
+        if "Temporary MP4 video stream:" in line:
+            probe_match = temp_probe_re.search(line)
+            if probe_match:
+                ffmpeg_total = max(ffmpeg_total, int(probe_match.group(1)))
+
+        if "ffmpeg version" in line or "Stream mapping:" in line or "Output #0, mp4" in line:
+            phase = "Burning subtitles / exporting MP4"
+            detail = "Encoding the final MP4 with subtitles."
+            ratio = max(ratio, 0.82)
+
+        ffmpeg_match = ffmpeg_re.search(line)
+        if ffmpeg_match:
+            ffmpeg_current = int(ffmpeg_match.group(1))
+            if ffmpeg_total <= 0 and moviepy_total > 0:
+                ffmpeg_total = moviepy_total
+            export_ratio = _parse_ratio(ffmpeg_current, ffmpeg_total) if ffmpeg_total > 0 else 0.0
+            phase = "Burning subtitles / exporting MP4"
+            detail = (
+                f"ffmpeg frames {ffmpeg_current}/{ffmpeg_total}"
+                if ffmpeg_total > 0
+                else f"ffmpeg frames {ffmpeg_current}"
+            )
+            ratio = max(ratio, 0.82 + export_ratio * 0.14)
+
+        if "Final MP4 video stream:" in line:
+            phase = "Finalizing output"
+            detail = "Final MP4 verified."
+            ratio = 1.0
+
+    return {
+        "phase": phase,
+        "detail": detail,
+        "ratio": _clamp_progress(ratio),
+        "raw_tail": raw_tail,
+    }
+
 def ensure_run_layout(run_dir: Path) -> dict[str, Path]:
     internal_dir = run_dir / "_internal"
     internal_dir.mkdir(parents=True, exist_ok=True)
@@ -1744,6 +1850,8 @@ def _restore_project_session_from_generated(company: str) -> bool:
         if project_slots:
             st.session_state["project_slots"] = project_slots
 
+        remember_last_active_creative_path(ROOT, str(creative_path))
+
         return True
 
     return False
@@ -1872,16 +1980,33 @@ with st.sidebar:
     )
     st.session_state["display_lang"] = "zh" if display_lang_label == "中文" else "en"
 
-    if "work_mode" not in st.session_state:
-        st.session_state["work_mode"] = "Script Planning / Project Mode"
+    work_mode_options = ["Script Planning / Project Mode", "Shoot Tasks / Coverage / Pool Fill"]
+    planning_entry_mode_options = ["ai", "existing"]
+    src_mode_options = ["Paste Script YAML", "Use Existing Script YAML"]
+
+    saved_active_creative_path = str(ui_prefs.last_active_creative_path or "").strip()
+    if company and not st.session_state.get("active_creative_path") and saved_active_creative_path:
+        saved_active_creative = Path(saved_active_creative_path).expanduser()
+        company_creative_root = CREATIVE_ROOT / company
+        if saved_active_creative.exists() and (
+            saved_active_creative.parent == company_creative_root / "generated"
+            or company_creative_root in saved_active_creative.parents
+        ):
+            st.session_state["active_creative_path"] = str(saved_active_creative)
+            remember_last_active_creative_path(ROOT, str(saved_active_creative))
+
+    if st.session_state.get("work_mode") not in work_mode_options:
+        saved_work_mode = str(ui_prefs.last_work_mode or "").strip()
+        st.session_state["work_mode"] = saved_work_mode if saved_work_mode in work_mode_options else "Script Planning / Project Mode"
 
     st.markdown(f"### {tr('Workflow')}")
     work_mode = st.radio(
         tr("Current Stage"),
-        ["Script Planning / Project Mode", "Shoot Tasks / Coverage / Pool Fill"],
+        work_mode_options,
         format_func=tr,
         key="work_mode",
     )
+    remember_last_work_mode(ROOT, work_mode)
     st.caption(tr("Render / Export becomes available after planning and coverage completion."))
 
     with st.expander(tr("System Settings"), expanded=False):
@@ -2335,28 +2460,44 @@ st.markdown(f"## 📝 {tr('Project Planning')}")
 st.caption(tr("Pick a planning path: AI Script Planning is the default workflow, and Import Existing Script stays available for manual control."))
 
 
-if "planning_entry_mode_key" not in st.session_state:
-    st.session_state["planning_entry_mode_key"] = "existing" if st.session_state.get("active_creative_path") else "ai"
+if st.session_state.get("planning_entry_mode_key") not in planning_entry_mode_options:
+    saved_planning_entry_mode_key = str(ui_prefs.last_planning_entry_mode_key or "").strip()
+    if saved_planning_entry_mode_key in planning_entry_mode_options:
+        st.session_state["planning_entry_mode_key"] = saved_planning_entry_mode_key
+    else:
+        st.session_state["planning_entry_mode_key"] = "existing" if st.session_state.get("active_creative_path") else "ai"
 
 planning_entry_mode_key = st.radio(
     "planning_entry_mode",
-    ["ai", "existing"],
+    planning_entry_mode_options,
     horizontal=True,
     key="planning_entry_mode_key",
     label_visibility="collapsed",
     format_func=lambda v: tr("✨ AI Script Planning") if v == "ai" else tr("📝 Import Existing Script"),
 )
+remember_last_planning_entry_mode_key(ROOT, planning_entry_mode_key)
 
 src_mode = "Paste Script YAML"
 selected_path: Path | None = None
 
 active_creative_for_ui = Path(st.session_state["active_creative_path"]) if st.session_state.get("active_creative_path") else None
-if "src_mode" not in st.session_state:
-    st.session_state["src_mode"] = (
-        "Use Existing Script YAML"
-        if active_creative_for_ui and active_creative_for_ui.exists()
-        else "Paste Script YAML"
-    )
+saved_selected_script_path = str(ui_prefs.last_selected_script_path or "").strip()
+if saved_selected_script_path and "select_yaml" not in st.session_state:
+    saved_selected_script = Path(saved_selected_script_path).expanduser()
+    company_creative_root = CREATIVE_ROOT / company
+    if saved_selected_script.exists() and company_creative_root in saved_selected_script.parents:
+        st.session_state["select_yaml"] = saved_selected_script
+
+if st.session_state.get("src_mode") not in src_mode_options:
+    saved_src_mode = str(ui_prefs.last_src_mode or "").strip()
+    if saved_src_mode in src_mode_options:
+        st.session_state["src_mode"] = saved_src_mode
+    else:
+        st.session_state["src_mode"] = (
+            "Use Existing Script YAML"
+            if active_creative_for_ui and active_creative_for_ui.exists()
+            else "Paste Script YAML"
+        )
 
 generate_ready = False
 generate_help = ""
@@ -2385,10 +2526,11 @@ if planning_entry_mode_key == "ai":
 else:
     src_mode = st.selectbox(
         tr("Manual Script Source"),
-        ["Paste Script YAML", "Use Existing Script YAML"],
+        src_mode_options,
         key="src_mode",
         format_func=tr,
     )
+    remember_last_src_mode(ROOT, src_mode)
     if src_mode == "Paste Script YAML":
         st.session_state["creative_draft"] = st.text_area(
             tr("Script YAML"),
@@ -2429,6 +2571,7 @@ else:
                 format_func=lambda pp: pp.name,
                 key="select_yaml",
             )
+            remember_last_selected_script_path(ROOT, str(selected_path))
             st.caption(tr("The selected script will be used as-is."))
 
     draft_text = str(st.session_state.get("creative_draft", "") or "").strip()
@@ -2438,6 +2581,8 @@ else:
     else:
         generate_ready = bool(draft_text)
         generate_help = tr("Paste script YAML to generate task rows.")
+
+remember_last_src_mode(ROOT, src_mode)
 
 action_a, action_b, action_c = st.columns([1, 1, 1])
 with action_a:
@@ -2506,6 +2651,7 @@ if generate_btn:
                 creative_path.write_text(creative_text, encoding="utf-8")
 
             st.session_state["active_creative_path"] = str(creative_path)
+            remember_last_active_creative_path(ROOT, str(creative_path))
             st.session_state["run_dir"] = ""
 
             task_rows_json = generated_dir / f"{creative_path.stem}.shooting_rows.json"
@@ -2999,6 +3145,9 @@ else:
     if st.button(tr("Create Video"), use_container_width=True, key="create_video"):
         progress = st.progress(0)
         status = st.empty()
+        phase_strip = st.empty()
+        detail_strip = st.empty()
+        logs_placeholder = st.empty()
 
         try:
             creative_name = active_creative_path.stem.replace(".creative", "")
@@ -3011,7 +3160,9 @@ else:
             st.session_state["run_dir"] = str(run_dir)
 
             status.markdown("**Preparing Workflow…**")
-            progress.progress(10)
+            progress.progress(8)
+            phase_strip.caption("Current phase: Validating assets")
+            detail_strip.caption("Checking script, inventory, and render settings.")
 
             run_env = dict(ENV)
             run_env["VIDEO_AUTOMATION_RUN_DIR"] = str(run_dir)
@@ -3021,19 +3172,51 @@ else:
             run_env["VIDEO_AUTOMATION_FILTER_PRESET"] = str(filter_preset_name)
             run_env["VIDEO_AUTOMATION_ELEVEN_PROFILE_PATH"] = str(ELEVEN_PROFILE_PATH)
 
-            status.markdown("**Preparing Render Plan…**")
-            progress.progress(35)
-
-            status.markdown("**Rendering Final Video…**")
-            progress.progress(70)
-
             cmd_run = [sys.executable, str(SRC_MAIN)]
             if "verbose" in locals() and verbose:
                 cmd_run.append("-v")
             cmd_run += ["run", "--company", company, "--script", str(active_creative_path), "--input", str(input_root_path)]
 
-            rc2, render_logs = run_cmd_silent(cmd_run, run_env)
-            (internal_dir / "render.log").write_text(render_logs, encoding="utf-8")
+            render_log_path = internal_dir / "render.log"
+            with render_log_path.open("w", encoding="utf-8") as log_fp:
+                proc = subprocess.Popen(
+                    cmd_run,
+                    cwd=str(ROOT),
+                    env=run_env,
+                    stdout=log_fp,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                )
+
+                render_logs = ""
+                while True:
+                    time.sleep(0.35)
+                    lines = _tail_lines(render_log_path, max_lines=800)
+                    render_logs = "\n".join(lines)
+                    telemetry = _render_phase_state(lines)
+
+                    status.markdown("**Rendering Final Video…**")
+                    progress.progress(int(float(telemetry["ratio"]) * 100))
+                    phase_strip.caption(f"Current phase: {telemetry['phase']}")
+                    detail_strip.caption(str(telemetry["detail"]))
+                    with logs_placeholder.container():
+                        with st.expander("Render details", expanded=False):
+                            st.code(str(telemetry["raw_tail"]) or "Waiting for render logs…", language="text")
+
+                    rc2 = proc.poll()
+                    if rc2 is not None:
+                        break
+
+                log_fp.flush()
+
+            render_logs = render_log_path.read_text(encoding="utf-8", errors="replace")
+            final_telemetry = _render_phase_state(render_logs.splitlines())
+            progress.progress(int(float(final_telemetry["ratio"]) * 100))
+            phase_strip.caption(f"Current phase: {final_telemetry['phase']}")
+            detail_strip.caption(str(final_telemetry["detail"]))
+            with logs_placeholder.container():
+                with st.expander("Render details", expanded=False):
+                    st.code(str(final_telemetry["raw_tail"]) or "No render logs captured.", language="text")
 
             if rc2 != 0:
                 progress.progress(100)
@@ -3086,6 +3269,8 @@ else:
 
             status.markdown(f"**{tr('Completed.')}**")
             progress.progress(100)
+            phase_strip.caption("Current phase: Finalizing output")
+            detail_strip.caption("Final MP4 is ready.")
             st.success(tr("Final video created successfully."))
 
         except SystemExit:

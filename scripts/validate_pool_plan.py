@@ -260,7 +260,7 @@ def main() -> None:
     semantic_any, semantic_full = semantic_coverage(slots)
     defaults_any, defaults_full = defaults_coverage(slots)
 
-    print(f"=== Pool Plan Validation · {args.brand_name} / {args.plan} ===")
+    print(f"=== Pool Plan Validation | {args.brand_name} / {args.plan} ===")
     print(f"plan_path         : {plan_path.relative_to(ROOT)}")
     print(f"slot_count        : {len(slots)}")
     print(f"semantic_any      : {semantic_any}/{len(slots) if slots else 0}")

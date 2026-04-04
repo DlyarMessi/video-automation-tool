@@ -291,7 +291,7 @@ def main() -> None:
     selected_plan = choose_plan(brand_dir, args.plan)
     registry_keys = load_registry_keys()
 
-    print(f"=== Brand Audit · {brand_name} ===")
+    print(f"=== Brand Audit | {brand_name} ===")
     print(f"brand_dir           : {brand_dir}")
     print(f"logo                : {'found' if logo_exists else 'optional / not set'}")
     print(f"pool_plan_count     : {len(plan_files)}")
