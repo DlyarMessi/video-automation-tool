@@ -556,7 +556,7 @@ def burn_subtitles_ffmpeg(
         f"PlayResX={PLAY_RES_X},"
         f"PlayResY={PLAY_RES_Y}"
     )
-    srt_filter_path = str(srt_path).replace("\\", "/").replace(":", r"\\:")
+    srt_filter_path = str(srt_path).replace("\\", "/").replace(":", r"\:")
 
     vf = (
         f"subtitles=filename='{srt_filter_path}':"
