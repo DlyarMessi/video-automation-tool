@@ -180,7 +180,7 @@ def _apply_filter_preset(video, project: dict):
     except Exception:
         pass
 
-    logger.info("🎨 Applied filter preset: %s", name)
+    logger.info("Applied filter preset: %s", name)
     return out
 
 # ============================================================
@@ -528,6 +528,7 @@ def burn_subtitles_ffmpeg(
     video_out: Path,
     font_name: str = "Arial",
     original_size: str = "1080x1920",
+    fps: int = 60,
     font_size: int = 48,
     outline: int = 2,
     shadow: int = 0,
@@ -555,8 +556,10 @@ def burn_subtitles_ffmpeg(
         f"PlayResX={PLAY_RES_X},"
         f"PlayResY={PLAY_RES_Y}"
     )
+    srt_filter_path = str(srt_path).replace("\\", "/").replace(":", r"\\:")
+
     vf = (
-        f"subtitles=filename='{srt_path}':"
+        f"subtitles=filename='{srt_filter_path}':"
         f"original_size={original_size}:"
         f"force_style='{style}'"
     )
@@ -564,10 +567,48 @@ def burn_subtitles_ffmpeg(
         "ffmpeg", "-y",
         "-i", str(video_in),
         "-vf", vf,
+        "-r", str(int(fps)),
         "-c:a", "copy",
         str(video_out),
     ]
     subprocess.run(cmd, check=True)
+
+
+def _log_video_stream_details(video_path: Path, *, label: str) -> None:
+    try:
+        proc = subprocess.run(
+            [
+                "ffprobe",
+                "-v", "error",
+                "-select_streams", "v:0",
+                "-show_entries", "stream=codec_name,avg_frame_rate,r_frame_rate,nb_frames,duration,width,height",
+                "-of", "json",
+                str(video_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(proc.stdout or "{}")
+        streams = payload.get("streams", [])
+        if not isinstance(streams, list) or not streams:
+            logger.warning("%s stream probe returned no video streams: %s", label, video_path)
+            return
+
+        stream = streams[0] if isinstance(streams[0], dict) else {}
+        logger.info(
+            "%s video stream: codec=%s size=%sx%s avg_fps=%s r_fps=%s duration=%s frames=%s",
+            label,
+            stream.get("codec_name", "unknown"),
+            stream.get("width", "?"),
+            stream.get("height", "?"),
+            stream.get("avg_frame_rate", "?"),
+            stream.get("r_frame_rate", "?"),
+            stream.get("duration", "?"),
+            stream.get("nb_frames", "?"),
+        )
+    except Exception as exc:
+        logger.warning("Failed to probe %s video stream (%s): %s", label, video_path, exc)
 
 
 def _loop_audio_to_duration(audio: AudioFileClip, duration: float) -> AudioFileClip:
@@ -679,7 +720,7 @@ def _find_script_file(company_name: str, script_path: str | None = None) -> Opti
 def _normalize_shots_from_dsl(dsl: dict) -> list:
     shots = dsl.get("timeline") or dsl.get("shots") or []
     if not isinstance(shots, list):
-        raise ValueError("脚本的 timeline/shots 必须是数组")
+        raise ValueError("Script timeline/shots must be a list")
     return shots
 
 
@@ -712,22 +753,22 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
     runtime_profile_path = Path(runtime_profile_raw).expanduser().resolve() if runtime_profile_raw else None
 
     if company_name not in COMPANY_CONFIG:
-        logger.error("未知公司：%s", company_name)
+        logger.error("Unknown company: %s", company_name)
         return
 
     # ---- script discover ----
     if script_path:
         script_file = Path(script_path).expanduser().resolve()
         if not script_file.exists():
-            logger.error("指定脚本不存在：%s", script_file)
+            logger.error("Specified script does not exist: %s", script_file)
             return
     else:
         script_file = _find_script_file(company_name)
         if not script_file:
-            logger.error("未找到脚本：%s_promo.(yaml/yml/toml/json/txt)", company_name.lower())
+            logger.error("Script not found: %s_promo.(yaml/yml/toml/json/txt)", company_name.lower())
             return
 
-    logger.info("[%s] 使用脚本：%s", company_name, script_file.name)
+    logger.info("[%s] Using script: %s", company_name, script_file.name)
 
     # ---- load DSL ----
     if script_file.suffix.lower() == ".txt":
@@ -768,7 +809,7 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
         project = dsl.get("project", {}) if isinstance(dsl.get("project", {}), dict) else {}
         dsl_shots = _normalize_shots_from_dsl(dsl)
         if not dsl_shots:
-            logger.error("[%s] 脚本 timeline/shots 为空", company_name)
+            logger.error("[%s] Script timeline/shots is empty", company_name)
             return
 
     # =========================
@@ -778,6 +819,7 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
     # ---- output filenames/config ----
     out_cfg = project.get("output", {}) if isinstance(project.get("output", {}), dict) else {}
     fmt = out_cfg.get("format") if isinstance(out_cfg, dict) else None
+    render_fps = _read_render_fps(project)
     orientation = _orientation_from_format(str(fmt) if fmt else None)
 
     # ✅ normalize run_name (prevents *.compiled folder)
@@ -850,6 +892,7 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
 
     burn_subtitles = not (isinstance(out_cfg, dict) and out_cfg.get("burn_subtitles") is False)
     style_presets = _get_style_presets(str(fmt) if fmt else None)
+    logger.info("[%s] Render FPS resolved to %s", company_name, render_fps)
 
     # ---- input dir (AUTO orientation + company) ----
     effective_input = _resolve_company_input_dir(company_name, orientation, input_dir)
@@ -972,7 +1015,7 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
                 src_path = Path(_decision.selected_path) if _decision.selected_path else None
 
             if not src_path or not src_path.exists():
-                logger.error("找不到素材：%r", s.get("source", ""))
+                logger.error("Source asset not found: %r", s.get("source", ""))
                 return
 
             base = VideoFileClip(str(src_path), audio=False)
@@ -1019,10 +1062,10 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
                 shots_dir.mkdir(parents=True, exist_ok=True)
                 shot_tag = re.sub(r"[^A-Za-z0-9_\-]+", "_", str(s.get("tag", "shot") or "shot")).strip("_") or "shot"
                 shot_mov_path = shots_dir / f"S{i:03d}_{shot_tag}.mov"
-                logger.info("导出 shot MOV：%s", shot_mov_path)
+                logger.info("Exporting shot MOV: %s", shot_mov_path)
                 clip.write_videofile(
                     str(shot_mov_path),
-                    fps=FPS,
+                    fps=render_fps,
                     codec="libx264",
                     audio=False,
                     preset=PRESET,
@@ -1041,7 +1084,7 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
             segments = build_subtitles_from_vo_events(vo_result["events"])
 
         export_timeline_metadata(timeline_base, segments)
-        logger.info("✅ 已导出时间轴：%s.timeline.json + %s.srt", timeline_base.name, timeline_base.name)
+        logger.info("Exported timeline: %s.timeline.json + %s.srt", timeline_base.name, timeline_base.name)
 
         # =========================
         # ✅ Phase 3: 拼视频 + 合成音轨
@@ -1073,10 +1116,10 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
             final_video = final_video.with_audio(CompositeAudioClip(tracks))
 
         if runtime_export_raw_mov:
-            logger.info("导出原始拼接 MOV（未烧字幕）：%s", raw_mov_path)
+            logger.info("Exporting raw stitched MOV (no burned subtitles): %s", raw_mov_path)
             final_video.write_videofile(
                 str(raw_mov_path),
-                fps=FPS,
+                fps=render_fps,
                 codec="libx264",
                 audio_codec=AUDIO_CODEC,
                 preset=PRESET,
@@ -1086,11 +1129,11 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
             )
 
         tmp_mp4 = internal_dir / "_render_tmp.mp4"
-        logger.info("导出临时 MP4（无字幕）：%s", tmp_mp4)
+        logger.info("Exporting temporary MP4 (no subtitles): %s", tmp_mp4)
 
         final_video.write_videofile(
             str(tmp_mp4),
-            fps=FPS,
+            fps=render_fps,
             codec=VIDEO_CODEC,
             audio_codec=AUDIO_CODEC,
             preset=PRESET,
@@ -1098,6 +1141,7 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
             temp_audiofile=str(internal_dir / f"_temp_{company_name}.m4a"),
             remove_temp=True,
         )
+        _log_video_stream_details(tmp_mp4, label="Temporary MP4")
 
         did_burn = False
         final_video = _apply_filter_preset(final_video, project)
@@ -1142,6 +1186,7 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
                     srt_path=srt_path,
                     video_out=mp4_path,
                     font_name=font_name,
+                    fps=render_fps,
                     font_size=font_size,
                     outline=outline,
                     shadow=shadow,
@@ -1149,17 +1194,19 @@ def process_company(company_name: str, script_path: str | None = None, input_dir
                     original_size=f"{final_video.w}x{final_video.h}",
                 )
                 did_burn = True
-                logger.info("✅ 已输出最终（烧字幕）MP4：%s", mp4_path.name)
+                logger.info("Final MP4 written with burned subtitles: %s", mp4_path.name)
+                _log_video_stream_details(mp4_path, label="Final MP4")
                 try:
                     tmp_mp4.unlink()
                 except Exception:
                     pass
             else:
-                logger.warning("⚠️ 未检测到可用字幕文件（%s），将跳过烧字幕。", srt_path.name)
+                logger.warning("No usable subtitle file detected (%s); skipping subtitle burn.", srt_path.name)
 
         if (not burn_subtitles) or (not did_burn):
             tmp_mp4.replace(mp4_path)
-            logger.info("✅ 已输出最终（无字幕）MP4：%s", mp4_path.name)
+            logger.info("Final MP4 written without subtitles: %s", mp4_path.name)
+            _log_video_stream_details(mp4_path, label="Final MP4")
 
     finally:
         for c in final_clips:
