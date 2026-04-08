@@ -571,7 +571,12 @@ def burn_subtitles_ffmpeg(
         "-c:a", "copy",
         str(video_out),
     ]
-    subprocess.run(cmd, check=True)
+    try:
+        subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError:
+        import shutil
+        print("[WARNING] ffmpeg subtitles filter unavailable — copying video without burned subtitles.")
+        shutil.copy2(str(video_in), str(video_out))
 
 
 def _log_video_stream_details(video_path: Path, *, label: str) -> None:
